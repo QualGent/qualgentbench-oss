@@ -830,3 +830,52 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: journey, screen_keywords: ["markor"]}
+
+# ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
+# BENIGN UI changes compiled into the same journey APK and gated by the same QgbFlags
+# shim as the bugs: off unless an episode's flags file lists them (the journey harness
+# never lists them unless a stage asks; a missing flags file switches EVERYTHING on,
+# drift included). Not defects: no task, no canary, never in a case's `bugs:`. The case
+# file's `drift:` block declares each one for the harness (kind, change, the replay
+# route's rewrite); `scripts/lint_journey_cases.py` keeps the two lists equal.
+drift:
+  # relabel: the file list's + button is announced as "New file or folder".
+  - id: markor-drift-fab-label
+    patch:
+      file: app/src/main/java/net/gsantner/markor/activity/MainActivity.java
+      find: "_fab.setOnClickListener(this::onClickFab);"
+      replace: |-
+        _fab.setOnClickListener(this::onClickFab);
+        if (net.gsantner.markor.QgbFlags.on("markor-drift-fab-label")) {
+            _fab.setContentDescription("New file or folder");
+        }
+  # move: the editor's Save action leaves the toolbar for the More options menu.
+  - id: markor-drift-save-overflow
+    patch:
+      file: app/src/main/java/net/gsantner/markor/activity/DocumentEditAndViewFragment.java
+      find: "_saveMenuItem = menu.findItem(R.id.action_save).setVisible(isText && !_isPreviewVisible);"
+      replace: |-
+        _saveMenuItem = menu.findItem(R.id.action_save).setVisible(isText && !_isPreviewVisible);
+        if (net.gsantner.markor.QgbFlags.on("markor-drift-save-overflow")) {
+            _saveMenuItem.setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER);
+        }
+  # relabel: the editor menu's "File Browser" entry reads "Browse files".
+  - id: markor-drift-file-browser-label
+    patch:
+      file: app/src/main/java/net/gsantner/markor/activity/DocumentEditAndViewFragment.java
+      find: "menu.findItem(R.id.action_share_pdf).setVisible(true);"
+      replace: |-
+        menu.findItem(R.id.action_share_pdf).setVisible(true);
+        if (net.gsantner.markor.QgbFlags.on("markor-drift-file-browser-label")) {
+            menu.findItem(R.id.action_show_file_browser).setTitle("Browse files");
+        }
+  # move: with files selected, Details leaves the toolbar for the More options menu.
+  - id: markor-drift-details-overflow
+    patch:
+      file: app/src/main/java/net/gsantner/opoc/frontend/filebrowser/GsFileBrowserFragment.java
+      find: "_fragmentMenu = menu;"
+      replace: |-
+        if (net.gsantner.markor.QgbFlags.on("markor-drift-details-overflow")) {
+            menu.findItem(R.id.action_info_selected_item).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+        }
+        _fragmentMenu = menu;

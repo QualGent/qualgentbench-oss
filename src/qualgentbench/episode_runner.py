@@ -1122,6 +1122,10 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
     else:
         active = [str(bug_spec.get("id") or "")]
     active = [a for a in active if a]
+    # Drift flags (QUA-3490): benign UI changes switched on beside the defects. They
+    # share the file and the shim but never `active_bugs`, so nothing that scores
+    # sees them; `active_bugs_written` stays the defect list alone.
+    drift = [str(d) for d in (bug_spec.get("drift") or []) if str(d)]
 
     # Per-episode NONCE backstop (QUA-2804): a random value written into qgb_flags.txt
     # and a `.qgb` marker. The only way it reaches the agent is by reading the app's
@@ -1136,7 +1140,7 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
     # One line PER argument — the shim reads with readLines(), and printf never expands
     # escapes inside a %s argument. Passing each line as its own argument to
     # `printf '%s\n'` puts the newline in the format, where it does expand.
-    ids = " ".join(shlex.quote(ln) for ln in flag_file_lines(nonce, active))
+    ids = " ".join(shlex.quote(ln) for ln in flag_file_lines(nonce, active + drift))
     # The attribution markers (`verify.canary`) are wiped in the same command, so a
     # marker read after the agent exits was written during this episode; the nonce
     # marker (`files/.qgb/nonce`) is (re)written here too. `files/.qgb/fired` is
@@ -1152,7 +1156,10 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
         logger.warning("could not write bug flags for %s: %s", bundle_id, out.strip()[:200])
         return
     bug_spec["active_bugs_written"] = active
-    logger.info("bug flags for %s → %s", bundle_id, active or "(none: clean episode)")
+    if drift:
+        bug_spec["drift_written"] = drift
+    logger.info("bug flags for %s → %s%s", bundle_id, active or "(none: clean episode)",
+                f" + drift {drift}" if drift else "")
 
 
 # How many times the landing screen is read before its anchor is called missing. A
@@ -1162,7 +1169,7 @@ _PRECONDITION_ATTEMPTS = 3
 _PRECONDITION_SETTLE_S = 1.0
 
 
-def precondition_anchor(app_id: str, case_id: str) -> tuple[str, str]:
+def precondition_anchor(app_id: str, case_id: str, drift=()) -> tuple[str, str]:
     """(label, row) of the tap the case's `check:` route makes FIRST, or ("", "") if
     there is none. `row` is "" unless that tap is scoped with `row:`.
 
@@ -1173,14 +1180,21 @@ def precondition_anchor(app_id: str, case_id: str) -> tuple[str, str]:
     step at a time through `submission.route_item`, as `truth._steps` reads the route
     the replayer runs. A `row:` is part of the anchor (QUA-2738): the route's
     `{tap: Reminded, row: "Ibuprofen (4)"}` can only run in Ibuprofen's row, so another
-    row's "Reminded" on screen is not the world the case assumes."""
+    row's "Reminded" on screen is not the world the case assumes.
+
+    `drift` (QUA-3490): the episode's drift flag ids. The route is read through
+    `journey.drift_route`, so a relabelled first control is looked for under its NEW
+    label — the old one is legitimately absent on a drifted build."""
     from . import journey
 
     doc = journey.load_cases(app_id) or {}
     for case in doc.get("test_cases", []):
         if str(case.get("id")) != case_id:
             continue
-        for step in (case.get("check") or {}).get("steps") or []:
+        route = (case.get("check") or {}).get("steps") or []
+        if drift:
+            route = journey.drift_route(route, list(drift), journey.load_drift(doc))
+        for step in route:
             shape = submission.route_item(step) if isinstance(step, dict) else None
             if shape is not None and shape[0] == "tap":
                 return shape[1], shape[2] or ""
@@ -1219,7 +1233,8 @@ async def assert_precondition(device: str, spec: dict) -> str:
         from .verify.match import visible_texts
 
         anchor, row = precondition_anchor(str(spec.get("app_id") or ""),
-                                          str(spec.get("case_id") or ""))
+                                          str(spec.get("case_id") or ""),
+                                          drift=spec.get("drift") or ())
         if not anchor:
             return "skipped"
         seen: list = []
@@ -2162,6 +2177,8 @@ def _write_evidence(
                                  if k == "interactions" or k.startswith("interactions_")},
                 "apk_sha256": spec.get("apk_sha256"),
                 "active_bugs": spec.get("active_bugs_written"),
+                # Drift flags (QUA-3490) — present only on a drift episode.
+                **({"drift": spec["drift_written"]} if spec.get("drift_written") else {}),
                 "truncated": spec.get("truncated"),
                 "timed_out": spec.get("timed_out"),
                 "off_app": spec.get("off_app"),

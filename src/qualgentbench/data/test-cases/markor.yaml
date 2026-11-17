@@ -47,11 +47,20 @@ app: markor
 # NOT YET PUBLISHED: apk-pins.json marks the sha256 `unpublished` until the owner uploads
 # it (QUA-3469) with `publish_apk.py markor --kind journey --write --upload --yes`.
 # Until then a fresh clone's journey download fails its sha256 check, loudly, by design.
+#
+# REBUILT for drift flags (QUA-3490): the same ref and the same defect patches plus the
+# benchmark spec's `drift:` patches (benign UI changes, each off unless its flag is listed),
+# built by `build_app.py markor --buggy`. A rebuild is not byte-identical, so the hash below
+# moved. Checked on the rebuild: `derive_journey.py markor` (drift off, one trial) reached the
+# committed verdict on every case, and `derive_journey.py markor --drift all --repeat 3`
+# (data/truth/drift-markor.json) the same verdict on every case a drift flag touches. The
+# committed journey truth is unchanged. NOT YET PUBLISHED: owner uploads with
+# `publish_apk.py markor --kind journey --write --upload --yes`.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/markor-buggy.apk
-  sha256: 44da4a89eabcf6aa56db2a74b5be553f3d0c7661db8f9ce426205d0e9aac8e48
-  size_bytes: 14551789
+  sha256: b26aced342af64b2a3b2f5719727bcd3feded1f78cc14e774f317ce22eddb1c6
+  size_bytes: 14551750
 
 defects:
   # ── CRASH x4 ────────────────────────────────────────────────────────────────────────
@@ -494,3 +503,37 @@ test_cases:
       expect: {present: Ideas.md, anr: true}
     evidence: [Ideas.md]    # screen witness: the new note's row inside the new folder
     bugs: [new-folder-blocks-main-thread]
+
+# ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
+# Benign UI changes compiled into the journey APK beside the defects (the patches are in
+# the benchmark spec's `drift:`). NOT defects: no case lists one under `bugs:`, nothing
+# that scores reads them, and the brief does not change (its steps still name the
+# drift-off UI). A memory track switches them on per stage (`journey.journey_tasks(...,
+# drift=...)`); `rewrite:` is how the harness-only replay route walks the drifted UI.
+# `scripts/derive_journey.py <app> --drift all --repeat 3` proves every affected case
+# reaches the same verdict with them on (data/truth/drift-<app>.json).
+drift:
+  - id: markor-drift-fab-label
+    kind: relabel
+    change: 'The file list''s + button is announced as "New file or folder" instead of "Create a new file or folder".'
+    rewrite:
+      - from: {tap: "Create a new file or folder"}
+        to: [{tap: "New file or folder"}]
+  - id: markor-drift-save-overflow
+    kind: move
+    change: "The editor's Save action moves from the toolbar into the More options menu."
+    rewrite:
+      - from: {tap: Save}
+        to: [{tap: More options}, {tap: Save}]
+  - id: markor-drift-file-browser-label
+    kind: relabel
+    change: 'The editor menu''s "File Browser" entry reads "Browse files".'
+    rewrite:
+      - from: {tap: File Browser}
+        to: [{tap: Browse files}]
+  - id: markor-drift-details-overflow
+    kind: move
+    change: "With files selected, the Details action moves from the toolbar into the More options menu."
+    rewrite:
+      - from: {tap: Details}
+        to: [{tap: More options}, {tap: Details}]

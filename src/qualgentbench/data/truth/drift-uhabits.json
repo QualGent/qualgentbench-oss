@@ -1,0 +1,7424 @@
+{
+  "uhabits-create-measurable": {
+    "name": "Create a measurable habit with a weekly target",
+    "bugs": [
+      "measurable-target-decimal-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "measurable-target-decimal-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 12,
+        "added": [],
+        "removed": [
+          "Run"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [],
+        "removed": [
+          "Run"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 12,
+        "added": [],
+        "removed": [
+          "Run"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [],
+        "removed": [
+          "Run"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Run' and type=1 and \" \u2192 '1' (want '1')",
+        "steps_run": 15,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 14: org.isoron.uhabits crashed \u2014 java.lang.NumberFormatException: For input string: \"2.5\" \u2014 java.lang.NumberFormatException@org.isoron.uhabits.activities.habits.edit.EditHabitActivity.save(EditHabitActivity.kt) > org.isoron.uhabits.activities.habits.edit.EditHabitActivity.onCreate$lambda$12(EditHabitActivity.kt) > org.isoron.uhabits.activities.habits.edit.EditHabitActivity.$r8$lambda(Unknown Source) \u2014 fired: measurable-target-decimal-crash",
+        "steps_run": 13,
+        "attempts": 1,
+        "fired": [
+          "measurable-target-decimal-crash"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "km",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "km",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "km",
+          "Unit",
+          "2.5",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Every day",
+          "Every week",
+          "Every month"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "km",
+          "Unit",
+          "2.5",
+          "Target",
+          "Every week",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Run"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Run"
+        ],
+        [
+          "Navigate up",
+          "Run",
+          "Edit",
+          "More options",
+          "\uf0aa",
+          "2.5 km",
+          "\uf073",
+          "Every week",
+          "\uf0f3",
+          "Off",
+          "Target",
+          "Score",
+          "Week",
+          "History",
+          "Day",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Run",
+          "Edit",
+          "More options",
+          "\uf0aa",
+          "2.5 km",
+          "\uf073",
+          "Every week",
+          "\uf0f3",
+          "Off",
+          "Target",
+          "Score",
+          "Week",
+          "History",
+          "Day",
+          "Calendar"
+        ]
+      ],
+      "seeded": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "km",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "km",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "km",
+          "Unit",
+          "2.5",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Every day",
+          "Every week",
+          "Every month"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "km",
+          "Unit",
+          "2.5",
+          "Target",
+          "Every week",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Run' and type=1 and \" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Run' and type=1 and \" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Run' and type=1 and \" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 14: org.isoron.uhabits crashed \u2014 java.lang.NumberFormatException: For input string: \"2.5\" \u2014 java.lang.NumberFormatException@org.isoron.uhabits.activities.habits.edit.EditHabitActivity.save(EditHabitActivity.kt) > org.isoron.uhabits.activities.habits.edit.EditHabitActivity.onCreate$lambda$12(EditHabitActivity.kt) > org.isoron.uhabits.activities.habits.edit.EditHabitActivity.$r8$lambda(Unknown Source) \u2014 fired: measurable-target-decimal-crash",
+          "steps_run": 13,
+          "attempts": 1,
+          "fired": [
+            "measurable-target-decimal-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 14: org.isoron.uhabits crashed \u2014 java.lang.NumberFormatException: For input string: \"2.5\" \u2014 java.lang.NumberFormatException@org.isoron.uhabits.activities.habits.edit.EditHabitActivity.save(EditHabitActivity.kt) > org.isoron.uhabits.activities.habits.edit.EditHabitActivity.onCreate$lambda$12(EditHabitActivity.kt) > org.isoron.uhabits.activities.habits.edit.EditHabitActivity.$r8$lambda(Unknown Source) \u2014 fired: measurable-target-decimal-crash",
+          "steps_run": 13,
+          "attempts": 1,
+          "fired": [
+            "measurable-target-decimal-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 14: org.isoron.uhabits crashed \u2014 java.lang.NumberFormatException: For input string: \"2.5\" \u2014 java.lang.NumberFormatException@org.isoron.uhabits.activities.habits.edit.EditHabitActivity.save(EditHabitActivity.kt) > org.isoron.uhabits.activities.habits.edit.EditHabitActivity.onCreate$lambda$12(EditHabitActivity.kt) > org.isoron.uhabits.activities.habits.edit.EditHabitActivity.$r8$lambda(Unknown Source) \u2014 fired: measurable-target-decimal-crash",
+          "steps_run": 13,
+          "attempts": 1,
+          "fired": [
+            "measurable-target-decimal-crash"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 297,
+      "u2": 99
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow",
+      "uhabits-drift-archive-label",
+      "uhabits-drift-type-order"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Measurable"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Run"
+      },
+      {
+        "tap": "unitInput"
+      },
+      {
+        "type": "km"
+      },
+      {
+        "tap": "targetInput"
+      },
+      {
+        "type": "2.5"
+      },
+      {
+        "tap": "numericalFrequencyPicker"
+      },
+      {
+        "tap": "Every week"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Run"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "uhabits-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "New habit"
+      ],
+      "texts_removed": [
+        "Add habit"
+      ]
+    }
+  },
+  "uhabits-unarchive-habit": {
+    "name": "Archive a habit and bring it back",
+    "bugs": [
+      "unarchive-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "unarchive-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 17,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Habits",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Filter",
+          "More options",
+          "New habit",
+          "QASEED",
+          "Walk"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Habits",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Filter",
+          "More options",
+          "New habit",
+          "QASEED",
+          "Walk"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 17,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Habits",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Filter",
+          "More options",
+          "New habit",
+          "QASEED",
+          "Walk"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Habits",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Filter",
+          "More options",
+          "New habit",
+          "QASEED",
+          "Walk"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Walk' and archived=0\" \u2192 '1' (want '1')",
+        "steps_run": 18,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 18: org.isoron.uhabits crashed \u2014 java.util.NoSuchElementException: Collection contains no element matching the predicate. \u2014 java.util.NoSuchElementException@org.isoron.uhabits.activities.habits.list.ListHabitsSelectionMenu.onActionItemClicked(ListHabitsSelectionMenu.kt) \u2014 fired: unarchive-crash",
+        "steps_run": 18,
+        "attempts": 1,
+        "fired": [
+          "unarchive-crash"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Walk",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Change color",
+          "Move to archive",
+          "Delete"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Hide archived",
+          "Hide completed",
+          "Sort"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Change color",
+          "Unarchive",
+          "Delete"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk"
+        ]
+      ],
+      "seeded": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Walk",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Change color",
+          "Move to archive",
+          "Delete"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Hide archived",
+          "Hide completed",
+          "Sort"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Walk",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Change color",
+          "Unarchive",
+          "Delete"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Habits",
+          "Predicted app: Habits",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Habits",
+          "Predicted app: Habits",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Walk' and archived=0\" \u2192 '1' (want '1')",
+          "steps_run": 18,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Walk' and archived=0\" \u2192 '1' (want '1')",
+          "steps_run": 18,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Walk' and archived=0\" \u2192 '1' (want '1')",
+          "steps_run": 18,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 18: org.isoron.uhabits crashed \u2014 java.util.NoSuchElementException: Collection contains no element matching the predicate. \u2014 java.util.NoSuchElementException@org.isoron.uhabits.activities.habits.list.ListHabitsSelectionMenu.onActionItemClicked(ListHabitsSelectionMenu.kt) \u2014 fired: unarchive-crash",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "unarchive-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 18: org.isoron.uhabits crashed \u2014 java.util.NoSuchElementException: Collection contains no element matching the predicate. \u2014 java.util.NoSuchElementException@org.isoron.uhabits.activities.habits.list.ListHabitsSelectionMenu.onActionItemClicked(ListHabitsSelectionMenu.kt) \u2014 fired: unarchive-crash",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "unarchive-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 18: org.isoron.uhabits crashed \u2014 java.util.NoSuchElementException: Collection contains no element matching the predicate. \u2014 java.util.NoSuchElementException@org.isoron.uhabits.activities.habits.list.ListHabitsSelectionMenu.onActionItemClicked(ListHabitsSelectionMenu.kt) \u2014 fired: unarchive-crash",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "unarchive-crash"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 342,
+      "u2": 114
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow",
+      "uhabits-drift-archive-label",
+      "uhabits-drift-type-order"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Yes or No"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Walk"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "long_press": "Walk"
+      },
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Move to archive"
+      },
+      "wait",
+      {
+        "tap": "Filter"
+      },
+      {
+        "tap": "Hide archived"
+      },
+      "wait",
+      {
+        "long_press": "Walk"
+      },
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Unarchive"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-archive-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Move to archive",
+        "New habit"
+      ],
+      "texts_removed": [
+        "Add habit",
+        "Archive"
+      ]
+    }
+  },
+  "uhabits-change-color": {
+    "name": "Change a habit's color from the habit list",
+    "bugs": [
+      "color-pick-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "color-pick-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 13,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Habits",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Filter",
+          "More options",
+          "New habit",
+          "QASEED",
+          "Swim"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Habits",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Filter",
+          "More options",
+          "New habit",
+          "QASEED",
+          "Swim"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 13,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Habits",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Filter",
+          "More options",
+          "New habit",
+          "QASEED",
+          "Swim"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Habits",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Filter",
+          "More options",
+          "New habit",
+          "QASEED",
+          "Swim"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Swim' and color=7;\" \u2192 '1' (want '1')",
+        "steps_run": 14,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 14: org.isoron.uhabits crashed \u2014 java.lang.ArrayIndexOutOfBoundsException: length=7; index=7 \u2014 java.lang.ArrayIndexOutOfBoundsException@org.isoron.uhabits.activities.habits.list.ListHabitsScreen.showColorPicker$lambda$4(ListHabitsScreen.kt) > org.isoron.uhabits.activities.habits.list.ListHabitsScreen.$r8$lambda(Unknown Source) > org.isoron.uhabits.activities.habits.list.ListHabitsScreen$$Lambda.onColorPicked(D8$$SyntheticClass) \u2014 fired: color-pick-crash",
+        "steps_run": 14,
+        "attempts": 1,
+        "fired": [
+          "color-pick-crash"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Swim",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Swim",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Swim",
+          "Name",
+          "Color",
+          "Did you swim today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Swim"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Swim"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Swim",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Change color",
+          "Move to archive",
+          "Delete"
+        ],
+        [
+          "Change color",
+          "Color 1",
+          "Color 2",
+          "Color 3",
+          "Color 4",
+          "Color 5",
+          "Color 6",
+          "Color 7",
+          "Color 8",
+          "Color 9",
+          "Color 10",
+          "Color 11",
+          "Color 12 selected",
+          "Color 13",
+          "Color 14",
+          "Color 15",
+          "Color 16",
+          "Color 17",
+          "Color 18",
+          "Color 19",
+          "Color 20"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Swim"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Swim"
+        ]
+      ],
+      "seeded": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Swim",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Swim",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Swim",
+          "Name",
+          "Color",
+          "Did you swim today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Swim"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Swim"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Swim",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Change color",
+          "Move to archive",
+          "Delete"
+        ],
+        [
+          "Change color",
+          "Color 1",
+          "Color 2",
+          "Color 3",
+          "Color 4",
+          "Color 5",
+          "Color 6",
+          "Color 7",
+          "Color 8",
+          "Color 9",
+          "Color 10",
+          "Color 11",
+          "Color 12 selected",
+          "Color 13",
+          "Color 14",
+          "Color 15",
+          "Color 16",
+          "Color 17",
+          "Color 18",
+          "Color 19",
+          "Color 20"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Habits",
+          "Predicted app: Habits",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Habits",
+          "Predicted app: Habits",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Swim' and color=7;\" \u2192 '1' (want '1')",
+          "steps_run": 14,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Swim' and color=7;\" \u2192 '1' (want '1')",
+          "steps_run": 14,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Swim' and color=7;\" \u2192 '1' (want '1')",
+          "steps_run": 14,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 14: org.isoron.uhabits crashed \u2014 java.lang.ArrayIndexOutOfBoundsException: length=7; index=7 \u2014 java.lang.ArrayIndexOutOfBoundsException@org.isoron.uhabits.activities.habits.list.ListHabitsScreen.showColorPicker$lambda$4(ListHabitsScreen.kt) > org.isoron.uhabits.activities.habits.list.ListHabitsScreen.$r8$lambda(Unknown Source) > org.isoron.uhabits.activities.habits.list.ListHabitsScreen$$Lambda.onColorPicked(D8$$SyntheticClass) \u2014 fired: color-pick-crash",
+          "steps_run": 14,
+          "attempts": 1,
+          "fired": [
+            "color-pick-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 14: org.isoron.uhabits crashed \u2014 java.lang.ArrayIndexOutOfBoundsException: length=7; index=7 \u2014 java.lang.ArrayIndexOutOfBoundsException@org.isoron.uhabits.activities.habits.list.ListHabitsScreen.showColorPicker$lambda$4(ListHabitsScreen.kt) > org.isoron.uhabits.activities.habits.list.ListHabitsScreen.$r8$lambda(Unknown Source) > org.isoron.uhabits.activities.habits.list.ListHabitsScreen$$Lambda.onColorPicked(D8$$SyntheticClass) \u2014 fired: color-pick-crash",
+          "steps_run": 14,
+          "attempts": 1,
+          "fired": [
+            "color-pick-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 14: org.isoron.uhabits crashed \u2014 java.lang.ArrayIndexOutOfBoundsException: length=7; index=7 \u2014 java.lang.ArrayIndexOutOfBoundsException@org.isoron.uhabits.activities.habits.list.ListHabitsScreen.showColorPicker$lambda$4(ListHabitsScreen.kt) > org.isoron.uhabits.activities.habits.list.ListHabitsScreen.$r8$lambda(Unknown Source) > org.isoron.uhabits.activities.habits.list.ListHabitsScreen$$Lambda.onColorPicked(D8$$SyntheticClass) \u2014 fired: color-pick-crash",
+          "steps_run": 14,
+          "attempts": 1,
+          "fired": [
+            "color-pick-crash"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 270,
+      "u2": 90
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow",
+      "uhabits-drift-archive-label",
+      "uhabits-drift-type-order"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Yes or No"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Swim"
+      },
+      {
+        "tap": "questionInput"
+      },
+      {
+        "type": "Did you swim today?"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "long_press": "Swim"
+      },
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Change color"
+      },
+      {
+        "tap": "Color 5"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Delete",
+        "Move to archive",
+        "New habit"
+      ],
+      "texts_removed": [
+        "Add habit"
+      ]
+    }
+  },
+  "uhabits-weekly-frequency": {
+    "name": "Create a habit for three times a week and open it",
+    "bugs": [
+      "frequency-label-off-by-one"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "frequency-label-off-by-one",
+        "marker": "2 times per week",
+        "visible_steps": [
+          13,
+          14
+        ],
+        "texts": [
+          "2 times per week"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 13,
+        "added": [
+          "2 times per week"
+        ],
+        "removed": [
+          "3 times per week"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "2 times per week"
+        ],
+        "removed": [
+          "3 times per week"
+        ]
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Stretch' and freq_nu\" \u2192 '1' (want '1')",
+        "steps_run": 14,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Stretch' and freq_nu\" \u2192 '1' (want '1')",
+        "steps_run": 14,
+        "attempts": 1,
+        "fired": [
+          "frequency-label-off-by-one"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Stretch",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Stretch",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "3 times per week",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Stretch"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Stretch"
+        ],
+        [
+          "Navigate up",
+          "Stretch",
+          "Edit",
+          "More options",
+          "\uf073",
+          "3 times per week",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Stretch",
+          "Edit",
+          "More options",
+          "\uf073",
+          "3 times per week",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ]
+      ],
+      "seeded": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Stretch",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Stretch",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "3 times per week",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Stretch"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Stretch"
+        ],
+        [
+          "Navigate up",
+          "Stretch",
+          "Edit",
+          "More options",
+          "\uf073",
+          "2 times per week",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Stretch",
+          "Edit",
+          "More options",
+          "\uf073",
+          "2 times per week",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Stretch' and freq_nu\" \u2192 '1' (want '1')",
+          "steps_run": 14,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Stretch' and freq_nu\" \u2192 '1' (want '1')",
+          "steps_run": 14,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Stretch' and freq_nu\" \u2192 '1' (want '1')",
+          "steps_run": 14,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Stretch' and freq_nu\" \u2192 '1' (want '1')",
+          "steps_run": 14,
+          "attempts": 1,
+          "fired": [
+            "frequency-label-off-by-one"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Stretch' and freq_nu\" \u2192 '1' (want '1')",
+          "steps_run": 14,
+          "attempts": 1,
+          "fired": [
+            "frequency-label-off-by-one"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Stretch' and freq_nu\" \u2192 '1' (want '1')",
+          "steps_run": 14,
+          "attempts": 1,
+          "fired": [
+            "frequency-label-off-by-one"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 270,
+      "u2": 90
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow",
+      "uhabits-drift-archive-label",
+      "uhabits-drift-type-order"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Yes or No"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Stretch"
+      },
+      {
+        "tap": "boolean_frequency_picker"
+      },
+      {
+        "tap": "xTimesPerWeekRadioButton"
+      },
+      {
+        "tap": "xTimesPerWeekTextView"
+      },
+      {
+        "type": "3"
+      },
+      {
+        "tap": "button1"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Stretch"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "uhabits-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "New habit"
+      ],
+      "texts_removed": [
+        "Add habit"
+      ]
+    }
+  },
+  "uhabits-add-reminder": {
+    "name": "Add a reminder to an existing habit",
+    "bugs": [
+      "reminder-label-hour-late"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "reminder-label-hour-late",
+        "marker": "9:00 AM",
+        "visible_steps": [
+          14,
+          15
+        ],
+        "texts": [
+          "9:00 AM"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 14,
+        "added": [
+          "9:00 AM"
+        ],
+        "removed": [
+          "8:00 AM"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "9:00 AM"
+        ],
+        "removed": [
+          "8:00 AM"
+        ]
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Meditate' and remind\" \u2192 '1' (want '1')",
+        "steps_run": 15,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Meditate' and remind\" \u2192 '1' (want '1')",
+        "steps_run": 15,
+        "attempts": 1,
+        "fired": [
+          "reminder-label-hour-late"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Meditate",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Meditate"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Meditate"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Meditate",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Meditate",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "8",
+          "00",
+          ":",
+          "AM",
+          "Hours circular slider: 8",
+          "CLEAR",
+          "DONE"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Meditate",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "8:00 AM",
+          "Reminder",
+          "Any day of the week",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Meditate"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Meditate"
+        ],
+        [
+          "Navigate up",
+          "Meditate",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "8:00 AM",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Meditate",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "8:00 AM",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ]
+      ],
+      "seeded": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Meditate",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Meditate"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Meditate"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Meditate",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Meditate",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "8",
+          "00",
+          ":",
+          "AM",
+          "Hours circular slider: 8",
+          "CLEAR",
+          "DONE"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Meditate",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "8:00 AM",
+          "Reminder",
+          "Any day of the week",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Meditate"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Meditate"
+        ],
+        [
+          "Navigate up",
+          "Meditate",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "9:00 AM",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Meditate",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "9:00 AM",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Meditate' and remind\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Meditate' and remind\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Meditate' and remind\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Meditate' and remind\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "reminder-label-hour-late"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Meditate' and remind\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "reminder-label-hour-late"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Meditate' and remind\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "reminder-label-hour-late"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 288,
+      "u2": 96
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow",
+      "uhabits-drift-archive-label",
+      "uhabits-drift-type-order"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Yes or No"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Meditate"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "long_press": "Meditate"
+      },
+      {
+        "tap": "Edit"
+      },
+      {
+        "tap": "reminderTimePicker"
+      },
+      {
+        "tap": "DONE"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Meditate"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "uhabits-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "New habit"
+      ],
+      "texts_removed": [
+        "Add habit",
+        "Change color"
+      ]
+    }
+  },
+  "uhabits-archive-habit": {
+    "name": "Archive a new habit and find it with archived habits shown",
+    "bugs": [
+      "unarchive-offered-for-active"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "unarchive-offered-for-active",
+        "marker": "Unarchive",
+        "visible_steps": [
+          9,
+          10
+        ],
+        "texts": [
+          "Unarchive"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 9,
+        "added": [
+          "Unarchive"
+        ],
+        "removed": []
+      },
+      {
+        "step": 10,
+        "added": [
+          "Unarchive"
+        ],
+        "removed": []
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Journal' and archive\" \u2192 '1' (want '1')",
+        "steps_run": 15,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Journal' and archive\" \u2192 '1' (want '1')",
+        "steps_run": 15,
+        "attempts": 1,
+        "fired": [
+          "unarchive-offered-for-active"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Journal",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Journal"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Journal"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Journal",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Change color",
+          "Move to archive",
+          "Delete"
+        ],
+        [
+          "Change color",
+          "Move to archive",
+          "Delete"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Hide archived",
+          "Hide completed",
+          "Sort"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Journal"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Journal"
+        ]
+      ],
+      "seeded": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Journal",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Journal"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Journal"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Journal",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Change color",
+          "Move to archive",
+          "Unarchive",
+          "Delete"
+        ],
+        [
+          "Change color",
+          "Move to archive",
+          "Unarchive",
+          "Delete"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Hide archived",
+          "Hide completed",
+          "Sort"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Journal"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Journal"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Journal' and archive\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Journal' and archive\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Journal' and archive\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Journal' and archive\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "unarchive-offered-for-active"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Journal' and archive\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "unarchive-offered-for-active"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Journal' and archive\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "unarchive-offered-for-active"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 288,
+      "u2": 96
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow",
+      "uhabits-drift-archive-label",
+      "uhabits-drift-type-order"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Yes or No"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Journal"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "long_press": "Journal"
+      },
+      {
+        "tap": "More options"
+      },
+      "wait",
+      {
+        "tap": "Move to archive"
+      },
+      "wait",
+      {
+        "tap": "Filter"
+      },
+      {
+        "tap": "Hide archived"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-archive-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Move to archive",
+        "New habit"
+      ],
+      "texts_removed": [
+        "Add habit",
+        "Archive"
+      ]
+    }
+  },
+  "uhabits-measurable-target": {
+    "name": "Create a measurable habit with an upper limit and open it",
+    "bugs": [
+      "target-decimal-dropped"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "target-decimal-dropped",
+        "marker": "75 mi",
+        "visible_steps": [
+          14,
+          15
+        ],
+        "texts": [
+          "75 mi"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 14,
+        "added": [
+          "75 mi"
+        ],
+        "removed": [
+          "7.5 mi"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "75 mi"
+        ],
+        "removed": [
+          "7.5 mi"
+        ]
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Cycle' and type=1 an\" \u2192 '1' (want '1')",
+        "steps_run": 15,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Cycle' and type=1 an\" \u2192 '1' (want '1')",
+        "steps_run": 15,
+        "attempts": 1,
+        "fired": [
+          "target-decimal-dropped"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Cycle",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Cycle",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Cycle",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "mi",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Cycle",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "mi",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Cycle",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "mi",
+          "Unit",
+          "7.5",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "At least",
+          "At most"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Cycle",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "mi",
+          "Unit",
+          "7.5",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At most",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Cycle"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Cycle"
+        ],
+        [
+          "Navigate up",
+          "Cycle",
+          "Edit",
+          "More options",
+          "\uf0ab",
+          "7.5 mi",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Target",
+          "Score",
+          "Week",
+          "History",
+          "Day",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Cycle",
+          "Edit",
+          "More options",
+          "\uf0ab",
+          "7.5 mi",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Target",
+          "Score",
+          "Week",
+          "History",
+          "Day",
+          "Calendar"
+        ]
+      ],
+      "seeded": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Run",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Cycle",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Cycle",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "e.g. miles",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Cycle",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "mi",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Cycle",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "mi",
+          "Unit",
+          "e.g. 15",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Cycle",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "mi",
+          "Unit",
+          "7.5",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At least",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "At least",
+          "At most"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Cycle",
+          "Name",
+          "Color",
+          "e.g. How many miles did you run today?",
+          "Question",
+          "mi",
+          "Unit",
+          "7.5",
+          "Target",
+          "Every day",
+          "Frequency",
+          "At most",
+          "Target Type",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Cycle"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Cycle"
+        ],
+        [
+          "Navigate up",
+          "Cycle",
+          "Edit",
+          "More options",
+          "\uf0ab",
+          "75 mi",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Target",
+          "Score",
+          "Week",
+          "History",
+          "Day",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Cycle",
+          "Edit",
+          "More options",
+          "\uf0ab",
+          "75 mi",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Target",
+          "Score",
+          "Week",
+          "History",
+          "Day",
+          "Calendar"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Cycle' and type=1 an\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Cycle' and type=1 an\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Cycle' and type=1 an\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Cycle' and type=1 an\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "target-decimal-dropped"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Cycle' and type=1 an\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "target-decimal-dropped"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Cycle' and type=1 an\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "target-decimal-dropped"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 288,
+      "u2": 96
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow",
+      "uhabits-drift-archive-label",
+      "uhabits-drift-type-order"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Measurable"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Cycle"
+      },
+      {
+        "tap": "unitInput"
+      },
+      {
+        "type": "mi"
+      },
+      {
+        "tap": "targetInput"
+      },
+      {
+        "type": "7.5"
+      },
+      {
+        "tap": "targetTypePicker"
+      },
+      {
+        "tap": "At most"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Cycle"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "uhabits-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "New habit"
+      ],
+      "texts_removed": [
+        "Add habit"
+      ]
+    }
+  },
+  "uhabits-rename-from-list": {
+    "name": "Rename a habit from the habit list",
+    "bugs": [
+      "rename-not-saved"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "rename-not-saved",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 12,
+        "added": [
+          "Yoga"
+        ],
+        "removed": [
+          "Pilates"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [
+          "Yoga"
+        ],
+        "removed": [
+          "Pilates"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 12,
+        "added": [
+          "Yoga"
+        ],
+        "removed": [
+          "Pilates"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [
+          "Yoga"
+        ],
+        "removed": [
+          "Pilates"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Pilates';\" \u2192 '1' (want '1')",
+        "steps_run": 13,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from Habits where name='Pilates';\" \u2192 '0' (want '1')",
+        "steps_run": 13,
+        "attempts": 1,
+        "fired": [
+          "rename-not-saved"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Yoga",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Yoga"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Yoga"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Yoga",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Yoga",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Yoga",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Pilates",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Pilates"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Pilates"
+        ]
+      ],
+      "seeded": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Yoga",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Yoga"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Yoga"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Yoga",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Yoga",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Yoga",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Pilates",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Yoga"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Yoga"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Pilates';\" \u2192 '1' (want '1')",
+          "steps_run": 13,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Pilates';\" \u2192 '1' (want '1')",
+          "steps_run": 13,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Pilates';\" \u2192 '1' (want '1')",
+          "steps_run": 13,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from Habits where name='Pilates';\" \u2192 '0' (want '1')",
+          "steps_run": 13,
+          "attempts": 1,
+          "fired": [
+            "rename-not-saved"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from Habits where name='Pilates';\" \u2192 '0' (want '1')",
+          "steps_run": 13,
+          "attempts": 1,
+          "fired": [
+            "rename-not-saved"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from Habits where name='Pilates';\" \u2192 '0' (want '1')",
+          "steps_run": 13,
+          "attempts": 1,
+          "fired": [
+            "rename-not-saved"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 252,
+      "u2": 84
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow",
+      "uhabits-drift-archive-label",
+      "uhabits-drift-type-order"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Yes or No"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Yoga"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "long_press": "Yoga"
+      },
+      {
+        "tap": "Edit"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Pilates"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "uhabits-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "New habit"
+      ],
+      "texts_removed": [
+        "Add habit",
+        "Change color"
+      ]
+    }
+  },
+  "uhabits-open-second-habit": {
+    "name": "Delete a habit from its own screen",
+    "bugs": [
+      "card-opens-first-habit"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "card-opens-first-habit",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 14,
+        "added": [
+          "QASEED"
+        ],
+        "removed": [
+          "Write"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "QASEED"
+        ],
+        "removed": [
+          "Write"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "Write"
+        ],
+        "removed": [
+          "QASEED"
+        ]
+      },
+      {
+        "step": 19,
+        "added": [
+          "Write"
+        ],
+        "removed": [
+          "QASEED"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 14,
+        "added": [
+          "QASEED"
+        ],
+        "removed": [
+          "Write"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "QASEED"
+        ],
+        "removed": [
+          "Write"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "Write"
+        ],
+        "removed": [
+          "QASEED"
+        ]
+      },
+      {
+        "step": 19,
+        "added": [
+          "Write"
+        ],
+        "removed": [
+          "QASEED"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select (select count(*) from Habits where name='Read') * 10 \" \u2192 '10' (want '10')",
+        "steps_run": 19,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select (select count(*) from Habits where name='Read') * 10 \" \u2192 '11' (want '10')",
+        "steps_run": 19,
+        "attempts": 1,
+        "fired": [
+          "card-opens-first-habit"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Read",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Read"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Read"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Write",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Read",
+          "Write"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Read",
+          "Write"
+        ],
+        [
+          "Navigate up",
+          "Write",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Write",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Export",
+          "Delete"
+        ],
+        [
+          "Delete habit?",
+          "The habit will be permanently deleted. This action cannot be undone.",
+          "NO",
+          "YES"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Read"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Read"
+        ]
+      ],
+      "seeded": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Read",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Read"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Read"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Write",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Read",
+          "Write"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Read",
+          "Write"
+        ],
+        [
+          "Navigate up",
+          "QASEED",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "QASEED",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Export",
+          "Delete"
+        ],
+        [
+          "Delete habit?",
+          "The habit will be permanently deleted. This action cannot be undone.",
+          "NO",
+          "YES"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "Read",
+          "Write"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "Read",
+          "Write"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from Habits where name='Read') * 10 \" \u2192 '10' (want '10')",
+          "steps_run": 19,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from Habits where name='Read') * 10 \" \u2192 '10' (want '10')",
+          "steps_run": 19,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from Habits where name='Read') * 10 \" \u2192 '10' (want '10')",
+          "steps_run": 19,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from Habits where name='Read') * 10 \" \u2192 '11' (want '10')",
+          "steps_run": 19,
+          "attempts": 1,
+          "fired": [
+            "card-opens-first-habit"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from Habits where name='Read') * 10 \" \u2192 '11' (want '10')",
+          "steps_run": 19,
+          "attempts": 1,
+          "fired": [
+            "card-opens-first-habit"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from Habits where name='Read') * 10 \" \u2192 '11' (want '10')",
+          "steps_run": 19,
+          "attempts": 1,
+          "fired": [
+            "card-opens-first-habit"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 360,
+      "u2": 120
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow",
+      "uhabits-drift-archive-label",
+      "uhabits-drift-type-order"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Yes or No"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Read"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Yes or No"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Write"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Write"
+      },
+      "wait",
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Delete"
+      },
+      {
+        "tap": "Yes"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "uhabits-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "New habit"
+      ],
+      "texts_removed": [
+        "Add habit"
+      ]
+    }
+  },
+  "uhabits-edit-from-detail": {
+    "name": "Rename a habit from its own screen",
+    "bugs": [
+      "detail-edit-opens-create"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "detail-edit-opens-create",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 10,
+        "added": [
+          "Create habit",
+          "e.g. Exercise"
+        ],
+        "removed": [
+          "Edit habit",
+          "Tea"
+        ]
+      },
+      {
+        "step": 11,
+        "added": [
+          "Create habit",
+          "e.g. Exercise"
+        ],
+        "removed": [
+          "Edit habit",
+          "Tea"
+        ]
+      },
+      {
+        "step": 12,
+        "added": [
+          "Create habit"
+        ],
+        "removed": [
+          "Edit habit"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [
+          "Tea"
+        ],
+        "removed": [
+          "Green tea"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "Tea"
+        ],
+        "removed": [
+          "Green tea"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "Tea"
+        ],
+        "removed": []
+      },
+      {
+        "step": 16,
+        "added": [
+          "Tea"
+        ],
+        "removed": []
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 10,
+        "added": [
+          "Create habit",
+          "e.g. Exercise"
+        ],
+        "removed": [
+          "Edit habit",
+          "Tea"
+        ]
+      },
+      {
+        "step": 11,
+        "added": [
+          "Create habit",
+          "e.g. Exercise"
+        ],
+        "removed": [
+          "Edit habit",
+          "Tea"
+        ]
+      },
+      {
+        "step": 12,
+        "added": [
+          "Create habit"
+        ],
+        "removed": [
+          "Edit habit"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [
+          "Tea"
+        ],
+        "removed": [
+          "Green tea"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "Tea"
+        ],
+        "removed": [
+          "Green tea"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "Tea"
+        ],
+        "removed": []
+      },
+      {
+        "step": 16,
+        "added": [
+          "Tea"
+        ],
+        "removed": []
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select (select count(*) from Habits where name='Green tea') \" \u2192 '10' (want '10')",
+        "steps_run": 16,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select (select count(*) from Habits where name='Green tea') \" \u2192 '11' (want '10')",
+        "steps_run": 16,
+        "attempts": 1,
+        "fired": [
+          "detail-edit-opens-create"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Tea",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Tea"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Tea"
+        ],
+        [
+          "Navigate up",
+          "Tea",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Tea",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Tea",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Tea",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Edit habit",
+          "SAVE",
+          "Green tea",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Green tea",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Green tea",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Green tea"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Green tea"
+        ]
+      ],
+      "seeded": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Tea",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Tea"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Tea"
+        ],
+        [
+          "Navigate up",
+          "Tea",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Tea",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Green tea",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Tea",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Navigate up",
+          "Tea",
+          "Edit",
+          "More options",
+          "\uf073",
+          "Every day",
+          "\uf0f3",
+          "Off",
+          "Overview",
+          "0%",
+          "Score",
+          "+0%",
+          "Month",
+          "Year",
+          "0",
+          "Total",
+          "Week",
+          "History",
+          "Calendar"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Tea",
+          "Green tea"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Tea",
+          "Green tea"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from Habits where name='Green tea') \" \u2192 '10' (want '10')",
+          "steps_run": 16,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from Habits where name='Green tea') \" \u2192 '10' (want '10')",
+          "steps_run": 16,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from Habits where name='Green tea') \" \u2192 '10' (want '10')",
+          "steps_run": 16,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from Habits where name='Green tea') \" \u2192 '11' (want '10')",
+          "steps_run": 16,
+          "attempts": 1,
+          "fired": [
+            "detail-edit-opens-create"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from Habits where name='Green tea') \" \u2192 '11' (want '10')",
+          "steps_run": 16,
+          "attempts": 1,
+          "fired": [
+            "detail-edit-opens-create"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from Habits where name='Green tea') \" \u2192 '11' (want '10')",
+          "steps_run": 16,
+          "attempts": 1,
+          "fired": [
+            "detail-edit-opens-create"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 306,
+      "u2": 102
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow",
+      "uhabits-drift-archive-label",
+      "uhabits-drift-type-order"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Yes or No"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Tea"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Tea"
+      },
+      "wait",
+      {
+        "tap": "Edit"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Green tea"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "press": "back"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "uhabits-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "New habit"
+      ],
+      "texts_removed": [
+        "Add habit"
+      ]
+    }
+  },
+  "uhabits-frequency-survives-rotation": {
+    "name": "Pick a frequency, turn the phone sideways, then save",
+    "bugs": [
+      "frequency-lost-on-rotation"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "frequency-lost-on-rotation",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 12,
+        "added": [
+          "Every day"
+        ],
+        "removed": [
+          "4 times per month"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [
+          "Every day"
+        ],
+        "removed": [
+          "4 times per month"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 12,
+        "added": [
+          "Every day"
+        ],
+        "removed": [
+          "4 times per month"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [
+          "Every day"
+        ],
+        "removed": [
+          "4 times per month"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='Floss' and freq_num=\" \u2192 '1' (want '1')",
+        "steps_run": 15,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from Habits where name='Floss' and freq_num=\" \u2192 '0' (want '1')",
+        "steps_run": 15,
+        "attempts": 1,
+        "fired": [
+          "frequency-lost-on-rotation"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Floss",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "4",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Floss",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "4 times per month",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Floss",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "4 times per month",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Floss",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "4 times per month",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Floss",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "4 times per month",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Floss"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Floss"
+        ]
+      ],
+      "seeded": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Floss",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "10",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Every day",
+          "Every",
+          "3",
+          "days",
+          "times per week",
+          "4",
+          "times per month",
+          "times in",
+          "14",
+          "SAVE"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Floss",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "4 times per month",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Floss",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "4 times per month",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Floss",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Floss",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Floss"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Floss"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Floss' and freq_num=\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Floss' and freq_num=\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Habits where name='Floss' and freq_num=\" \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from Habits where name='Floss' and freq_num=\" \u2192 '0' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "frequency-lost-on-rotation"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from Habits where name='Floss' and freq_num=\" \u2192 '0' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "frequency-lost-on-rotation"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from Habits where name='Floss' and freq_num=\" \u2192 '0' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "frequency-lost-on-rotation"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 288,
+      "u2": 96
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow",
+      "uhabits-drift-archive-label",
+      "uhabits-drift-type-order"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Yes or No"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Floss"
+      },
+      {
+        "tap": "boolean_frequency_picker"
+      },
+      {
+        "tap": "xTimesPerMonthRadioButton"
+      },
+      {
+        "tap": "xTimesPerMonthTextView"
+      },
+      {
+        "type": "4"
+      },
+      {
+        "tap": "button1"
+      },
+      "wait",
+      {
+        "rotate": "landscape"
+      },
+      "wait",
+      {
+        "tap": "SAVE"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "uhabits-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "New habit"
+      ],
+      "texts_removed": [
+        "Add habit"
+      ]
+    }
+  },
+  "uhabits-delete-habit": {
+    "name": "Delete one of two habits from the habit list",
+    "bugs": [
+      "delete-confirm-off-main-thread"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "delete-confirm-off-main-thread",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 17,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Habits",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Filter",
+          "More options",
+          "New habit",
+          "Piano",
+          "QASEED"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Habits",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Filter",
+          "More options",
+          "New habit",
+          "Piano",
+          "QASEED"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 17,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Habits",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Filter",
+          "More options",
+          "New habit",
+          "Piano",
+          "QASEED"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Habits",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Filter",
+          "More options",
+          "New habit",
+          "Piano",
+          "QASEED"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select (select count(*) from Habits where name='Piano') * 10\" \u2192 '10' (want '10')",
+        "steps_run": 18,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 18: org.isoron.uhabits crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@org.isoron.uhabits.activities.habits.list.ListHabitsSelectionMenu.onSelectionFinish(ListHabitsSelectionMenu.kt) > org.isoron.uhabits.activities.habits.list.views.HabitCardListController.onModelChange(HabitCardListController.kt) > org.isoron.uhabits.core.models.ModelObservable.notifyListeners(ModelObservable.kt) \u2014 fired: delete-confirm-off-main-thread",
+        "steps_run": 18,
+        "attempts": 1,
+        "fired": [
+          "delete-confirm-off-main-thread"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Chess",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Chess"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Chess"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Piano",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Chess",
+          "Piano"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Chess",
+          "Piano"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Chess",
+          "Piano",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Change color",
+          "Move to archive",
+          "Delete"
+        ],
+        [
+          "Delete habit?",
+          "The habit will be permanently deleted. This action cannot be undone.",
+          "NO",
+          "YES"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Piano"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Piano"
+        ]
+      ],
+      "seeded": [
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Chess",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Chess"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Chess"
+        ],
+        [
+          "Measurable",
+          "e.g. How many miles did you run today? How many pages did you read?",
+          "Yes or No",
+          "e.g. Did you wake up early today? Did you exercise? Did you play chess?"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "e.g. Exercise",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Navigate up",
+          "Create habit",
+          "SAVE",
+          "Piano",
+          "Name",
+          "Color",
+          "e.g. Did you exercise today?",
+          "Question",
+          "Every day",
+          "Frequency",
+          "Off",
+          "Reminder",
+          "(Optional)",
+          "Notes"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Chess",
+          "Piano"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Chess",
+          "Piano"
+        ],
+        [
+          "Habits",
+          "New habit",
+          "Filter",
+          "More options",
+          "QASEED",
+          "Chess",
+          "Piano",
+          "Done",
+          "1",
+          "Edit"
+        ],
+        [
+          "Change color",
+          "Move to archive",
+          "Delete"
+        ],
+        [
+          "Delete habit?",
+          "The habit will be permanently deleted. This action cannot be undone.",
+          "NO",
+          "YES"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Habits",
+          "Predicted app: Habits",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Habits",
+          "Predicted app: Habits",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from Habits where name='Piano') * 10\" \u2192 '10' (want '10')",
+          "steps_run": 18,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from Habits where name='Piano') * 10\" \u2192 '10' (want '10')",
+          "steps_run": 18,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from Habits where name='Piano') * 10\" \u2192 '10' (want '10')",
+          "steps_run": 18,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 18: org.isoron.uhabits crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@org.isoron.uhabits.activities.habits.list.ListHabitsSelectionMenu.onSelectionFinish(ListHabitsSelectionMenu.kt) > org.isoron.uhabits.activities.habits.list.views.HabitCardListController.onModelChange(HabitCardListController.kt) > org.isoron.uhabits.core.models.ModelObservable.notifyListeners(ModelObservable.kt) \u2014 fired: delete-confirm-off-main-thread",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "delete-confirm-off-main-thread"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 18: org.isoron.uhabits crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@org.isoron.uhabits.activities.habits.list.ListHabitsSelectionMenu.onSelectionFinish(ListHabitsSelectionMenu.kt) > org.isoron.uhabits.activities.habits.list.views.HabitCardListController.onModelChange(HabitCardListController.kt) > org.isoron.uhabits.core.models.ModelObservable.notifyListeners(ModelObservable.kt) \u2014 fired: delete-confirm-off-main-thread",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "delete-confirm-off-main-thread"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 18: org.isoron.uhabits crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@org.isoron.uhabits.activities.habits.list.ListHabitsSelectionMenu.onSelectionFinish(ListHabitsSelectionMenu.kt) > org.isoron.uhabits.activities.habits.list.views.HabitCardListController.onModelChange(HabitCardListController.kt) > org.isoron.uhabits.core.models.ModelObservable.notifyListeners(ModelObservable.kt) \u2014 fired: delete-confirm-off-main-thread",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "delete-confirm-off-main-thread"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 342,
+      "u2": 114
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "uhabits-drift-add-label",
+      "uhabits-drift-color-overflow",
+      "uhabits-drift-archive-label",
+      "uhabits-drift-type-order"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Yes or No"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Chess"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "New habit"
+      },
+      {
+        "tap": "Yes or No"
+      },
+      {
+        "tap": "nameInput"
+      },
+      {
+        "type": "Piano"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "long_press": "Chess"
+      },
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Delete"
+      },
+      {
+        "tap": "Yes"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "uhabits-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Move to archive",
+        "New habit"
+      ],
+      "texts_removed": [
+        "Add habit",
+        "Archive"
+      ]
+    }
+  }
+}

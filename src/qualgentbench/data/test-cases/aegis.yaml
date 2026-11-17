@@ -38,11 +38,20 @@ app: aegis
 # then data/apk-pins.json marks this sha256 `unpublished`, a fresh clone's journey download
 # fails its sha256 check, and dist/aegis/buggy.apk (which wins locally) is the artifact.
 # The hunt spec's own `apk:` block does not move.
+#
+# REBUILT for drift flags (QUA-3490): the same ref and the same defect patches plus the
+# benchmark spec's `drift:` patches (benign UI changes, each off unless its flag is listed),
+# built by `build_app.py aegis --buggy`. A rebuild is not byte-identical, so the hash below
+# moved. Checked on the rebuild: `derive_journey.py aegis` (drift off, one trial) reached the
+# committed verdict on every case, and `derive_journey.py aegis --drift all --repeat 3`
+# (data/truth/drift-aegis.json) the same verdict on every case a drift flag touches. The
+# committed journey truth is unchanged. NOT YET PUBLISHED: owner uploads with
+# `publish_apk.py aegis --kind journey --write --upload --yes`.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/aegis-buggy.apk
-  sha256: 9a37b5762dc974b5875994f6c8f514b2d39198e6254d412150a767eb3cf3da08
-  size_bytes: 18383927
+  sha256: 9e01c776fa052b58e96a6dbf5060f58e22d662c4617431388ea5a17ba664429d
+  size_bytes: 18525864
 
 defects:
   # ── CRASH ×4 ───────────────────────────────────────────────────────────────────────
@@ -527,3 +536,37 @@ test_cases:
       expect: {present: "1 / 2 QR codes", crash: ConcurrentModificationException}
     evidence: ["1 / 2 QR codes"]   # screen witness: the two-code counter, only on the Transfer screen
     bugs: [share-ends-selection-mid-loop]
+
+# ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
+# Benign UI changes compiled into the journey APK beside the defects (the patches are in
+# the benchmark spec's `drift:`). NOT defects: no case lists one under `bugs:`, nothing
+# that scores reads them, and the brief does not change (its steps still name the
+# drift-off UI). A memory track switches them on per stage (`journey.journey_tasks(...,
+# drift=...)`); `rewrite:` is how the harness-only replay route walks the drifted UI.
+# `scripts/derive_journey.py <app> --drift all --repeat 3` proves every affected case
+# reaches the same verdict with them on (data/truth/drift-<app>.json).
+drift:
+  - id: aegis-drift-fab-label
+    kind: relabel
+    change: 'The + button is announced as "Add account" instead of "Add new entry".'
+    rewrite:
+      - from: {tap: Add new entry}
+        to: [{tap: Add account}]
+  - id: aegis-drift-enter-label
+    kind: relabel
+    change: 'The + menu''s "Enter manually" item reads "Type in details".'
+    rewrite:
+      - from: {tap: Enter manually}
+        to: [{tap: Type in details}]
+  - id: aegis-drift-transfer-overflow
+    kind: move
+    change: "With entries selected, the Transfer action moves from the toolbar into the More options menu."
+    rewrite:
+      - from: {tap: Transfer}
+        to: [{tap: More options}, {tap: Transfer}]
+  - id: aegis-drift-settings-label
+    kind: relabel
+    change: 'The main menu''s "Settings" entry reads "Preferences".'
+    rewrite:
+      - from: {tap: Settings}
+        to: [{tap: Preferences}]

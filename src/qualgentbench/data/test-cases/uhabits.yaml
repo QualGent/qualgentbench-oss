@@ -45,11 +45,20 @@ app: uhabits
 # NOT YET PUBLISHED: apk-pins.json marks the sha256 `unpublished` until the owner uploads
 # it (QUA-3469) with `publish_apk.py uhabits --kind journey --write --upload --yes`.
 # Until then a fresh clone's journey download fails its sha256 check, loudly, by design.
+#
+# REBUILT for drift flags (QUA-3490): the same ref and the same defect patches plus the
+# benchmark spec's `drift:` patches (benign UI changes, each off unless its flag is listed),
+# built by `build_app.py uhabits --buggy`. A rebuild is not byte-identical, so the hash below
+# moved. Checked on the rebuild: `derive_journey.py uhabits` (drift off, one trial) reached the
+# committed verdict on every case, and `derive_journey.py uhabits --drift all --repeat 3`
+# (data/truth/drift-uhabits.json) the same verdict on every case a drift flag touches. The
+# committed journey truth is unchanged. NOT YET PUBLISHED: owner uploads with
+# `publish_apk.py uhabits --kind journey --write --upload --yes`.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/uhabits-buggy.apk
-  sha256: 2c251d90ccbf64651079a7859c90e1348178bae1447a20b2ac5eb3b08ba6f006
-  size_bytes: 28522856
+  sha256: 777dee520d2f4fc9ad3b8e58c044bb71790d4ccbd1ec1ff681af3a847e09f75c
+  size_bytes: 28523260
 
 defects:
   # ── CRASH x3 ────────────────────────────────────────────────────────────────────────
@@ -529,3 +538,35 @@ test_cases:
         query: "select (select count(*) from Habits where name='Piano') * 10 + (select count(*) from Habits where name='Chess');"
         crash: CalledFromWrongThreadException
     bugs: [delete-confirm-off-main-thread]
+
+# ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
+# Benign UI changes compiled into the journey APK beside the defects (the patches are in
+# the benchmark spec's `drift:`). NOT defects: no case lists one under `bugs:`, nothing
+# that scores reads them, and the brief does not change (its steps still name the
+# drift-off UI). A memory track switches them on per stage (`journey.journey_tasks(...,
+# drift=...)`); `rewrite:` is how the harness-only replay route walks the drifted UI.
+# `scripts/derive_journey.py <app> --drift all --repeat 3` proves every affected case
+# reaches the same verdict with them on (data/truth/drift-<app>.json).
+drift:
+  - id: uhabits-drift-add-label
+    kind: relabel
+    change: 'The toolbar''s "Add habit" action is announced as "New habit".'
+    rewrite:
+      - from: {tap: Add habit}
+        to: [{tap: New habit}]
+  - id: uhabits-drift-color-overflow
+    kind: move
+    change: 'With a habit selected, "Change color" moves from the toolbar into the More options menu.'
+    rewrite:
+      - from: {tap: Change color}
+        to: [{tap: More options}, {tap: Change color}]
+  - id: uhabits-drift-archive-label
+    kind: relabel
+    change: 'The selection menu''s "Archive" entry reads "Move to archive".'
+    rewrite:
+      - from: {tap: Archive}
+        to: [{tap: Move to archive}]
+  - id: uhabits-drift-type-order
+    kind: reorder
+    change: "The new-habit type picker lists Measurable above Yes or No."
+    affects: [uhabits-create-measurable, uhabits-weekly-frequency]

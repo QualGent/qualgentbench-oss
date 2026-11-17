@@ -941,3 +941,65 @@ tasks:
       db: simpleTimeTrackerDB
       query: "select count(*) from records r join recordTypes t on t.id = r.type_id where t.name='QAACT02';"
       expect: ">=1"
+
+# ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
+# BENIGN UI changes behind the same QgbFlags shim as the bugs (see markor.yaml for the
+# contract). Declared for the harness in data/test-cases/simpletimetracker.yaml
+# `drift:`. Each read of the flags file on the main thread is wrapped in a StrictMode
+# allowance, as the bug patches do (the debug build's thread policy flags disk reads).
+drift:
+  # relabel: the bottom bar's Records tab is announced as "History".
+  - id: stt-drift-records-tab-label
+    patch:
+      file: features/feature_main/src/main/java/com/example/util/simpletimetracker/feature_main/provider/MainTabsProvider.kt
+      find: "NavigationTab.Records -> R.string.shortcut_navigation_records"
+      replace: |-
+        NavigationTab.Records -> if (run {
+                val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                try { com.example.util.simpletimetracker.domain.QgbFlags.on("stt-drift-records-tab-label") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+            }) return "History" else R.string.shortcut_navigation_records
+  # relabel: Settings' "Edit categories and tags" row reads "Categories and tags".
+  - id: stt-drift-categories-label
+    patch:
+      file: features/feature_settings/src/main/java/com/example/util/simpletimetracker/feature_settings/interactor/SettingsMainViewDataInteractor.kt
+      find: "title = resourceRepo.getString(R.string.settings_edit_categories),"
+      replace: |-
+        title = if (run {
+                val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                try { com.example.util.simpletimetracker.domain.QgbFlags.on("stt-drift-categories-label") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+            }) "Categories and tags" else resourceRepo.getString(R.string.settings_edit_categories),
+  # relabel: the activity editor's "More" toggle reads "Advanced".
+  - id: stt-drift-more-label
+    patch:
+      file: features/feature_change_record_type/src/main/java/com/example/util/simpletimetracker/feature_change_record_type/view/ChangeRecordTypeFragment.kt
+      find: "tvChangeRecordTypeMoreFieldsText.setText(moreButtonText)"
+      replace: |-
+        tvChangeRecordTypeMoreFieldsText.setText(moreButtonText)
+        if (moreButtonText == R.string.change_record_type_more_fields && run {
+                val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                try { com.example.util.simpletimetracker.domain.QgbFlags.on("stt-drift-more-label") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+            }) {
+            tvChangeRecordTypeMoreFieldsText.text = "Advanced"
+        }
+  # relabel: the Timers grid's "Add" card reads "New activity".
+  - id: stt-drift-add-label
+    patch:
+      file: core/src/main/java/com/example/util/simpletimetracker/core/mapper/RecordTypeViewDataMapper.kt
+      find: |-
+        checkState = GoalCheckmarkView.CheckState.HIDDEN,
+            )
+        }
+
+        fun mapToAddDefaultItem(
+      replace: |-
+        checkState = GoalCheckmarkView.CheckState.HIDDEN,
+            ).let {
+                val qgbOn = run {
+                    val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                    try { com.example.util.simpletimetracker.domain.QgbFlags.on("stt-drift-add-label") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                }
+                if (qgbOn) it.copy(name = "New activity") else it
+            }
+        }
+
+        fun mapToAddDefaultItem(

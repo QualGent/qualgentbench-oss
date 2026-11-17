@@ -1,0 +1,8199 @@
+{
+  "stt-category-for-activity": {
+    "name": "Create an activity and give it a new category",
+    "bugs": [
+      "category-save-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "category-save-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 16,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Add category",
+          "Add record tag",
+          "Assign different tags to records to differentiate between them",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Categories and tags",
+          "Study"
+        ]
+      },
+      {
+        "step": 17,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Add category",
+          "Add record tag",
+          "Assign different tags to records to differentiate between them",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Categories and tags",
+          "Study"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 16,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Add category",
+          "Add record tag",
+          "Assign different tags to records to differentiate between them",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Categories and tags",
+          "Study"
+        ]
+      },
+      {
+        "step": 17,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Add category",
+          "Add record tag",
+          "Assign different tags to records to differentiate between them",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Categories and tags",
+          "Study"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from categories c join recordTypeCategory rc' \u2192 '1' (want '1')",
+        "steps_run": 17,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 17: com.razeeman.util.simpletimetracker.debug crashed \u2014 java.lang.IllegalArgumentException: category color index out of palette range \u2014 java.lang.IllegalArgumentException@com.example.util.simpletimetracker.feature_change_category.viewModel.ChangeCategoryViewModel$onSaveClick$1.invokeSuspend(ChangeCategoryViewModel.kt) > kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt) > kotlinx.coroutines.internal.DispatchedContinuationKt.resumeCancellableWith(DispatchedContinuation.kt) \u2014 fired: category-save-crash",
+        "steps_run": 17,
+        "attempts": 1,
+        "fired": [
+          "category-save-crash"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Allow multitasking",
+          "If disabled, starting new timer will automatically stop other activities.",
+          "Dark mode",
+          "System",
+          "Language",
+          "Categories and tags",
+          "Assign categories to activities and tags to records.",
+          "Archive",
+          "Rate us",
+          "Rate the app and leave a review.",
+          "Support development",
+          "Does not grant access to any digital content or services.",
+          "Feedback",
+          "Have a suggestion? Found a bug? Want to talk? Write us!",
+          "Version",
+          "1.59 debug",
+          "Notification settings",
+          "Display settings",
+          "Additional settings",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Study",
+          "Clear text",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Study",
+          "Activities",
+          "Nothing selected",
+          "QASEED",
+          "Reading",
+          "SAVE"
+        ],
+        [
+          "Study",
+          "Activities",
+          "1",
+          "Selected",
+          "Reading",
+          "QASEED",
+          "SAVE"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Study",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Study",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ]
+      ],
+      "seeded": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Allow multitasking",
+          "If disabled, starting new timer will automatically stop other activities.",
+          "Dark mode",
+          "System",
+          "Language",
+          "Categories and tags",
+          "Assign categories to activities and tags to records.",
+          "Archive",
+          "Rate us",
+          "Rate the app and leave a review.",
+          "Support development",
+          "Does not grant access to any digital content or services.",
+          "Feedback",
+          "Have a suggestion? Found a bug? Want to talk? Write us!",
+          "Version",
+          "1.59 debug",
+          "Notification settings",
+          "Display settings",
+          "Additional settings",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Study",
+          "Clear text",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Study",
+          "Activities",
+          "Nothing selected",
+          "QASEED",
+          "Reading",
+          "SAVE"
+        ],
+        [
+          "Study",
+          "Activities",
+          "1",
+          "Selected",
+          "Reading",
+          "QASEED",
+          "SAVE"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Predicted app: Debug Simple Time Tracker",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Predicted app: Debug Simple Time Tracker",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from categories c join recordTypeCategory rc' \u2192 '1' (want '1')",
+          "steps_run": 17,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from categories c join recordTypeCategory rc' \u2192 '1' (want '1')",
+          "steps_run": 17,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from categories c join recordTypeCategory rc' \u2192 '1' (want '1')",
+          "steps_run": 17,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 17: com.razeeman.util.simpletimetracker.debug crashed \u2014 java.lang.IllegalArgumentException: category color index out of palette range \u2014 java.lang.IllegalArgumentException@com.example.util.simpletimetracker.feature_change_category.viewModel.ChangeCategoryViewModel$onSaveClick$1.invokeSuspend(ChangeCategoryViewModel.kt) > kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt) > kotlinx.coroutines.internal.DispatchedContinuationKt.resumeCancellableWith(DispatchedContinuation.kt) \u2014 fired: category-save-crash",
+          "steps_run": 17,
+          "attempts": 1,
+          "fired": [
+            "category-save-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 17: com.razeeman.util.simpletimetracker.debug crashed \u2014 java.lang.IllegalArgumentException: category color index out of palette range \u2014 java.lang.IllegalArgumentException@com.example.util.simpletimetracker.feature_change_category.viewModel.ChangeCategoryViewModel$onSaveClick$1.invokeSuspend(ChangeCategoryViewModel.kt) > kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt) > kotlinx.coroutines.internal.DispatchedContinuationKt.resumeCancellableWith(DispatchedContinuation.kt) \u2014 fired: category-save-crash",
+          "steps_run": 17,
+          "attempts": 1,
+          "fired": [
+            "category-save-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 17: com.razeeman.util.simpletimetracker.debug crashed \u2014 java.lang.IllegalArgumentException: category color index out of palette range \u2014 java.lang.IllegalArgumentException@com.example.util.simpletimetracker.feature_change_category.viewModel.ChangeCategoryViewModel$onSaveClick$1.invokeSuspend(ChangeCategoryViewModel.kt) > kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt) > kotlinx.coroutines.internal.DispatchedContinuationKt.resumeCancellableWith(DispatchedContinuation.kt) \u2014 fired: category-save-crash",
+          "steps_run": 17,
+          "attempts": 1,
+          "fired": [
+            "category-save-crash"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 324,
+      "u2": 108
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "stt-drift-records-tab-label",
+      "stt-drift-categories-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New activity"
+      },
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Reading"
+      },
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Settings"
+      },
+      {
+        "tap": "Categories and tags"
+      },
+      "wait",
+      {
+        "tap": "Add category"
+      },
+      {
+        "tap": "etChangeCategoryName"
+      },
+      {
+        "type": "Study"
+      },
+      {
+        "tap": "Activities"
+      },
+      {
+        "tap": "Reading"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "stt-drift-categories-label",
+      "stt-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Advanced",
+        "History",
+        "New activity",
+        "QASEED"
+      ],
+      "texts_removed": [
+        "Add",
+        "Edit categories and tags",
+        "Records",
+        "To start tracking, add activities by clicking on Add button or use default presets by clicking on Default button"
+      ]
+    }
+  },
+  "stt-tag-for-activity": {
+    "name": "Create an activity and a record tag for it",
+    "bugs": [
+      "tag-save-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "tag-save-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 16,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Add category",
+          "Add record tag",
+          "Assign different tags to records to differentiate between them",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Categories and tags",
+          "Scales"
+        ]
+      },
+      {
+        "step": 17,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Add category",
+          "Add record tag",
+          "Assign different tags to records to differentiate between them",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Categories and tags",
+          "Scales"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 16,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Add category",
+          "Add record tag",
+          "Assign different tags to records to differentiate between them",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Categories and tags",
+          "Scales"
+        ]
+      },
+      {
+        "step": 17,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Add category",
+          "Add record tag",
+          "Assign different tags to records to differentiate between them",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Categories and tags",
+          "Scales"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from recordTags g join recordTypeToTag rt on' \u2192 '1' (want '1')",
+        "steps_run": 17,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 17: com.razeeman.util.simpletimetracker.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index: 0, Size: 0 \u2014 java.lang.IndexOutOfBoundsException@com.example.util.simpletimetracker.feature_change_record_tag.viewModel.ChangeRecordTagViewModel$onSaveClick$1.invokeSuspend(ChangeRecordTagViewModel.kt) > kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt) > kotlinx.coroutines.internal.DispatchedContinuationKt.resumeCancellableWith(DispatchedContinuation.kt) \u2014 fired: tag-save-crash",
+        "steps_run": 17,
+        "attempts": 1,
+        "fired": [
+          "tag-save-crash"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Guitar",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Guitar",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Guitar",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Guitar",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Allow multitasking",
+          "If disabled, starting new timer will automatically stop other activities.",
+          "Dark mode",
+          "System",
+          "Language",
+          "Categories and tags",
+          "Assign categories to activities and tags to records.",
+          "Archive",
+          "Rate us",
+          "Rate the app and leave a review.",
+          "Support development",
+          "Does not grant access to any digital content or services.",
+          "Feedback",
+          "Have a suggestion? Found a bug? Want to talk? Write us!",
+          "Version",
+          "1.59 debug",
+          "Notification settings",
+          "Display settings",
+          "Additional settings",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Activity",
+          "More"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Activity",
+          "More"
+        ],
+        [
+          "Scales",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Activity",
+          "More"
+        ],
+        [
+          "Scales",
+          "Activity",
+          "Can be assigned to records of any activity",
+          "Nothing selected",
+          "Guitar",
+          "QASEED",
+          "SAVE"
+        ],
+        [
+          "Scales",
+          "Activity",
+          "1",
+          "Can only be assigned to records of a specific activity",
+          "Selected",
+          "Guitar",
+          "QASEED",
+          "SAVE"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Scales",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Scales",
+          "Add record tag"
+        ]
+      ],
+      "seeded": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Guitar",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Guitar",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Guitar",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Guitar",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Allow multitasking",
+          "If disabled, starting new timer will automatically stop other activities.",
+          "Dark mode",
+          "System",
+          "Language",
+          "Categories and tags",
+          "Assign categories to activities and tags to records.",
+          "Archive",
+          "Rate us",
+          "Rate the app and leave a review.",
+          "Support development",
+          "Does not grant access to any digital content or services.",
+          "Feedback",
+          "Have a suggestion? Found a bug? Want to talk? Write us!",
+          "Version",
+          "1.59 debug",
+          "Notification settings",
+          "Display settings",
+          "Additional settings",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Activity",
+          "More"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Activity",
+          "More"
+        ],
+        [
+          "Scales",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Activity",
+          "More"
+        ],
+        [
+          "Scales",
+          "Activity",
+          "Can be assigned to records of any activity",
+          "Nothing selected",
+          "Guitar",
+          "QASEED",
+          "SAVE"
+        ],
+        [
+          "Scales",
+          "Activity",
+          "1",
+          "Can only be assigned to records of a specific activity",
+          "Selected",
+          "Guitar",
+          "QASEED",
+          "SAVE"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Predicted app: Debug Simple Time Tracker",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Predicted app: Debug Simple Time Tracker",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from recordTags g join recordTypeToTag rt on' \u2192 '1' (want '1')",
+          "steps_run": 17,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from recordTags g join recordTypeToTag rt on' \u2192 '1' (want '1')",
+          "steps_run": 17,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from recordTags g join recordTypeToTag rt on' \u2192 '1' (want '1')",
+          "steps_run": 17,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 17: com.razeeman.util.simpletimetracker.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index: 0, Size: 0 \u2014 java.lang.IndexOutOfBoundsException@com.example.util.simpletimetracker.feature_change_record_tag.viewModel.ChangeRecordTagViewModel$onSaveClick$1.invokeSuspend(ChangeRecordTagViewModel.kt) > kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt) > kotlinx.coroutines.internal.DispatchedContinuationKt.resumeCancellableWith(DispatchedContinuation.kt) \u2014 fired: tag-save-crash",
+          "steps_run": 17,
+          "attempts": 1,
+          "fired": [
+            "tag-save-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 17: com.razeeman.util.simpletimetracker.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index: 0, Size: 0 \u2014 java.lang.IndexOutOfBoundsException@com.example.util.simpletimetracker.feature_change_record_tag.viewModel.ChangeRecordTagViewModel$onSaveClick$1.invokeSuspend(ChangeRecordTagViewModel.kt) > kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt) > kotlinx.coroutines.internal.DispatchedContinuationKt.resumeCancellableWith(DispatchedContinuation.kt) \u2014 fired: tag-save-crash",
+          "steps_run": 17,
+          "attempts": 1,
+          "fired": [
+            "tag-save-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 17: com.razeeman.util.simpletimetracker.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index: 0, Size: 0 \u2014 java.lang.IndexOutOfBoundsException@com.example.util.simpletimetracker.feature_change_record_tag.viewModel.ChangeRecordTagViewModel$onSaveClick$1.invokeSuspend(ChangeRecordTagViewModel.kt) > kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt) > kotlinx.coroutines.internal.DispatchedContinuationKt.resumeCancellableWith(DispatchedContinuation.kt) \u2014 fired: tag-save-crash",
+          "steps_run": 17,
+          "attempts": 1,
+          "fired": [
+            "tag-save-crash"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 324,
+      "u2": 108
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "stt-drift-records-tab-label",
+      "stt-drift-categories-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New activity"
+      },
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Guitar"
+      },
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Settings"
+      },
+      {
+        "tap": "Categories and tags"
+      },
+      "wait",
+      {
+        "tap": "Add record tag"
+      },
+      {
+        "tap": "etChangeRecordTagName"
+      },
+      {
+        "type": "Scales"
+      },
+      {
+        "tap": "Activity"
+      },
+      {
+        "tap": "Guitar"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "stt-drift-categories-label",
+      "stt-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Advanced",
+        "History",
+        "New activity",
+        "QASEED"
+      ],
+      "texts_removed": [
+        "Add",
+        "Edit categories and tags",
+        "Records",
+        "To start tracking, add activities by clicking on Add button or use default presets by clicking on Default button"
+      ]
+    }
+  },
+  "stt-comment-on-record": {
+    "name": "Track a session and add a comment to its record",
+    "bugs": [
+      "record-comment-save-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "record-comment-save-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 8,
+        "added": [
+          "5s"
+        ],
+        "removed": [
+          "4s"
+        ]
+      },
+      {
+        "step": 9,
+        "added": [
+          "20s"
+        ],
+        "removed": [
+          "19s"
+        ]
+      },
+      {
+        "step": 20,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "-",
+          "0m",
+          "10:00",
+          "10:01",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "1m",
+          "Click on record to edit",
+          "Essay",
+          "First draft",
+          "Fri",
+          "History",
+          "Mon",
+          "QASEED",
+          "Sep",
+          "Settings",
+          "Statistics",
+          "Thu",
+          "Timers",
+          "Tue",
+          "Wed"
+        ]
+      },
+      {
+        "step": 21,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "-",
+          "0m",
+          "10:00",
+          "10:01",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "1m",
+          "Click on record to edit",
+          "Essay",
+          "First draft",
+          "Fri",
+          "History",
+          "Mon",
+          "QASEED",
+          "Sep",
+          "Settings",
+          "Statistics",
+          "Thu",
+          "Timers",
+          "Tue",
+          "Wed"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 8,
+        "added": [
+          "5s"
+        ],
+        "removed": [
+          "4s"
+        ]
+      },
+      {
+        "step": 9,
+        "added": [
+          "20s"
+        ],
+        "removed": [
+          "19s"
+        ]
+      },
+      {
+        "step": 20,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "-",
+          "0m",
+          "10:00",
+          "10:01",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "1m",
+          "Click on record to edit",
+          "Essay",
+          "First draft",
+          "Fri",
+          "History",
+          "Mon",
+          "QASEED",
+          "Sep",
+          "Settings",
+          "Statistics",
+          "Thu",
+          "Timers",
+          "Tue",
+          "Wed"
+        ]
+      },
+      {
+        "step": 21,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "-",
+          "0m",
+          "10:00",
+          "10:01",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "1m",
+          "Click on record to edit",
+          "Essay",
+          "First draft",
+          "Fri",
+          "History",
+          "Mon",
+          "QASEED",
+          "Sep",
+          "Settings",
+          "Statistics",
+          "Thu",
+          "Timers",
+          "Tue",
+          "Wed"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from records r join recordTypes t on t.id = ' \u2192 '1' (want '1')",
+        "steps_run": 21,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 21: com.razeeman.util.simpletimetracker.debug crashed \u2014 java.lang.NumberFormatException: For input string: \"First draft\" \u2014 java.lang.NumberFormatException@com.example.util.simpletimetracker.feature_change_record.viewModel.ChangeRecordViewModel.onSaveClickDelegate(ChangeRecordViewModel.kt) > com.example.util.simpletimetracker.feature_change_record.viewModel.ChangeRecordBaseViewModel.onSaveClickDelegate$default(ChangeRecordBaseViewModel.kt) > com.example.util.simpletimetracker.feature_change_record.viewModel.ChangeRecordBaseViewModel.onSaveClick$onSaveClickDelegate(ChangeRecordBaseViewModel.kt) \u2014 fired: record-comment-save-crash",
+        "steps_run": 21,
+        "attempts": 1,
+        "fired": [
+          "record-comment-save-crash"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Essay",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Essay",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Essay",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Essay",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "4s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "19s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Essay",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Essay",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Essay",
+          "10:00",
+          "1m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Essay",
+          "10:00",
+          "1m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "Statistics",
+          "Delete",
+          "Start",
+          "Sep 16",
+          "End",
+          "-30",
+          "-5",
+          "-1",
+          "+1",
+          "+5",
+          "+30",
+          "Now",
+          "Activity",
+          "Tag",
+          "Comment",
+          "Actions",
+          "SAVE"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "Statistics",
+          "Delete",
+          "Start",
+          "Sep 16",
+          "End",
+          "-30",
+          "-5",
+          "-1",
+          "+1",
+          "+5",
+          "+30",
+          "Now",
+          "Activity",
+          "Tag",
+          "Comment",
+          "Actions",
+          "SAVE"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "Comment",
+          "Enter new comment"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "Comment",
+          "Enter new comment"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "First draft",
+          "Comment",
+          "Clear text"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "First draft",
+          "Statistics",
+          "Delete",
+          "Start",
+          "Sep 16",
+          "End",
+          "-30",
+          "-5",
+          "-1",
+          "+1",
+          "+5",
+          "+30",
+          "Now",
+          "Activity",
+          "Tag",
+          "Comment",
+          "Actions",
+          "SAVE"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Essay",
+          "10:00",
+          "1m",
+          "First draft",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Essay",
+          "10:00",
+          "1m",
+          "First draft",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ],
+      "seeded": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Essay",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Essay",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Essay",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Essay",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "5s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "20s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Essay",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Essay",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Essay",
+          "10:00",
+          "1m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Essay",
+          "10:00",
+          "1m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "Statistics",
+          "Delete",
+          "Start",
+          "Sep 16",
+          "End",
+          "-30",
+          "-5",
+          "-1",
+          "+1",
+          "+5",
+          "+30",
+          "Now",
+          "Activity",
+          "Tag",
+          "Comment",
+          "Actions",
+          "SAVE"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "Statistics",
+          "Delete",
+          "Start",
+          "Sep 16",
+          "End",
+          "-30",
+          "-5",
+          "-1",
+          "+1",
+          "+5",
+          "+30",
+          "Now",
+          "Activity",
+          "Tag",
+          "Comment",
+          "Actions",
+          "SAVE"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "Comment",
+          "Enter new comment"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "Comment",
+          "Enter new comment"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "First draft",
+          "Comment",
+          "Clear text"
+        ],
+        [
+          "Essay",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "First draft",
+          "Statistics",
+          "Delete",
+          "Start",
+          "Sep 16",
+          "End",
+          "-30",
+          "-5",
+          "-1",
+          "+1",
+          "+5",
+          "+30",
+          "Now",
+          "Activity",
+          "Tag",
+          "Comment",
+          "Actions",
+          "SAVE"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Predicted app: Debug Simple Time Tracker",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Predicted app: Debug Simple Time Tracker",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from records r join recordTypes t on t.id = ' \u2192 '1' (want '1')",
+          "steps_run": 21,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from records r join recordTypes t on t.id = ' \u2192 '1' (want '1')",
+          "steps_run": 21,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from records r join recordTypes t on t.id = ' \u2192 '1' (want '1')",
+          "steps_run": 21,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 21: com.razeeman.util.simpletimetracker.debug crashed \u2014 java.lang.NumberFormatException: For input string: \"First draft\" \u2014 java.lang.NumberFormatException@com.example.util.simpletimetracker.feature_change_record.viewModel.ChangeRecordViewModel.onSaveClickDelegate(ChangeRecordViewModel.kt) > com.example.util.simpletimetracker.feature_change_record.viewModel.ChangeRecordBaseViewModel.onSaveClickDelegate$default(ChangeRecordBaseViewModel.kt) > com.example.util.simpletimetracker.feature_change_record.viewModel.ChangeRecordBaseViewModel.onSaveClick$onSaveClickDelegate(ChangeRecordBaseViewModel.kt) \u2014 fired: record-comment-save-crash",
+          "steps_run": 21,
+          "attempts": 1,
+          "fired": [
+            "record-comment-save-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 21: com.razeeman.util.simpletimetracker.debug crashed \u2014 java.lang.NumberFormatException: For input string: \"First draft\" \u2014 java.lang.NumberFormatException@com.example.util.simpletimetracker.feature_change_record.viewModel.ChangeRecordViewModel.onSaveClickDelegate(ChangeRecordViewModel.kt) > com.example.util.simpletimetracker.feature_change_record.viewModel.ChangeRecordBaseViewModel.onSaveClickDelegate$default(ChangeRecordBaseViewModel.kt) > com.example.util.simpletimetracker.feature_change_record.viewModel.ChangeRecordBaseViewModel.onSaveClick$onSaveClickDelegate(ChangeRecordBaseViewModel.kt) \u2014 fired: record-comment-save-crash",
+          "steps_run": 21,
+          "attempts": 1,
+          "fired": [
+            "record-comment-save-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 21: com.razeeman.util.simpletimetracker.debug crashed \u2014 java.lang.NumberFormatException: For input string: \"First draft\" \u2014 java.lang.NumberFormatException@com.example.util.simpletimetracker.feature_change_record.viewModel.ChangeRecordViewModel.onSaveClickDelegate(ChangeRecordViewModel.kt) > com.example.util.simpletimetracker.feature_change_record.viewModel.ChangeRecordBaseViewModel.onSaveClickDelegate$default(ChangeRecordBaseViewModel.kt) > com.example.util.simpletimetracker.feature_change_record.viewModel.ChangeRecordBaseViewModel.onSaveClick$onSaveClickDelegate(ChangeRecordBaseViewModel.kt) \u2014 fired: record-comment-save-crash",
+          "steps_run": 21,
+          "attempts": 1,
+          "fired": [
+            "record-comment-save-crash"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 396,
+      "u2": 132
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "stt-drift-records-tab-label",
+      "stt-drift-categories-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New activity"
+      },
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Essay"
+      },
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Essay"
+      },
+      "wait",
+      {
+        "tap": "Essay"
+      },
+      "wait",
+      {
+        "tap": "History"
+      },
+      "wait",
+      {
+        "tap": "Essay"
+      },
+      "wait",
+      {
+        "tap": "Comment"
+      },
+      {
+        "tap": "etChangeRecordCommentField"
+      },
+      {
+        "type": "First draft"
+      },
+      {
+        "tap": "Comment"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "stt-drift-records-tab-label",
+      "stt-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "0m",
+        "19s",
+        "Advanced",
+        "History",
+        "New activity",
+        "QASEED"
+      ],
+      "texts_removed": [
+        "18s",
+        "Add",
+        "More",
+        "Records",
+        "To start tracking, add activities by clicking on Add button or use default presets by clicking on Default button"
+      ]
+    }
+  },
+  "stt-statistics-single-activity": {
+    "name": "Track one activity and read its share on Statistics",
+    "bugs": [
+      "statistics-share-halved"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "statistics-share-halved",
+        "marker": "50%",
+        "visible_steps": [
+          14,
+          15
+        ],
+        "texts": [
+          "50%"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 14,
+        "added": [
+          "50%"
+        ],
+        "removed": [
+          "100%"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "50%"
+        ],
+        "removed": [
+          "100%"
+        ]
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from records r join recordTypes t on t.id = ' \u2192 '1' (want '1')",
+        "steps_run": 15,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from records r join recordTypes t on t.id = ' \u2192 '1' (want '1')",
+        "steps_run": 15,
+        "attempts": 1,
+        "fired": [
+          "statistics-share-halved"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Gym",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Gym",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Gym",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Gym",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Gym",
+          "10:00",
+          "5s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Gym",
+          "10:00",
+          "20s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Gym",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Gym",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Gym",
+          "10:00",
+          "1m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Gym",
+          "10:00",
+          "1m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Gym",
+          "1m",
+          "100%",
+          "QASEED",
+          "0m",
+          "<1%",
+          "Total tracked",
+          "Click on card to view detailed statistics",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Gym",
+          "1m",
+          "100%",
+          "QASEED",
+          "0m",
+          "<1%",
+          "Total tracked",
+          "Click on card to view detailed statistics",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ],
+      "seeded": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Gym",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Gym",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Gym",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Gym",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Gym",
+          "10:00",
+          "5s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Gym",
+          "10:00",
+          "20s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Gym",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Gym",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Gym",
+          "10:00",
+          "1m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Gym",
+          "10:00",
+          "1m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Gym",
+          "1m",
+          "50%",
+          "QASEED",
+          "0m",
+          "<1%",
+          "Total tracked",
+          "Click on card to view detailed statistics",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Gym",
+          "1m",
+          "50%",
+          "QASEED",
+          "0m",
+          "<1%",
+          "Total tracked",
+          "Click on card to view detailed statistics",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from records r join recordTypes t on t.id = ' \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from records r join recordTypes t on t.id = ' \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from records r join recordTypes t on t.id = ' \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from records r join recordTypes t on t.id = ' \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "statistics-share-halved"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from records r join recordTypes t on t.id = ' \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "statistics-share-halved"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from records r join recordTypes t on t.id = ' \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "statistics-share-halved"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 288,
+      "u2": 96
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "stt-drift-records-tab-label",
+      "stt-drift-categories-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New activity"
+      },
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Gym"
+      },
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Gym"
+      },
+      "wait",
+      {
+        "tap": "Gym"
+      },
+      "wait",
+      {
+        "tap": "History"
+      },
+      "wait",
+      {
+        "tap": "Statistics"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "stt-drift-records-tab-label",
+      "stt-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "0m",
+        "20s",
+        "5s",
+        "<1%",
+        "Advanced",
+        "History",
+        "New activity",
+        "QASEED"
+      ],
+      "texts_removed": [
+        "18s",
+        "4s",
+        "Add",
+        "More",
+        "Records",
+        "To start tracking, add activities by clicking on Add button or use default presets by clicking on Default button"
+      ]
+    }
+  },
+  "stt-session-goal": {
+    "name": "Set a session goal on a new activity and reopen it",
+    "bugs": [
+      "goal-duration-label-doubled"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "goal-duration-label-doubled",
+        "marker": "2h",
+        "visible_steps": [
+          9,
+          10,
+          15,
+          16
+        ],
+        "texts": [
+          "2h"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 9,
+        "added": [
+          "2h"
+        ],
+        "removed": [
+          "1h"
+        ]
+      },
+      {
+        "step": 10,
+        "added": [
+          "2h"
+        ],
+        "removed": [
+          "1h"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "2h"
+        ],
+        "removed": [
+          "1h"
+        ]
+      },
+      {
+        "step": 16,
+        "added": [
+          "2h"
+        ],
+        "removed": [
+          "1h"
+        ]
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from recordTypeGoals g join recordTypes t on' \u2192 '1' (want '1')",
+        "steps_run": 16,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from recordTypeGoals g join recordTypes t on' \u2192 '1' (want '1')",
+        "steps_run": 16,
+        "attempts": 1,
+        "fired": [
+          "goal-duration-label-doubled"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Piano",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Piano",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled"
+        ],
+        [
+          "Piano",
+          "Goal",
+          "Notification will be shown after reaching the goal",
+          "Session",
+          "Duration",
+          "Disabled",
+          "Day",
+          "Week",
+          "Month",
+          "SAVE"
+        ],
+        [
+          "1m",
+          "15m",
+          "1h",
+          "Add",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "00",
+          "0",
+          "DISABLE",
+          "SAVE"
+        ],
+        [
+          "1m",
+          "15m",
+          "1h",
+          "Add",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "00",
+          "0",
+          "DISABLE",
+          "SAVE"
+        ],
+        [
+          "Piano",
+          "Goal",
+          "1",
+          "Notification will be shown after reaching the goal",
+          "Session",
+          "Duration",
+          "1h",
+          "GOAL",
+          "LIMIT",
+          "Day",
+          "Disabled",
+          "Week",
+          "Month",
+          "SAVE",
+          "System setting should be enabled for this app in order to schedule exact alarms",
+          "OPEN"
+        ],
+        [
+          "Piano",
+          "Goal",
+          "1",
+          "Notification will be shown after reaching the goal",
+          "Session",
+          "Duration",
+          "1h",
+          "GOAL",
+          "LIMIT",
+          "Day",
+          "Disabled",
+          "Week",
+          "Month",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Piano",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Piano",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Piano",
+          "Statistics",
+          "Archive",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "1",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled",
+          "SAVE"
+        ],
+        [
+          "Piano",
+          "Statistics",
+          "Archive",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "1",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled",
+          "SAVE"
+        ],
+        [
+          "Piano",
+          "Goal",
+          "1",
+          "Notification will be shown after reaching the goal",
+          "Session",
+          "Duration",
+          "1h",
+          "GOAL",
+          "LIMIT",
+          "Day",
+          "Disabled",
+          "Week",
+          "Month",
+          "SAVE"
+        ],
+        [
+          "Piano",
+          "Goal",
+          "1",
+          "Notification will be shown after reaching the goal",
+          "Session",
+          "Duration",
+          "1h",
+          "GOAL",
+          "LIMIT",
+          "Day",
+          "Disabled",
+          "Week",
+          "Month",
+          "SAVE"
+        ]
+      ],
+      "seeded": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Piano",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Piano",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled"
+        ],
+        [
+          "Piano",
+          "Goal",
+          "Notification will be shown after reaching the goal",
+          "Session",
+          "Duration",
+          "Disabled",
+          "Day",
+          "Week",
+          "Month",
+          "SAVE"
+        ],
+        [
+          "1m",
+          "15m",
+          "1h",
+          "Add",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "00",
+          "0",
+          "DISABLE",
+          "SAVE"
+        ],
+        [
+          "1m",
+          "15m",
+          "1h",
+          "Add",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "00",
+          "0",
+          "DISABLE",
+          "SAVE"
+        ],
+        [
+          "Piano",
+          "Goal",
+          "1",
+          "Notification will be shown after reaching the goal",
+          "Session",
+          "Duration",
+          "2h",
+          "GOAL",
+          "LIMIT",
+          "Day",
+          "Disabled",
+          "Week",
+          "Month",
+          "SAVE",
+          "System setting should be enabled for this app in order to schedule exact alarms",
+          "OPEN"
+        ],
+        [
+          "Piano",
+          "Goal",
+          "1",
+          "Notification will be shown after reaching the goal",
+          "Session",
+          "Duration",
+          "2h",
+          "GOAL",
+          "LIMIT",
+          "Day",
+          "Disabled",
+          "Week",
+          "Month",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Piano",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Piano",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Piano",
+          "Statistics",
+          "Archive",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "1",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled",
+          "SAVE"
+        ],
+        [
+          "Piano",
+          "Statistics",
+          "Archive",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "1",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled",
+          "SAVE"
+        ],
+        [
+          "Piano",
+          "Goal",
+          "1",
+          "Notification will be shown after reaching the goal",
+          "Session",
+          "Duration",
+          "2h",
+          "GOAL",
+          "LIMIT",
+          "Day",
+          "Disabled",
+          "Week",
+          "Month",
+          "SAVE"
+        ],
+        [
+          "Piano",
+          "Goal",
+          "1",
+          "Notification will be shown after reaching the goal",
+          "Session",
+          "Duration",
+          "2h",
+          "GOAL",
+          "LIMIT",
+          "Day",
+          "Disabled",
+          "Week",
+          "Month",
+          "SAVE"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from recordTypeGoals g join recordTypes t on' \u2192 '1' (want '1')",
+          "steps_run": 16,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from recordTypeGoals g join recordTypes t on' \u2192 '1' (want '1')",
+          "steps_run": 16,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from recordTypeGoals g join recordTypes t on' \u2192 '1' (want '1')",
+          "steps_run": 16,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from recordTypeGoals g join recordTypes t on' \u2192 '1' (want '1')",
+          "steps_run": 16,
+          "attempts": 1,
+          "fired": [
+            "goal-duration-label-doubled"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from recordTypeGoals g join recordTypes t on' \u2192 '1' (want '1')",
+          "steps_run": 16,
+          "attempts": 1,
+          "fired": [
+            "goal-duration-label-doubled"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from recordTypeGoals g join recordTypes t on' \u2192 '1' (want '1')",
+          "steps_run": 16,
+          "attempts": 1,
+          "fired": [
+            "goal-duration-label-doubled"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 306,
+      "u2": 102
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "stt-drift-records-tab-label",
+      "stt-drift-categories-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New activity"
+      },
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Piano"
+      },
+      {
+        "tap": "Advanced"
+      },
+      {
+        "tap": "Goal"
+      },
+      {
+        "tap": "Disabled"
+      },
+      {
+        "tap": "1h"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "long_press": "Piano"
+      },
+      "wait",
+      {
+        "tap": "Goal"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Advanced",
+        "History",
+        "New activity",
+        "QASEED"
+      ],
+      "texts_removed": [
+        "More",
+        "Records",
+        "To start tracking, add activities by clicking on Add button or use default presets by clicking on Default button"
+      ]
+    }
+  },
+  "stt-activity-with-note": {
+    "name": "Create an activity with a note and track it",
+    "bugs": [
+      "new-activity-offers-archive"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "new-activity-offers-archive",
+        "marker": "Archive",
+        "visible_steps": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "texts": [
+          "Archive"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 2,
+        "added": [
+          "Archive"
+        ],
+        "removed": []
+      },
+      {
+        "step": 3,
+        "added": [
+          "Archive"
+        ],
+        "removed": []
+      },
+      {
+        "step": 4,
+        "added": [
+          "Archive"
+        ],
+        "removed": []
+      },
+      {
+        "step": 5,
+        "added": [
+          "Archive"
+        ],
+        "removed": []
+      },
+      {
+        "step": 6,
+        "added": [
+          "Archive"
+        ],
+        "removed": []
+      },
+      {
+        "step": 7,
+        "added": [
+          "Archive"
+        ],
+        "removed": []
+      },
+      {
+        "step": 8,
+        "added": [
+          "Archive"
+        ],
+        "removed": []
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select (select count(*) from recordTypes where name='Yoga' a\" \u2192 '11' (want '11')",
+        "steps_run": 17,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "db \"select (select count(*) from recordTypes where name='Yoga' a\" \u2192 '11' (want '11')",
+        "steps_run": 17,
+        "attempts": 1,
+        "fired": [
+          "new-activity-offers-archive"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Yoga",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Yoga",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled"
+        ],
+        [
+          "Yoga",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled"
+        ],
+        [
+          "Yoga",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Morning stretch",
+          "Clear text",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled"
+        ],
+        [
+          "Yoga",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Yoga",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Yoga",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Yoga",
+          "10:01",
+          "4s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Yoga",
+          "10:01",
+          "19s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Yoga",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Yoga",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Yoga",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Yoga",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ],
+      "seeded": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Archive",
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Archive",
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Archive",
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Yoga",
+          "Archive",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Yoga",
+          "Archive",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled"
+        ],
+        [
+          "Yoga",
+          "Archive",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled"
+        ],
+        [
+          "Yoga",
+          "Archive",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Morning stretch",
+          "Clear text",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled"
+        ],
+        [
+          "Yoga",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Yoga",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Yoga",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Yoga",
+          "10:01",
+          "4s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Yoga",
+          "10:01",
+          "19s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Yoga",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Yoga",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Yoga",
+          "10:01",
+          "-",
+          "0m",
+          "QASEED",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Yoga",
+          "10:01",
+          "-",
+          "0m",
+          "QASEED",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from recordTypes where name='Yoga' a\" \u2192 '11' (want '11')",
+          "steps_run": 17,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from recordTypes where name='Yoga' a\" \u2192 '11' (want '11')",
+          "steps_run": 17,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from recordTypes where name='Yoga' a\" \u2192 '11' (want '11')",
+          "steps_run": 17,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from recordTypes where name='Yoga' a\" \u2192 '11' (want '11')",
+          "steps_run": 17,
+          "attempts": 1,
+          "fired": [
+            "new-activity-offers-archive"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from recordTypes where name='Yoga' a\" \u2192 '11' (want '11')",
+          "steps_run": 17,
+          "attempts": 1,
+          "fired": [
+            "new-activity-offers-archive"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from recordTypes where name='Yoga' a\" \u2192 '11' (want '11')",
+          "steps_run": 17,
+          "attempts": 1,
+          "fired": [
+            "new-activity-offers-archive"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 324,
+      "u2": 108
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "stt-drift-records-tab-label",
+      "stt-drift-categories-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New activity"
+      },
+      "wait",
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Yoga"
+      },
+      {
+        "tap": "Advanced"
+      },
+      {
+        "tap": "etChangeRecordTypeNote"
+      },
+      {
+        "type": "Morning stretch"
+      },
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Yoga"
+      },
+      "wait",
+      {
+        "tap": "Yoga"
+      },
+      "wait",
+      {
+        "tap": "History"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "stt-drift-records-tab-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Advanced",
+        "History",
+        "New activity",
+        "QASEED"
+      ],
+      "texts_removed": [
+        "Add",
+        "More",
+        "Records",
+        "To start tracking, add activities by clicking on Add button or use default presets by clicking on Default button"
+      ]
+    }
+  },
+  "stt-rename-activity": {
+    "name": "Rename an activity from the Timers screen",
+    "bugs": [
+      "activity-rename-not-saved"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "activity-rename-not-saved",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 13,
+        "added": [
+          "Reading"
+        ],
+        "removed": [
+          "Studying"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "Reading"
+        ],
+        "removed": [
+          "Studying"
+        ]
+      },
+      {
+        "step": 17,
+        "added": [
+          "Reading"
+        ],
+        "removed": [
+          "Studying"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "Reading"
+        ],
+        "removed": [
+          "Studying"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 13,
+        "added": [
+          "Reading"
+        ],
+        "removed": [
+          "Studying"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "Reading"
+        ],
+        "removed": [
+          "Studying"
+        ]
+      },
+      {
+        "step": 17,
+        "added": [
+          "Reading"
+        ],
+        "removed": [
+          "Studying"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "Reading"
+        ],
+        "removed": [
+          "Studying"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from recordTypes where name='Studying';\" \u2192 '1' (want '1')",
+        "steps_run": 18,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from recordTypes where name='Studying';\" \u2192 '0' (want '1')",
+        "steps_run": 18,
+        "attempts": 1,
+        "fired": [
+          "activity-rename-not-saved"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Reading",
+          "Statistics",
+          "Archive",
+          "Color",
+          "Icon",
+          "Advanced",
+          "SAVE"
+        ],
+        [
+          "Reading",
+          "Statistics",
+          "Archive",
+          "Color",
+          "Icon",
+          "Advanced",
+          "SAVE"
+        ],
+        [
+          "Reading",
+          "Statistics",
+          "Archive",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Studying",
+          "Statistics",
+          "Archive",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Studying",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Studying",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Studying",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Studying",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Studying",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ],
+      "seeded": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Reading",
+          "Statistics",
+          "Archive",
+          "Color",
+          "Icon",
+          "Advanced",
+          "SAVE"
+        ],
+        [
+          "Reading",
+          "Statistics",
+          "Archive",
+          "Color",
+          "Icon",
+          "Advanced",
+          "SAVE"
+        ],
+        [
+          "Reading",
+          "Statistics",
+          "Archive",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Studying",
+          "Statistics",
+          "Archive",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Studying",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from recordTypes where name='Studying';\" \u2192 '1' (want '1')",
+          "steps_run": 18,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from recordTypes where name='Studying';\" \u2192 '1' (want '1')",
+          "steps_run": 18,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from recordTypes where name='Studying';\" \u2192 '1' (want '1')",
+          "steps_run": 18,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from recordTypes where name='Studying';\" \u2192 '0' (want '1')",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "activity-rename-not-saved"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from recordTypes where name='Studying';\" \u2192 '0' (want '1')",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "activity-rename-not-saved"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from recordTypes where name='Studying';\" \u2192 '0' (want '1')",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "activity-rename-not-saved"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 342,
+      "u2": 114
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "stt-drift-records-tab-label",
+      "stt-drift-categories-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New activity"
+      },
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Reading"
+      },
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "long_press": "Reading"
+      },
+      "wait",
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Studying"
+      },
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "History"
+      },
+      "wait",
+      {
+        "tap": "Timers"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "stt-drift-records-tab-label",
+      "stt-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "-",
+        "0m",
+        "10:01",
+        "Advanced",
+        "Click on record to edit",
+        "History",
+        "New activity",
+        "QASEED"
+      ],
+      "texts_removed": [
+        "Add",
+        "More",
+        "Records",
+        "Records will be shown here\nClick on [IMAGE] to add new record\nClick on date button to select date",
+        "To start tracking, add activities by clicking on Add button or use default presets by clicking on Default button"
+      ]
+    }
+  },
+  "stt-delete-second-category": {
+    "name": "Delete one of two categories",
+    "bugs": [
+      "category-card-opens-first"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "category-card-opens-first",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 17,
+        "added": [
+          "Home"
+        ],
+        "removed": [
+          "Work"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "Home"
+        ],
+        "removed": [
+          "Work"
+        ]
+      },
+      {
+        "step": 19,
+        "added": [
+          "Work"
+        ],
+        "removed": [
+          "Home"
+        ]
+      },
+      {
+        "step": 20,
+        "added": [
+          "Work"
+        ],
+        "removed": [
+          "Home"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 17,
+        "added": [
+          "Home"
+        ],
+        "removed": [
+          "Work"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "Home"
+        ],
+        "removed": [
+          "Work"
+        ]
+      },
+      {
+        "step": 19,
+        "added": [
+          "Work"
+        ],
+        "removed": [
+          "Home"
+        ]
+      },
+      {
+        "step": 20,
+        "added": [
+          "Work"
+        ],
+        "removed": [
+          "Home"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select (select count(*) from categories where name='Home') *\" \u2192 '10' (want '10')",
+        "steps_run": 20,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select (select count(*) from categories where name='Home') *\" \u2192 '1' (want '10')",
+        "steps_run": 20,
+        "attempts": 1,
+        "fired": [
+          "category-card-opens-first"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Allow multitasking",
+          "If disabled, starting new timer will automatically stop other activities.",
+          "Dark mode",
+          "System",
+          "Language",
+          "Categories and tags",
+          "Assign categories to activities and tags to records.",
+          "Archive",
+          "Rate us",
+          "Rate the app and leave a review.",
+          "Support development",
+          "Does not grant access to any digital content or services.",
+          "Feedback",
+          "Have a suggestion? Found a bug? Want to talk? Write us!",
+          "Version",
+          "1.59 debug",
+          "Notification settings",
+          "Display settings",
+          "Additional settings",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Home",
+          "Clear text",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Home",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Home",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Home",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Work",
+          "Clear text",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Work",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Home",
+          "Work",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Home",
+          "Work",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Work",
+          "Statistics",
+          "Delete",
+          "Color",
+          "Activities",
+          "More",
+          "SAVE"
+        ],
+        [
+          "Work",
+          "Statistics",
+          "Delete",
+          "Color",
+          "Activities",
+          "More",
+          "SAVE"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Home",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Home",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ]
+      ],
+      "seeded": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Allow multitasking",
+          "If disabled, starting new timer will automatically stop other activities.",
+          "Dark mode",
+          "System",
+          "Language",
+          "Categories and tags",
+          "Assign categories to activities and tags to records.",
+          "Archive",
+          "Rate us",
+          "Rate the app and leave a review.",
+          "Support development",
+          "Does not grant access to any digital content or services.",
+          "Feedback",
+          "Have a suggestion? Found a bug? Want to talk? Write us!",
+          "Version",
+          "1.59 debug",
+          "Notification settings",
+          "Display settings",
+          "Additional settings",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Home",
+          "Clear text",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Home",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Home",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Home",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Work",
+          "Clear text",
+          "Color",
+          "Activities",
+          "More"
+        ],
+        [
+          "Work",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Home",
+          "Work",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Home",
+          "Work",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Home",
+          "Statistics",
+          "Delete",
+          "Color",
+          "Activities",
+          "More",
+          "SAVE"
+        ],
+        [
+          "Home",
+          "Statistics",
+          "Delete",
+          "Color",
+          "Activities",
+          "More",
+          "SAVE"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Work",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ],
+        [
+          "Categories and tags",
+          "Assign the same category to different activities to view their grouped statistics",
+          "Work",
+          "Add category",
+          "Assign different tags to records to differentiate between them",
+          "Add record tag"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from categories where name='Home') *\" \u2192 '10' (want '10')",
+          "steps_run": 20,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from categories where name='Home') *\" \u2192 '10' (want '10')",
+          "steps_run": 20,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from categories where name='Home') *\" \u2192 '10' (want '10')",
+          "steps_run": 20,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from categories where name='Home') *\" \u2192 '1' (want '10')",
+          "steps_run": 20,
+          "attempts": 1,
+          "fired": [
+            "category-card-opens-first"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from categories where name='Home') *\" \u2192 '1' (want '10')",
+          "steps_run": 20,
+          "attempts": 1,
+          "fired": [
+            "category-card-opens-first"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from categories where name='Home') *\" \u2192 '1' (want '10')",
+          "steps_run": 20,
+          "attempts": 1,
+          "fired": [
+            "category-card-opens-first"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 378,
+      "u2": 126
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "stt-drift-records-tab-label",
+      "stt-drift-categories-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "Settings"
+      },
+      {
+        "tap": "Categories and tags"
+      },
+      "wait",
+      {
+        "tap": "Add category"
+      },
+      {
+        "tap": "etChangeCategoryName"
+      },
+      {
+        "type": "Home"
+      },
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Add category"
+      },
+      {
+        "tap": "etChangeCategoryName"
+      },
+      {
+        "type": "Work"
+      },
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Work"
+      },
+      "wait",
+      {
+        "tap": "Delete"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "stt-drift-categories-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Click on activity to start tracking",
+        "History",
+        "Long click to edit",
+        "New activity",
+        "QASEED"
+      ],
+      "texts_removed": [
+        "Add",
+        "Edit categories and tags",
+        "Records",
+        "To start tracking, add activities by clicking on Add button or use default presets by clicking on Default button"
+      ]
+    }
+  },
+  "stt-default-duration-rotation": {
+    "name": "Pick a default duration, turn the phone sideways, then save",
+    "bugs": [
+      "default-duration-lost-on-rotation"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "default-duration-lost-on-rotation",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from recordTypes where name='Tea' and instan\" \u2192 '1' (want '1')",
+        "steps_run": 13,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from recordTypes where name='Tea' and instan\" \u2192 '0' (want '1')",
+        "steps_run": 13,
+        "attempts": 1,
+        "fired": [
+          "default-duration-lost-on-rotation"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Tea",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Tea",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled"
+        ],
+        [
+          "1m",
+          "15m",
+          "1h",
+          "Add",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "00",
+          "0",
+          "DISABLE",
+          "SAVE"
+        ],
+        [
+          "1m",
+          "15m",
+          "1h",
+          "Add",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "00",
+          "0",
+          "DISABLE",
+          "SAVE"
+        ],
+        [
+          "Tea",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "15m",
+          "SAVE"
+        ],
+        [
+          "Tea",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "15m",
+          "SAVE"
+        ],
+        [
+          "Tea",
+          "Clear text",
+          "Color",
+          "Icon",
+          "SAVE"
+        ],
+        [
+          "Tea",
+          "Clear text",
+          "Color",
+          "Icon",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Tea",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Tea",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ],
+      "seeded": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Tea",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Tea",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "Disabled"
+        ],
+        [
+          "1m",
+          "15m",
+          "1h",
+          "Add",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "00",
+          "0",
+          "DISABLE",
+          "SAVE"
+        ],
+        [
+          "1m",
+          "15m",
+          "1h",
+          "Add",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "00",
+          "0",
+          "DISABLE",
+          "SAVE"
+        ],
+        [
+          "Tea",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "15m",
+          "SAVE"
+        ],
+        [
+          "Tea",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Less",
+          "Categories",
+          "Goal",
+          "Note",
+          "Default duration",
+          "Activities with default duration are tracked immediately on click.",
+          "15m",
+          "SAVE"
+        ],
+        [
+          "Tea",
+          "Clear text",
+          "Color",
+          "Icon",
+          "SAVE"
+        ],
+        [
+          "Tea",
+          "Clear text",
+          "Color",
+          "Icon",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Tea",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Tea",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from recordTypes where name='Tea' and instan\" \u2192 '1' (want '1')",
+          "steps_run": 13,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from recordTypes where name='Tea' and instan\" \u2192 '1' (want '1')",
+          "steps_run": 13,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from recordTypes where name='Tea' and instan\" \u2192 '1' (want '1')",
+          "steps_run": 13,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from recordTypes where name='Tea' and instan\" \u2192 '0' (want '1')",
+          "steps_run": 13,
+          "attempts": 1,
+          "fired": [
+            "default-duration-lost-on-rotation"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from recordTypes where name='Tea' and instan\" \u2192 '0' (want '1')",
+          "steps_run": 13,
+          "attempts": 1,
+          "fired": [
+            "default-duration-lost-on-rotation"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from recordTypes where name='Tea' and instan\" \u2192 '0' (want '1')",
+          "steps_run": 13,
+          "attempts": 1,
+          "fired": [
+            "default-duration-lost-on-rotation"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 252,
+      "u2": 84
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "stt-drift-records-tab-label",
+      "stt-drift-categories-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New activity"
+      },
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Tea"
+      },
+      {
+        "tap": "Advanced"
+      },
+      {
+        "tap": "Disabled"
+      },
+      {
+        "tap": "15m"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "rotate": "landscape"
+      },
+      "wait",
+      {
+        "tap": "SAVE"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Advanced",
+        "History",
+        "New activity",
+        "QASEED"
+      ],
+      "texts_removed": [
+        "More",
+        "Records",
+        "To start tracking, add activities by clicking on Add button or use default presets by clicking on Default button"
+      ]
+    }
+  },
+  "stt-timer-survives-restart": {
+    "name": "Start a timer, restart the app, and check the timer",
+    "bugs": [
+      "running-timer-lost-on-restart"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "running-timer-lost-on-restart",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 9,
+        "added": [
+          "20s"
+        ],
+        "removed": [
+          "19s"
+        ]
+      },
+      {
+        "step": 10,
+        "added": [
+          "Click on activity to start tracking",
+          "Long click to edit"
+        ],
+        "removed": [
+          "10:00",
+          "30s",
+          "Click on card to stop tracking"
+        ]
+      },
+      {
+        "step": 11,
+        "added": [
+          "Click on activity to start tracking",
+          "Long click to edit"
+        ],
+        "removed": [
+          "10:00",
+          "45s",
+          "Click on card to stop tracking"
+        ]
+      },
+      {
+        "step": 12,
+        "added": [],
+        "removed": [
+          "10:00",
+          "50s",
+          "Walk"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [],
+        "removed": [
+          "10:00",
+          "1m 4s",
+          "Walk"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "Click on activity to start tracking",
+          "Long click to edit"
+        ],
+        "removed": [
+          "10:00",
+          "1m 9s",
+          "Click on card to stop tracking"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "Click on activity to start tracking",
+          "Long click to edit"
+        ],
+        "removed": [
+          "10:00",
+          "1m 33s",
+          "Click on card to stop tracking"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 9,
+        "added": [
+          "20s"
+        ],
+        "removed": [
+          "19s"
+        ]
+      },
+      {
+        "step": 10,
+        "added": [
+          "Click on activity to start tracking",
+          "Long click to edit"
+        ],
+        "removed": [
+          "10:00",
+          "30s",
+          "Click on card to stop tracking"
+        ]
+      },
+      {
+        "step": 11,
+        "added": [
+          "Click on activity to start tracking",
+          "Long click to edit"
+        ],
+        "removed": [
+          "10:00",
+          "45s",
+          "Click on card to stop tracking"
+        ]
+      },
+      {
+        "step": 12,
+        "added": [],
+        "removed": [
+          "10:00",
+          "50s",
+          "Walk"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [],
+        "removed": [
+          "10:00",
+          "1m 4s",
+          "Walk"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "Click on activity to start tracking",
+          "Long click to edit"
+        ],
+        "removed": [
+          "10:00",
+          "1m 9s",
+          "Click on card to stop tracking"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "Click on activity to start tracking",
+          "Long click to edit"
+        ],
+        "removed": [
+          "10:00",
+          "1m 33s",
+          "Click on card to stop tracking"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from runningRecords r join recordTypes t on ' \u2192 '1' (want '1')",
+        "steps_run": 15,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db 'select count(*) from runningRecords r join recordTypes t on ' \u2192 '0' (want '1')",
+        "steps_run": 15,
+        "attempts": 1,
+        "fired": [
+          "running-timer-lost-on-restart"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Walk",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Walk",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Walk",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Walk",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Walk",
+          "10:00",
+          "4s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Walk",
+          "10:00",
+          "19s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Walk",
+          "10:00",
+          "30s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Walk",
+          "10:00",
+          "45s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Walk",
+          "10:00",
+          "50s",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Walk",
+          "10:00",
+          "1m 4s",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Walk",
+          "10:00",
+          "1m 9s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Walk",
+          "10:00",
+          "1m 33s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ],
+      "seeded": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Walk",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Walk",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Walk",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Walk",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Walk",
+          "10:00",
+          "4s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Walk",
+          "10:00",
+          "20s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Walk",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Walk",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Walk",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Walk",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from runningRecords r join recordTypes t on ' \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from runningRecords r join recordTypes t on ' \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from runningRecords r join recordTypes t on ' \u2192 '1' (want '1')",
+          "steps_run": 15,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db 'select count(*) from runningRecords r join recordTypes t on ' \u2192 '0' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "running-timer-lost-on-restart"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db 'select count(*) from runningRecords r join recordTypes t on ' \u2192 '0' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "running-timer-lost-on-restart"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db 'select count(*) from runningRecords r join recordTypes t on ' \u2192 '0' (want '1')",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "running-timer-lost-on-restart"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 306,
+      "u2": 102
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "stt-drift-records-tab-label",
+      "stt-drift-categories-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New activity"
+      },
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Walk"
+      },
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Walk"
+      },
+      "wait",
+      "relaunch",
+      "wait",
+      {
+        "tap": "History"
+      },
+      "wait",
+      {
+        "tap": "Timers"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "stt-drift-records-tab-label",
+      "stt-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "-",
+        "0m",
+        "10:01",
+        "19s",
+        "1m 33s",
+        "1m 4s",
+        "1m 9s",
+        "45s",
+        "4s",
+        "50s",
+        "Advanced",
+        "History",
+        "New activity",
+        "QASEED"
+      ],
+      "texts_removed": [
+        "18s",
+        "1m 32s",
+        "1m 3s",
+        "1m 8s",
+        "3s",
+        "44s",
+        "49s",
+        "Add",
+        "More",
+        "Records",
+        "To start tracking, add activities by clicking on Add button or use default presets by clicking on Default button"
+      ]
+    }
+  },
+  "stt-duplicate-activity-name": {
+    "name": "Try an activity name that is already used, then pick another",
+    "bugs": [
+      "name-error-off-main-thread"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "name-error-off-main-thread",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 10,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Advanced",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Name already used",
+          "Reading"
+        ]
+      },
+      {
+        "step": 11,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Advanced",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Name already used",
+          "Reading"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 10,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Advanced",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Name already used",
+          "Reading"
+        ]
+      },
+      {
+        "step": 11,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Debug Simple Time Tracker",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "Advanced",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Name already used",
+          "Reading"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select (select count(*) from recordTypes where name='Reading\" \u2192 '11' (want '11')",
+        "steps_run": 17,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 12: com.razeeman.util.simpletimetracker.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: name-error-off-main-thread",
+        "steps_run": 11,
+        "attempts": 1,
+        "fired": [
+          "name-error-off-main-thread"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Clear text",
+          "Name already used",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Clear text",
+          "Name already used",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Clear text",
+          "Name already used",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Writing",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Writing",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Writing",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Writing",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Writing",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ],
+      "seeded": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Reading",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Reading",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Predicted app: Debug Simple Time Tracker",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Debug Simple Time Tracker",
+          "Predicted app: Debug Simple Time Tracker",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from recordTypes where name='Reading\" \u2192 '11' (want '11')",
+          "steps_run": 17,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from recordTypes where name='Reading\" \u2192 '11' (want '11')",
+          "steps_run": 17,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from recordTypes where name='Reading\" \u2192 '11' (want '11')",
+          "steps_run": 17,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 12: com.razeeman.util.simpletimetracker.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: name-error-off-main-thread",
+          "steps_run": 11,
+          "attempts": 1,
+          "fired": [
+            "name-error-off-main-thread"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 12: com.razeeman.util.simpletimetracker.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: name-error-off-main-thread",
+          "steps_run": 11,
+          "attempts": 1,
+          "fired": [
+            "name-error-off-main-thread"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 12: com.razeeman.util.simpletimetracker.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: name-error-off-main-thread",
+          "steps_run": 11,
+          "attempts": 1,
+          "fired": [
+            "name-error-off-main-thread"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 297,
+      "u2": 99
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "stt-drift-records-tab-label",
+      "stt-drift-categories-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New activity"
+      },
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Reading"
+      },
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "New activity"
+      },
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Reading"
+      },
+      "wait",
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Writing"
+      },
+      "wait",
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "stt-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Advanced",
+        "History",
+        "New activity",
+        "QASEED"
+      ],
+      "texts_removed": [
+        "Add",
+        "More",
+        "Records",
+        "To start tracking, add activities by clicking on Add button or use default presets by clicking on Default button"
+      ]
+    }
+  },
+  "stt-delete-tracked-record": {
+    "name": "Track a session, then delete its record",
+    "bugs": [
+      "record-delete-blocks-main-thread"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "record-delete-blocks-main-thread",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 8,
+        "added": [
+          "4s"
+        ],
+        "removed": [
+          "5s"
+        ]
+      },
+      {
+        "step": 9,
+        "added": [
+          "19s"
+        ],
+        "removed": [
+          "20s"
+        ]
+      },
+      {
+        "step": 16,
+        "added": [],
+        "removed": [
+          "-",
+          "0m",
+          "10:01",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "Click on record to edit",
+          "Fri",
+          "History",
+          "Mon",
+          "QASEED",
+          "Record (Chess) removed",
+          "Sep",
+          "Settings",
+          "Statistics",
+          "Thu",
+          "Timers",
+          "Tue",
+          "UNDO",
+          "Wed"
+        ]
+      },
+      {
+        "step": 17,
+        "added": [],
+        "removed": [
+          "-",
+          "0m",
+          "10:01",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "Click on record to edit",
+          "Fri",
+          "History",
+          "Mon",
+          "QASEED",
+          "Sep",
+          "Settings",
+          "Statistics",
+          "Thu",
+          "Timers",
+          "Tue",
+          "Wed"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "Close app",
+          "Debug Simple Time Tracker isn't responding",
+          "Wait"
+        ],
+        "removed": [
+          "Chess",
+          "Click on activity to start tracking",
+          "Default",
+          "History",
+          "Long click to edit",
+          "New activity",
+          "Pomodoro",
+          "QASEED",
+          "Settings",
+          "Statistics",
+          "Timers"
+        ]
+      },
+      {
+        "step": 19,
+        "added": [
+          "Close app",
+          "Debug Simple Time Tracker isn't responding",
+          "Wait"
+        ],
+        "removed": [
+          "Chess",
+          "Click on activity to start tracking",
+          "Default",
+          "History",
+          "Long click to edit",
+          "New activity",
+          "Pomodoro",
+          "QASEED",
+          "Settings",
+          "Statistics",
+          "Timers"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 8,
+        "added": [
+          "4s"
+        ],
+        "removed": [
+          "5s"
+        ]
+      },
+      {
+        "step": 9,
+        "added": [
+          "19s"
+        ],
+        "removed": [
+          "20s"
+        ]
+      },
+      {
+        "step": 16,
+        "added": [],
+        "removed": [
+          "-",
+          "0m",
+          "10:01",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "Click on record to edit",
+          "Fri",
+          "History",
+          "Mon",
+          "QASEED",
+          "Record (Chess) removed",
+          "Sep",
+          "Settings",
+          "Statistics",
+          "Thu",
+          "Timers",
+          "Tue",
+          "UNDO",
+          "Wed"
+        ]
+      },
+      {
+        "step": 17,
+        "added": [],
+        "removed": [
+          "-",
+          "0m",
+          "10:01",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "Click on record to edit",
+          "Fri",
+          "History",
+          "Mon",
+          "QASEED",
+          "Sep",
+          "Settings",
+          "Statistics",
+          "Thu",
+          "Timers",
+          "Tue",
+          "Wed"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "Close app",
+          "Debug Simple Time Tracker isn't responding",
+          "Wait"
+        ],
+        "removed": [
+          "Chess",
+          "Click on activity to start tracking",
+          "Default",
+          "History",
+          "Long click to edit",
+          "New activity",
+          "Pomodoro",
+          "QASEED",
+          "Settings",
+          "Statistics",
+          "Timers"
+        ]
+      },
+      {
+        "step": 19,
+        "added": [
+          "Close app",
+          "Debug Simple Time Tracker isn't responding",
+          "Wait"
+        ],
+        "removed": [
+          "Chess",
+          "Click on activity to start tracking",
+          "Default",
+          "History",
+          "Long click to edit",
+          "New activity",
+          "Pomodoro",
+          "QASEED",
+          "Settings",
+          "Statistics",
+          "Timers"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select (select count(*) from recordTypes where name='Chess')\" \u2192 '10' (want '10')",
+        "steps_run": 19,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 19: com.razeeman.util.simpletimetracker.debug stopped responding (ANR) \u2014 ANR: Input dispatching timed out (f3cc21 com.razeeman.util.simpletimetracker.debug/com.example.util.simpletimetracker.ui \u2014 ANR@Input dispatching timed out (com.razeeman.util.simpletimetracker.debug/com.example.util.simpletimetracker.ui.MainActivity (server)), scanCode=0, metaState=0x, r \u2014 fired: record-delete-blocks-main-thread",
+        "steps_run": 19,
+        "attempts": 1,
+        "fired": [
+          "record-delete-blocks-main-thread"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Chess",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Chess",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Chess",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Chess",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Chess",
+          "10:00",
+          "5s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Chess",
+          "10:00",
+          "20s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Chess",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Chess",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Chess",
+          "10:00",
+          "1m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Chess",
+          "10:00",
+          "1m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Chess",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "Statistics",
+          "Delete",
+          "Start",
+          "Sep 16",
+          "End",
+          "-30",
+          "-5",
+          "-1",
+          "+1",
+          "+5",
+          "+30",
+          "Now",
+          "Activity",
+          "Tag",
+          "Comment",
+          "Actions",
+          "SAVE"
+        ],
+        [
+          "Chess",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "Statistics",
+          "Delete",
+          "Start",
+          "Sep 16",
+          "End",
+          "-30",
+          "-5",
+          "-1",
+          "+1",
+          "+5",
+          "+30",
+          "Now",
+          "Activity",
+          "Tag",
+          "Comment",
+          "Actions",
+          "SAVE"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings",
+          "Record (Chess) removed",
+          "UNDO"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Chess",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Chess",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ]
+      ],
+      "seeded": [
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Enter new name",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Chess",
+          "Clear text",
+          "Color",
+          "Icon",
+          "Advanced"
+        ],
+        [
+          "Chess",
+          "Color",
+          "SAVE"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Chess",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Chess",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Chess",
+          "10:00",
+          "4s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Chess",
+          "10:00",
+          "19s",
+          "Click on card to stop tracking",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Chess",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Click on activity to start tracking",
+          "Long click to edit",
+          "Chess",
+          "QASEED",
+          "Pomodoro",
+          "New activity",
+          "Default",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Chess",
+          "10:00",
+          "1m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "QASEED",
+          "10:01",
+          "-",
+          "0m",
+          "Chess",
+          "10:00",
+          "1m",
+          "Click on record to edit",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "Sep",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Timers",
+          "History",
+          "Statistics",
+          "Settings"
+        ],
+        [
+          "Chess",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "Statistics",
+          "Delete",
+          "Start",
+          "Sep 16",
+          "End",
+          "-30",
+          "-5",
+          "-1",
+          "+1",
+          "+5",
+          "+30",
+          "Now",
+          "Activity",
+          "Tag",
+          "Comment",
+          "Actions",
+          "SAVE"
+        ],
+        [
+          "Chess",
+          "10:00",
+          "-",
+          "10:01",
+          "1m",
+          "Statistics",
+          "Delete",
+          "Start",
+          "Sep 16",
+          "End",
+          "-30",
+          "-5",
+          "-1",
+          "+1",
+          "+5",
+          "+30",
+          "Now",
+          "Activity",
+          "Tag",
+          "Comment",
+          "Actions",
+          "SAVE"
+        ],
+        [],
+        [],
+        [
+          "Debug Simple Time Tracker isn't responding",
+          "Close app",
+          "Wait"
+        ],
+        [
+          "Debug Simple Time Tracker isn't responding",
+          "Close app",
+          "Wait"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from recordTypes where name='Chess')\" \u2192 '10' (want '10')",
+          "steps_run": 19,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from recordTypes where name='Chess')\" \u2192 '10' (want '10')",
+          "steps_run": 19,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from recordTypes where name='Chess')\" \u2192 '10' (want '10')",
+          "steps_run": 19,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 19: com.razeeman.util.simpletimetracker.debug stopped responding (ANR) \u2014 ANR: Input dispatching timed out (f3cc21 com.razeeman.util.simpletimetracker.debug/com.example.util.simpletimetracker.ui \u2014 ANR@Input dispatching timed out (com.razeeman.util.simpletimetracker.debug/com.example.util.simpletimetracker.ui.MainActivity (server)), scanCode=0, metaState=0x, r \u2014 fired: record-delete-blocks-main-thread",
+          "steps_run": 19,
+          "attempts": 1,
+          "fired": [
+            "record-delete-blocks-main-thread"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 19: com.razeeman.util.simpletimetracker.debug stopped responding (ANR) \u2014 ANR: Input dispatching timed out (462ce2b com.razeeman.util.simpletimetracker.debug/com.example.util.simpletimetracker.u \u2014 ANR@Input dispatching timed out (com.razeeman.util.simpletimetracker.debug/com.example.util.simpletimetracker.ui.MainActivity (server)), scanCode=0, metaState=0x, r \u2014 fired: record-delete-blocks-main-thread",
+          "steps_run": 19,
+          "attempts": 1,
+          "fired": [
+            "record-delete-blocks-main-thread"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 19: com.razeeman.util.simpletimetracker.debug stopped responding (ANR) \u2014 ANR: Input dispatching timed out (8c832d2 com.razeeman.util.simpletimetracker.debug/com.example.util.simpletimetracker.u \u2014 ANR@Input dispatching timed out (com.razeeman.util.simpletimetracker.debug/com.example.util.simpletimetracker.ui.MainActivity (server)), scanCode=0, metaState=0x, r \u2014 fired: record-delete-blocks-main-thread",
+          "steps_run": 19,
+          "attempts": 1,
+          "fired": [
+            "record-delete-blocks-main-thread"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 360,
+      "u2": 120
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "stt-drift-records-tab-label",
+      "stt-drift-categories-label",
+      "stt-drift-more-label",
+      "stt-drift-add-label"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New activity"
+      },
+      {
+        "tap": "etChangeRecordTypeName"
+      },
+      {
+        "type": "Chess"
+      },
+      {
+        "tap": "Color"
+      },
+      {
+        "tap": "SAVE"
+      },
+      "wait",
+      {
+        "tap": "Chess"
+      },
+      "wait",
+      {
+        "tap": "Chess"
+      },
+      "wait",
+      {
+        "tap": "History"
+      },
+      "wait",
+      {
+        "tap": "Chess"
+      },
+      "wait",
+      {
+        "tap": "Delete"
+      },
+      "wait",
+      {
+        "press": "back"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "stt-drift-records-tab-label",
+      "stt-drift-add-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "0m",
+        "20s",
+        "5s",
+        "Advanced",
+        "History",
+        "New activity",
+        "QASEED"
+      ],
+      "texts_removed": [
+        "22s",
+        "6s",
+        "Add",
+        "More",
+        "Records",
+        "Records will be shown here\nClick on [IMAGE] to add new record\nClick on date button to select date",
+        "To start tracking, add activities by clicking on Add button or use default presets by clicking on Default button"
+      ]
+    }
+  }
+}

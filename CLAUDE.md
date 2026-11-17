@@ -1440,6 +1440,33 @@ change). Both step loops pass it — `replay.run_steps` and `derive_journey.run_
 (QUA-2736); `tests/test_liveness_oracles.py` refuses any medtimer route, hunt or
 journey, that taps a bare `Reminded`.
 
+**Drift flags: same journey, new UI** (QUA-3490; `journey.load_drift`/`drift_route`/
+`resolve_drift`, `build_app.py` `drift:`, `derive_journey.py --drift`). A drift flag is a
+BENIGN UI change — a relabel, a control moved into an overflow menu, a reorder — patched
+into the same journey APK as the defects and gated by the same `QgbFlags.on(id)` shim, for
+the agent-memory evals (memory written on the old UI must adapt, not mislead). Two halves,
+kept equal by `lint_journey_cases.py`'s `drift` rule: the benchmark spec's top-level
+`drift:` carries the source patches (applied after the bug patches; no task, no canary);
+the case file's top-level `drift:` declares each flag for the harness (`kind` relabel |
+move | reorder, a one-line `change:`, `rewrite:` rules `{from: <route step>, to: [steps]}`
+for the harness-only replay route, `affects:` for a reorder that rewrites nothing). A drift
+flag is NEVER a defect: its id is no defect id, no case lists it in `bugs:` (`case_design`
+refuses it as unknown), it never enters `active_bugs`, so `bugs_present`, recall, false
+reports and the `defects` stamp cannot see it, and the brief is byte-identical (the steps
+still name the drift-off UI). `journey.journey_tasks(suite, drift=[ids]|"all")` sets
+`bug_spec["drift"]` on BOTH versions (no `drift` → specs unchanged; task ids unchanged, so
+a caller mixing drift and non-drift episodes of one case keeps them apart itself);
+`write_bug_flags` writes the ids beside the bugs (`drift_written`, and the evidence meta's
+`drift`), and the precondition anchor reads the rewritten route. NOT plumbed through `run`
+/`lanes`/`--resume` — the memory sequence runner owns per-stage flag sets. Hunt episodes
+list only `broken` features and clean episodes nothing, so drift is off there; a run with
+NO flags file (Qualock without `app_files`) switches drift on with every bug. Evidence:
+`derive_journey.py <app> --drift all --repeat 3` replays every case a flag touches with the
+flags on in both arms and writes `data/truth/drift-<app>.json` (not a `corpus_version`
+input, read by no scorer); each row's `vs_base` must show the SAME verdict as the
+committed drift-off row and `visible` screens. Built on markor, uhabits, aegis and
+simpletimetracker (4 flags each).
+
 ## Tool surface
 
 **The brief is versioned, because it is part of the treatment** (`brief.py`,

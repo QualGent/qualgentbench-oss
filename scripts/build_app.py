@@ -276,6 +276,36 @@ def _patches(spec: dict) -> list[tuple[str, str, str]]:
     return out
 
 
+def _drift_patches(spec: dict) -> list[tuple[str, str, str]]:
+    """The spec's `drift:` patches (QUA-3490): BENIGN UI changes — a relabel, a control
+    moved into an overflow menu, a reorder — gated by the same `QgbFlags.on(id)` shim
+    as the bugs, so they live in the same buggy APK and are off unless the episode's
+    flags file lists them. Not bugs: no task, no canary, never in a case's `bugs:`.
+    Applied AFTER the bug patches, so a drift anchor matches the bug-patched source."""
+    out = []
+    for d in spec.get("drift", []) or []:
+        sites = d.get("patches") or ([d["patch"]] if d.get("patch") else [])
+        for p in sites:
+            out.append((p["file"], p["find"], p["replace"]))
+    return out
+
+
+def _check_drift_ids(spec: dict) -> None:
+    """Drift ids share the flags namespace with bug ids: a collision would switch a
+    defect on with a drift flag (or the reverse)."""
+    bug_ids = {str(b["id"]) for b in spec.get("bugs", []) or []}
+    seen: set[str] = set()
+    for d in spec.get("drift", []) or []:
+        did = str(d.get("id") or "")
+        if not did:
+            sys.exit("a `drift:` entry has no id")
+        if did in bug_ids or did in seen:
+            sys.exit(f"drift id {did!r} collides with a bug id or another drift id")
+        if not (d.get("patch") or d.get("patches")):
+            sys.exit(f"drift {did!r} has no patch")
+        seen.add(did)
+
+
 def _setup_patches(spec: dict) -> list[tuple[str, str, str]]:
     """Patches applied to BOTH clean and buggy builds — e.g. seeding sample data so
     the app isn't empty. NOT bugs; they make every feature exercisable."""
@@ -585,10 +615,11 @@ def emit_source(spec: dict, app_dir: Path, dist: Path) -> Path:
     _apply(out, _setup_patches(spec))
     _write_flag_shim(spec, out)
     _apply(out, _patches(spec))
+    _apply(out, _drift_patches(spec))
     for bug in spec.get("bugs", []):
         if bug.get("patch"):
             print(f"    injected {bug['id']} (source)")
-    removed = _sanitize_bug_markers(out, _patches(spec))
+    removed = _sanitize_bug_markers(out, _patches(spec) + _drift_patches(spec))
     print(f"    sanitized {removed} bug-marker comment line(s)")
     leaks = _scan_for_leaks(out)
     if leaks:
@@ -716,6 +747,8 @@ def main() -> None:
 
     patches = _patches(spec)
     setup = _setup_patches(spec)
+    _check_drift_ids(spec)
+    drift = _drift_patches(spec)
     if not patches:
         sys.exit(f"{args.app_id}.yaml has no bug patches.")
 
@@ -753,7 +786,7 @@ def main() -> None:
 
     extra = [_demo_fired_patch(spec)] if args.demo_fired else []
     buggy_name = DEMO_APK_NAME if args.demo_fired else "buggy.apk"
-    files = sorted({rel for rel, _, _ in (patches + setup + extra)})
+    files = sorted({rel for rel, _, _ in (patches + setup + drift + extra)})
     snap = _snapshot(app_dir, files)  # the upstream-clean tree is the baseline
 
     do_clean = args.clean or not args.buggy
@@ -779,6 +812,9 @@ def main() -> None:
                 if sites:
                     n = f" ({len(sites)} sites)" if len(sites) > 1 else ""
                     print(f"    injected {bug['id']}{n}")
+            _apply(app_dir, drift)
+            for d in spec.get("drift", []) or []:
+                print(f"    drift {d['id']} (benign, flag-gated)")
             if args.demo_fired:
                 demo = _demo_fired_patch(spec)
                 _apply(app_dir, [demo])

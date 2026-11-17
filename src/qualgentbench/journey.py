@@ -74,6 +74,19 @@ def truth_path(app_id: str) -> Path:
     return corpus.resolve(f"truth/journey-{app_id}.json", app_id=app_id)
 
 
+def drift_truth_path(app_id: str) -> Path:
+    """`truth/drift-<app>.json` (QUA-3490): the drift derive's rows. NOT a
+    `corpus_version` input (`corpus.CORPUS_GLOBS` reads `truth/journey-*.json` only) and
+    read by no scorer — it is the evidence that each drift flag leaves every affected
+    case's verdict where the drift-off truth has it."""
+    return corpus.resolve(f"truth/drift-{app_id}.json", app_id=app_id)
+
+
+def load_drift_truth(app_id: str) -> dict:
+    p = drift_truth_path(app_id)
+    return json.loads(p.read_text()) if p.exists() else {}
+
+
 def load_cases(app_id: str) -> dict | None:
     p = cases_path(app_id)
     return yaml.safe_load(p.read_text()) if p.exists() else None
@@ -251,13 +264,119 @@ def case_design(case: dict, defects: dict[str, dict]) -> dict:
 CONTROLS_KEY = "create_controls"
 CONTROL_DERIVATION_KEY = "create_control_derivation"
 CONTROL_RELATIONS = ("side", "same-screen", "other")
-# What a control flag IS. Only `defect` exists: a seeded fault the authored case must
-# not trip on. `drift` is the reserved slot for a later build kind — a benign copy or
-# reorder change behind a flag, which a well-authored case must also PASS (a brittle
-# case fails it). Reserved and documented, not built: no drift flag exists in any APK,
-# and the deriver writes `defect` on every candidate.
+# What a control flag IS. `defect`: a seeded fault the authored case must not trip on.
+# `drift`: a benign UI change behind a flag — same journey, new UI (QUA-3490, below) —
+# which a well-authored case must also PASS (a brittle case fails it). The create-control
+# deriver still writes `defect` on every candidate; drift flags are not offered as
+# create controls yet.
 FLAG_KINDS = ("defect", "drift")
 SPECIFICITY_NA = "n/a"
+
+
+# ── drift flags (QUA-3490) ─────────────────────────────────────────────────────
+# A drift flag is a BENIGN UI change compiled into the same journey APK as the
+# defects and gated by the same `QgbFlags.on(id)` shim: a relabelled control, a
+# control moved into an overflow menu, a reordered list. It is NOT a defect:
+#   * it is declared in the case file's top-level `drift:` block, never in `defects:`,
+#     and `case_design` refuses a drift id in a case's `bugs:` (unknown defect);
+#   * it never enters `active_bugs`, so `bugs_present`, recall, false reports and the
+#     `defects` stamp cannot see it — a drift-on episode is scored exactly like the
+#     same episode with drift off (`journey_verdict` only reads `active_bugs`);
+#   * the brief does not change: the case's prose steps still name the OLD UI, which
+#     is the point (memory written on the old UI must adapt, not mislead).
+# What drift does change is the harness-only REPLAY route: a relabel or a move breaks
+# a text anchor, so each flag carries `rewrite:` rules that map one route step to the
+# step(s) that do the same thing on the drifted UI. `drift_route` applies them; the
+# deriver (`derive_journey.py --drift`) replays the rewritten route with the flags on
+# and must reach the SAME verdict on the same oracle (data/truth/drift-<app>.json),
+# and the precondition anchor reads the rewritten route too.
+#
+#   drift:
+#     - id: markor-drift-fab-label          # unique; also the QgbFlags id
+#       kind: relabel                       # relabel | move | reorder
+#       change: "…"                         # one line, harness-only
+#       rewrite:                            # optional (a reorder needs none)
+#         - from: {tap: "Create a new file or folder"}
+#           to: [{tap: "New file or folder"}]
+#       affects: [case-id, …]               # optional: cases it shows on without a
+#                                           # route change (derived too)
+#
+# The build side (`data/benchmarks/<app>.yaml` `drift:`) carries the source patches;
+# `scripts/lint_journey_cases.py` keeps the two lists equal.
+DRIFT_KINDS = ("relabel", "move", "reorder")
+DRIFT_KEY = "drift"
+
+
+def load_drift(doc: dict | None) -> dict[str, dict]:
+    """{drift id: {id, kind, change, rewrite, affects}} from a case document's `drift:`
+    block, in file order. `rewrite` is a list of `{from: <route item>, to: [<route
+    item>…]}`; `affects` names cases a flag shows on without rewriting their route (a
+    `reorder`), so the deriver covers them too."""
+    out: dict[str, dict] = {}
+    for d in (doc or {}).get(DRIFT_KEY) or []:
+        if not isinstance(d, dict) or not d.get("id"):
+            continue
+        rules = []
+        for r in d.get("rewrite") or []:
+            if isinstance(r, dict) and "from" in r:
+                to = r.get("to")
+                rules.append({"from": r["from"],
+                              "to": list(to) if isinstance(to, list) else [to]})
+        out[str(d["id"])] = {"id": str(d["id"]), "kind": str(d.get("kind") or ""),
+                             "change": str(d.get("change") or "").strip(),
+                             "rewrite": rules,
+                             "affects": [str(c) for c in (d.get("affects") or [])]}
+    return out
+
+
+def _route_key(item: object) -> tuple | None:
+    shape = submission.route_item(item)
+    return None if shape is None else (shape[0], shape[1], shape[2] or "")
+
+
+def resolve_drift(ids, drift_defs: dict[str, dict]) -> list[str]:
+    """Normalise a drift selection: `"all"` (or `["all"]`) is every declared flag in
+    file order; otherwise the given ids, deduplicated, in order. An undeclared id
+    raises — a typo would otherwise run the stage with drift silently off."""
+    if ids is None:
+        return []
+    raw = [ids] if isinstance(ids, str) else list(ids)
+    raw = [str(i).strip() for i in raw if str(i).strip()]
+    if raw == ["all"]:
+        return list(drift_defs)
+    unknown = [i for i in raw if i not in drift_defs]
+    if unknown:
+        raise ValueError(f"unknown drift flag(s) {unknown}; declared: {sorted(drift_defs)}")
+    return list(dict.fromkeys(raw))
+
+
+def drift_route(steps, drift_ids, drift_defs: dict[str, dict]) -> list:
+    """The raw route (`check.steps` items) as it must run with `drift_ids` on. Each
+    flag's rules are applied in turn; a rule replaces EVERY step equal to its `from`
+    (same verb, value and `row:`) with its `to` list. Flags are independent by
+    construction (each rewrites its own control), so the order of `drift_ids` does
+    not matter. No drift → the route unchanged (the same list object's items)."""
+    route = list(steps or [])
+    for did in drift_ids or []:
+        for rule in (drift_defs.get(did) or {}).get("rewrite") or []:
+            want = _route_key(rule["from"])
+            if want is None:
+                continue
+            nxt: list = []
+            for item in route:
+                if _route_key(item) == want:
+                    nxt.extend(rule["to"])
+                else:
+                    nxt.append(item)
+            route = nxt
+    return route
+
+
+def drift_affects(case: dict, drift_id: str, drift_defs: dict[str, dict]) -> bool:
+    """Does `drift_id` change this case's replay route? (A `reorder` flag changes no
+    route; whether it is VISIBLE on a route is measured by the deriver, not here.)"""
+    route = (case.get("check") or {}).get("steps") or []
+    return drift_route(route, [drift_id], drift_defs) != list(route)
 
 
 def controls_fingerprint(case: dict, defects: dict[str, dict]) -> str:
@@ -515,10 +634,15 @@ def case_evidence(case: dict, design: dict, measured: dict, oracle: dict, app_na
             "echo_texts": echo_texts, "absence_texts": absence_texts}
 
 
-def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
+def journey_tasks(suite: dict[str, Any], drift=None) -> list[BenchmarkTask]:
     """Two BenchmarkTasks per test case (clean, seeded); a case with no `bugs:` has
     only the clean version. The agent-facing fields go into the brief; everything
-    else rides in bug_spec for the scorer and is never shown."""
+    else rides in bug_spec for the scorer and is never shown.
+
+    `drift` (QUA-3490): drift flag ids to switch on in BOTH versions, or "all". None or
+    empty — every existing caller — builds byte-identical specs to before (no `drift`
+    key at all). Task ids do not change: a caller that mixes drift and non-drift
+    episodes of one case in one run must keep them apart itself."""
     app = suite["app"]
     app_id = str(app.get("id", ""))
     doc = load_cases(app_id)
@@ -527,6 +651,7 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
     truth = load_truth(app_id)
     defects = load_defects(doc)
     defect_meta = load_defect_meta(doc)
+    drift_on = resolve_drift(drift, load_drift(doc)) if drift else []
     tasks: list[BenchmarkTask] = []
     for case in doc.get("test_cases", []):
         cid = str(case["id"])
@@ -580,6 +705,10 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
                 # Public or held-out — one flag, read off where the case file lives.
                 "heldout": corpus.is_heldout(app_id),
             }
+            if drift_on:
+                # Written to the flags file beside `active_bugs` (write_bug_flags) and
+                # read by nothing that scores.
+                spec[DRIFT_KEY] = list(drift_on)
             tasks.append(BenchmarkTask(
                 id=task_id(cid, version),
                 name=spec["name"],
