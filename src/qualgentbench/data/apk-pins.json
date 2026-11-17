@@ -317,5 +317,18 @@
       "revision": "91d9463bbceeed9bcfe9f0006b6b4610498cd12d"
     }
   },
-  "unpublished": {}
+  "unpublished": {
+    "777dee520d2f4fc9ad3b8e58c044bb71790d4ccbd1ec1ff681af3a847e09f75c": {
+      "app": "uhabits",
+      "filename": "journey/uhabits-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
+    "b26aced342af64b2a3b2f5719727bcd3feded1f78cc14e774f317ce22eddb1c6": {
+      "app": "markor",
+      "filename": "journey/markor-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    }
+  }
 }

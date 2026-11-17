@@ -45,11 +45,20 @@ app: uhabits
 # NOT YET PUBLISHED: apk-pins.json marks the sha256 `unpublished` until the owner uploads
 # it (QUA-3469) with `publish_apk.py uhabits --kind journey --write --upload --yes`.
 # Until then a fresh clone's journey download fails its sha256 check, loudly, by design.
+#
+# REBUILT for drift flags (QUA-3490): the same ref and the same defect patches plus the
+# benchmark spec's `drift:` patches (benign UI changes, each off unless its flag is listed),
+# built by `build_app.py uhabits --buggy`. A rebuild is not byte-identical, so the hash below
+# moved. Checked on the rebuild: `derive_journey.py uhabits` (drift off, one trial) reached the
+# committed verdict on every case, and `derive_journey.py uhabits --drift all --repeat 3`
+# (data/truth/drift-uhabits.json) the same verdict on every case a drift flag touches. The
+# committed journey truth is unchanged. NOT YET PUBLISHED: owner uploads with
+# `publish_apk.py uhabits --kind journey --write --upload --yes`.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/uhabits-buggy.apk
-  sha256: 2c251d90ccbf64651079a7859c90e1348178bae1447a20b2ac5eb3b08ba6f006
-  size_bytes: 28522856
+  sha256: 777dee520d2f4fc9ad3b8e58c044bb71790d4ccbd1ec1ff681af3a847e09f75c
+  size_bytes: 28523260
 
 defects:
   # ── CRASH x3 ────────────────────────────────────────────────────────────────────────
