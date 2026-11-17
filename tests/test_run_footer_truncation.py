@@ -91,3 +91,16 @@ def test_a_journey_truncation_beside_any_unquotable_episode_is_named(tmp_path, c
                   tmp_path, capsys)
     assert "Not quotable: 1 left the app under test." in out
     assert "1 journey episode(s) ran out of steps" in out
+
+
+def test_a_blocked_version_is_not_counted_as_a_dead_oracle(tmp_path, capsys):
+    """A blocked version's db oracle is skipped on purpose (`BLOCKED_ORACLE_SKIP`), so it
+    is never a harness fault in the footer's "oracle not evaluated" count."""
+    db = {"mode": "db", "ok": None, "why": "db oracle not evaluated"}
+    out = _footer([_episode("journey_case", completed=None, blocking="b", oracle=db,
+                            hook_steps=10, step_budget=60, device_actions=10, cost_usd=1.0),
+                   _episode("journey_case", completed=None, oracle=db,
+                            hook_steps=10, step_budget=60, device_actions=10, cost_usd=1.0)],
+                  tmp_path, capsys)
+    assert "1 oracle not evaluated" in out
+    assert "2 oracle not evaluated" not in out

@@ -821,6 +821,19 @@ def _norm(s: str) -> str:
     return _fold_space((s or "").strip().strip('"\'').lower())
 
 
+# A JSON whitespace escape (`\n`, `\r`, `\t` as two characters) left inside a device
+# payload. DevLoop answers with `json.dumps(result)`, so a multi-line element text — an
+# editor holding a whole note — reaches the scorer as `# Pancakes\n\nFlour, ...` with
+# the escapes still spelled out (`decode_unicode_escapes` decodes only `\uXXXX`). Read
+# that way, the `n` of `\n` glues onto the next word, and `_word`'s token boundary can
+# never see `Flour` at the start of a line: markor-move-two-recipes scored a correct run
+# as not witnessed on both builds while the substring oracle saw it (QUA-3475). The
+# derive reads the decoded string, where the line break is whitespace, so the escape
+# folds to a space here too. An escaped backslash (`\\n`, a literal backslash then `n`)
+# is not a line break and is left alone.
+_JSON_WS_ESCAPE_RE = re.compile(r"(?<!\\)\\[nrt]")
+
+
 def _device_text(payload: str) -> str:
     """A device payload as every journey matcher reads it: lower-cased and space-folded
     exactly like the needle (`_norm`). Built once, in `_device_texts` and
@@ -831,8 +844,10 @@ def _device_text(payload: str) -> str:
     derive found it on the screen. Its input is already escape-decoded: `_ordered_stream`
     decodes every MCP result's `\\uXXXX` escapes (`transcript.decode_unicode_escapes`,
     QUA-2801), the same normaliser the parsed `ToolEvent.result_text` goes through, so
-    codex's `\\u2022` and claude's bullet reach this fold as one character."""
-    return _fold_space((payload or "").lower())
+    codex's `\\u2022` and claude's bullet reach this fold as one character. A JSON
+    whitespace escape still spelled out in the payload (`\\n`) folds as the whitespace it
+    stands for (`_JSON_WS_ESCAPE_RE`, QUA-3475)."""
+    return _fold_space(_JSON_WS_ESCAPE_RE.sub(" ", (payload or "").lower()))
 
 
 # A quoted screen string is evidence only if it is long enough to be one. The corpus
@@ -1690,7 +1705,13 @@ BLOCKER_TIERS = ("L4", "L3")
 #:   `mobile_release_otp_number` is bookkeeping. Under v1 both fell to the unknown-`mobile_*`
 #:   default (charged `other`, device evidence, no echo). A v1 episode never called either
 #:   tool, so no saved v1 verdict moves on a rescore.
-SCORER_VERSION = 2
+#: 3 (QUA-3475): a JSON whitespace escape still spelled out in a device payload (`\n`,
+#:   `\r`, `\t`: DevLoop's `json.dumps` of a multi-line element text) folds to a space in
+#:   `_device_text`, so a witness, quote or evidence string that starts a line is on a
+#:   token boundary. Under v2 the `n` of `\n` glued onto the line's first word, and
+#:   markor-move-two-recipes scored correct runs as not witnessed on both builds. It can
+#:   move a v2 verdict: a witness or grounded quote at a line start now matches.
+SCORER_VERSION = 3
 
 
 def _defect_lookup(m: list[dict]) -> rates.DefectLookup:

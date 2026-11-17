@@ -106,8 +106,11 @@ defects:
     kind: functional
     class: persistence    # the favorites row is never inserted; db oracle reads favorites
     tier: L2
+    # The effect wordings (QUA-3476): the star DOES fill, so a tester describes the
+    # Favorites folder that never shows up ("Favorites was absent").
     symptoms: ["not a favorite", "no favorites", "not added", "not saved",
-               "missing", "did not stick", "not listed", "unmarked", "no favorite album"]
+               "missing", "did not stick", "not listed", "unmarked", "no favorite album",
+               "absent", "did not appear", "does not appear", "never appeared"]
 
   # ── NAVIGATION x2 ───────────────────────────────────────────────────────────────────
   - id: viewer-reopens-previous-photo
