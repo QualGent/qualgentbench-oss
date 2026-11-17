@@ -1,0 +1,45 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+#
+# Trap memories (QUA-3491, spec 5.1): hand-written WRONG entries placed in M_k at `stage`.
+# Shape: memory.tracks.TrapDef (= memory.metrics.Trap + text, drift, lint_allow, note).
+# `memory.tracks.apply_traps` adds `text` as a NEW entry `entry_id` to a COPY of the stage
+# memory; the packaged base memory is never edited. Exposure = entry_id rendered.
+
+traps:
+  - id: uhabits-trap-reminder-fixed
+    app: uhabits
+    effect: missed_bug
+    stage: run-2
+    entry_id: bug-901
+    bug: reminder-label-hour-late
+    cases: [uhabits-add-reminder]
+    text: >-
+      The habit screen used to show a reminder one hour off from the time picked;
+      this was fixed in the previous release, and the shown reminder time now matches
+      the picker.
+    note: the reminder display defect is still on in this stage's build
+
+  - id: uhabits-trap-delete-no-confirm
+    app: uhabits
+    effect: false_report
+    stage: run-3
+    entry_id: note-901
+    cases: [uhabits-delete-habit]
+    markers: ["confirmation", "confirm", "dialog", "asked", "prompt"]
+    text: >-
+      Deleting habits from the selection menu removes them at once, with no
+      confirmation step, and offers an undo bar instead.
+    note: the app asks for confirmation ("Yes") and has no undo bar
+
+  - id: uhabits-trap-color-toolbar
+    app: uhabits
+    effect: not_completed
+    stage: run-4
+    entry_id: nav-901
+    drift: uhabits-drift-color-overflow
+    cases: [uhabits-change-color]
+    text: >-
+      With a habit selected in the list, "Change color" is the palette icon on the
+      toolbar itself; it is never inside the More options menu.
+    note: with uhabits-drift-color-overflow on, Change color is inside More options
