@@ -673,6 +673,10 @@ def journey_tasks(suite: dict[str, Any], drift=None) -> list[BenchmarkTask]:
                 "steps": [str(s) for s in (case.get("steps") or [])],
                 "expected_outcome": str(case.get("expected_outcome") or "").strip(),
                 "step_budget": int(case.get("step_budget") or 40),
+                # The reference route's length, `len(check.steps)`: the denominator of
+                # the wasted-steps metric `steps_over_ref` (QUA-3489,
+                # `memory.metrics.episode_fields`). Harness-only, never in the brief.
+                "ref_steps": len(((case.get("check") or {}).get("steps")) or []) or None,
                 # What staging switches on (write_bug_flags reads `active_bugs`).
                 "active_bugs": design["bugs"] if seeded else [],
                 "expected": design["expected"] if seeded else "PASS",
@@ -1998,7 +2002,9 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
         row.update(_row(key, rs, excluded.get(key, 0)))
         row["integrity_flags"] = dict(sorted(integrity.get(key, {}).items()))
         rows.append(row)
-    return sorted(rows, key=ranking_key)
+    # Memory arms are internal-only (D13, QUA-3488): flagged, never on a public board.
+    from .leaderboard import mark_internal
+    return sorted(mark_internal(rows), key=ranking_key)
 
 
 # Episode-integrity signals a board must SHOW, not just drop (QUA-2806). Every HARD

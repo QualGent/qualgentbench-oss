@@ -2023,6 +2023,32 @@ case's stored derivation after a rebuild that only adds defects: it walks rank r
 replay order under the same `--stop-after`, takes stored candidates' trials instead of
 replaying them, and replays only the new ones.
 
+## Cross-run memory arms (QUA-3488)
+
+`run --memory-mode none|static|dynamic --memory-budget small|large|index --memory-diff
+none|diff|hunt [--memory-snapshot ROOT] [--memory-org KEY]`, or `--memory-config FILE`
+(JSON/YAML, same keys; the lab writes it root-only so the snapshot path is not in argv).
+`memory/arm.py` (`MemoryArm`, `prepare`, `PreparedMemory`) renders with
+`memory.render.render` (budget = render mode; diff ≠ none adds `<app>.changes.md`) BEFORE
+the device is touched (a missing file fails the episode, never falls back to no memory),
+then writes `<episode>/memory.md` beside the workspace and, for `index`,
+`place_workspace` into `<workspace>/memory/`. Injection is the system channel only:
+codex-cli appends it to `developer_instructions` in its config.toml (never
+`model_instructions_file`; `--disable memories` stays), claude-code gets
+`--append-system-prompt-file <episode>/memory.md --setting-sources ""` and
+`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` (`--settings`, the budget hook, is a flag source and
+still loads). `native` is refused. The brief is untouched (`tests/test_memory_injection.py`
+asserts identical `instruction_sent.md` across arms) and `--memory-mode none` is
+byte-identical to no flag (same test, both adapters, both tool arms). Memory episodes get
+condition `<tooling>+mem-<mode>-<budget>-<diff>` (path-safe; it names the episode dir),
+`Rendered.metrics()` plus `memory_arm_mode`/`memory_budget`/`memory_diff`/
+`memory_condition`/`memory_prompt_sha256`/`memory_internal` and the proposals file's
+`memory_proposals_file|bytes|sha256` in result.json metrics, and `provenance.memory`. The
+agent's `workspace/memory_proposals.yaml` is collected, not parsed (its schema is
+`memory.proposals`). Board rows of a memory condition carry `internal: True`
+(`leaderboard.mark_internal`; `public_rows` drops them, D13); other rows are unchanged.
+plan.json carries `memory_arm` only on a memory run, and `--resume` takes it from there.
+
 ## Repo layout
 
 ```text
