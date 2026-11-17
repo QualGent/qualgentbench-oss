@@ -38,11 +38,20 @@ app: aegis
 # then data/apk-pins.json marks this sha256 `unpublished`, a fresh clone's journey download
 # fails its sha256 check, and dist/aegis/buggy.apk (which wins locally) is the artifact.
 # The hunt spec's own `apk:` block does not move.
+#
+# REBUILT for drift flags (QUA-3490): the same ref and the same defect patches plus the
+# benchmark spec's `drift:` patches (benign UI changes, each off unless its flag is listed),
+# built by `build_app.py aegis --buggy`. A rebuild is not byte-identical, so the hash below
+# moved. Checked on the rebuild: `derive_journey.py aegis` (drift off, one trial) reached the
+# committed verdict on every case, and `derive_journey.py aegis --drift all --repeat 3`
+# (data/truth/drift-aegis.json) the same verdict on every case a drift flag touches. The
+# committed journey truth is unchanged. NOT YET PUBLISHED: owner uploads with
+# `publish_apk.py aegis --kind journey --write --upload --yes`.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/aegis-buggy.apk
-  sha256: 9a37b5762dc974b5875994f6c8f514b2d39198e6254d412150a767eb3cf3da08
-  size_bytes: 18383927
+  sha256: 9e01c776fa052b58e96a6dbf5060f58e22d662c4617431388ea5a17ba664429d
+  size_bytes: 18525864
 
 defects:
   # ── CRASH ×4 ───────────────────────────────────────────────────────────────────────

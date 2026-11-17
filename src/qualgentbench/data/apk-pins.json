@@ -324,6 +324,12 @@
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     },
+    "9e01c776fa052b58e96a6dbf5060f58e22d662c4617431388ea5a17ba664429d": {
+      "app": "aegis",
+      "filename": "journey/aegis-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
     "b26aced342af64b2a3b2f5719727bcd3feded1f78cc14e774f317ce22eddb1c6": {
       "app": "markor",
       "filename": "journey/markor-buggy.apk",
