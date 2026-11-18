@@ -71,7 +71,7 @@ from ..mcp_meter import STDIO_LEDGER_FILE
 from ..result import RunResult, VerifierResult
 from ..task import BenchmarkTask
 from ..transcript import TranscriptParser
-from .arm import QUALGENT_SERVER_NAME, ResolvedArm, creation_prompt
+from .arm import QUALGENT_SERVER_NAME, ResolvedArm, creation_prompt, episode_api_key
 from .brief import CREATE_BRIEF_VERSION, case_brief, render_brief, text_sha256
 from .fake_api import API_DIR, AUTHORED_CASE_FILE, REQUEST_LOG, FakeApp, FakeQualGentAPI
 
@@ -214,7 +214,10 @@ class CreationEpisode:
         # Private text goes ONLY under the episode dir (refused inside the repo).
         self.arm.write_private_surface(run_dir)
         self.arm.write_manifest(run_dir)
-        self.fake = FakeQualGentAPI(run_dir, app=FakeApp(task.app_name)).start()
+        # A key of the episode's own: the fake refuses any other (QUA-3534).
+        self.api_key = episode_api_key()
+        self.fake = FakeQualGentAPI(run_dir, app=FakeApp(task.app_name),
+                                    api_key=self.api_key).start()
         self.api_url = self.fake.url
 
     @property
@@ -226,7 +229,7 @@ class CreationEpisode:
         that meters its calls, pointed at this episode's fake API."""
         entry = self.arm.qualgent_server_entry(self.api_url, self.surface.python, args=[
             "-m", "qualgentbench.mcp_meter", "stdio", "--ledger", str(self.ledger_path),
-            "--", self.surface.qualgent_command])
+            "--", self.surface.qualgent_command], api_key=self.api_key)
         # QGB_DISALLOWED_TOOLS withholds DEVICE tools; the author's QualGent surface is
         # the arm's tool policy alone (spike P5).
         entry["apply_disallowed_tools"] = False
