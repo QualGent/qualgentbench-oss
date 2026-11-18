@@ -198,3 +198,20 @@ def test_a_missing_case_is_404_not_unknown(api):
     fake, c = api
     assert c.get("/v1/test-cases/nope").status_code == 404
     assert _log(fake)[-1]["unknown"] is False
+
+
+def test_a_keyed_fake_refuses_every_other_key(tmp_path):
+    """QUA-3534: an episode's fake answers only its own key, before routing, and logs
+    the refusal without the key that was sent."""
+    with FakeQualGentAPI(tmp_path, app=FakeApp("MedTimer"), api_key="qg_episode_key") as fake:
+        for headers in ({}, {"x-api-key": "qg_createbench_fake_key"}):
+            r = httpx.post(f"{fake.url}/v1/test-cases", json=BODY, headers=headers)
+            assert r.status_code == 401
+        ok = httpx.get(f"{fake.url}/v1/categories/list", headers={"x-api-key": "qg_episode_key"})
+        assert ok.status_code == 200
+        log = _log(fake)
+    assert [(e["status"], e["route"], e["key_refused"]) for e in log] == [
+        (401, None, True), (401, None, True), (200, "list_categories", False)]
+    assert not any(e["unknown"] for e in log)
+    assert fake.summary()["cases_created"] == 0
+    assert "qg_createbench_fake_key" not in (fake.api_dir / "requests.jsonl").read_text()
