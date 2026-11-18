@@ -16,8 +16,19 @@ from ..transcript import claude_code_version, claude_session_usage_line
 class ClaudeCodeAdapter(AgentAdapter):
     name = "claude-code"
 
-    # The benchmark registers exactly one MCP server, under this name.
+    # The benchmark's device server is registered under this name (a creation episode
+    # adds a second, `qualgent`, QUA-2856).
     _SERVER = "device"
+    # The server-entry keys claude-code's --mcp-config understands. Everything else in
+    # the harness's mcp_config.json is a harness key (`enabled_tools`,
+    # `withheld_tools`, `apply_disallowed_tools`, `required`) and is dropped from the
+    # copy claude-code reads (`_write_mcp_config`).
+    _MCP_ENTRY_KEYS = ("type", "command", "args", "env", "url", "headers")
+    # Where a creation episode's creator template is written for
+    # --append-system-prompt-file (inside the per-episode config dir, which no
+    # checkpoint, view or lab upload copies: private text, QUA-2856).
+    _SYSTEM_PROMPT_FILE = "append_system_prompt.md"
+    _MCP_CONFIG_FILE = "mcp_config.json"
     # The only auth the harness accepts for claude-code on an Anthropic model.
     _AUTH_ENV = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")
     # The only auth a Fireworks-routed model needs (and the only one it may see).
@@ -168,11 +179,67 @@ class ClaudeCodeAdapter(AgentAdapter):
             "bypassPermissionsModeAccepted": True,
         }, indent=2))
 
+    @classmethod
+    def _system_prompt_path(cls, context: RunContext) -> Path:
+        return cls._config_dir(context) / cls._SYSTEM_PROMPT_FILE
+
+    @classmethod
+    def _mcp_config_copy(cls, context: RunContext) -> Path:
+        return cls._config_dir(context) / cls._MCP_CONFIG_FILE
+
+    def _mcp_servers(self, context: RunContext) -> dict[str, dict]:
+        if context.no_mcp or not context.mcp_config_path.exists():
+            return {}
+        raw = json.loads(context.mcp_config_path.read_text())
+        servers = raw.get("mcpServers") or raw.get("mcp_servers") or {}
+        return {str(n): e for n, e in servers.items() if isinstance(e, dict)}
+
+    def _write_mcp_config(self, context: RunContext) -> None:
+        """The MCP config claude-code reads: the harness's, with only the keys
+        claude-code understands per server. Written only when the harness's config
+        carries a harness key (a creation episode's `qualgent` entry); a journey episode
+        keeps reading the harness's own file."""
+        servers = self._mcp_servers(context)
+        if not any(set(e) - set(self._MCP_ENTRY_KEYS) for e in servers.values()):
+            return
+        clean = {name: {k: v for k, v in entry.items() if k in self._MCP_ENTRY_KEYS}
+                 for name, entry in servers.items()}
+        self._mcp_config_copy(context).write_text(
+            json.dumps({"mcpServers": clean}, indent=2) + "\n")
+
+    def _withheld_tools(self, context: RunContext) -> list[str]:
+        """`mcp__<server>__<tool>` for every tool a server entry's own policy withholds
+        (a creation episode's QualGent-MCP: the arm's `withheld_tools`, the deny-list
+        form of Codex's `enabled_tools`). An entry that narrows with `enabled_tools`
+        but cannot say what to withhold is refused: claude-code would otherwise show
+        the author every QualGent tool and the arm would silently be `all`."""
+        out: list[str] = []
+        for name, entry in self._mcp_servers(context).items():
+            withheld = entry.get("withheld_tools")
+            if withheld is None:
+                if entry.get("enabled_tools"):
+                    raise RuntimeError(
+                        f"MCP server {name!r} narrows its tools with enabled_tools but has "
+                        "no withheld_tools list: claude-code can only deny tools, and the "
+                        "server's full tool list was never probed")
+                continue
+            out += [f"mcp__{name}__{t}" for t in withheld]
+        return out
+
     def prepare(self, context: RunContext) -> None:
         """Seed the per-run config dir; with a tool-call cap, also write a PreToolUse
         hook that counts calls and drops the sentinel base.run() kills on — the CLI
-        equivalent of the native adapter's enforced step budget."""
+        equivalent of the native adapter's enforced step budget.
+
+        A creation episode (QUA-3507) also gets its creator template as a file for
+        --append-system-prompt-file (the codex adapter's `developer_instructions`) and
+        an MCP config without the harness's own keys."""
         self._seed_config(self._config_dir(context))
+        if context.developer_instructions:
+            self._system_prompt_path(context).write_text(
+                context.developer_instructions.rstrip() + "\n")
+        self._write_mcp_config(context)
+        self._withheld_tools(context)          # refuse an un-narrowable policy now
         if not context.tool_call_cap:
             return
         hooks_dir = context.run_dir / "hooks"
@@ -195,6 +262,8 @@ class ClaudeCodeAdapter(AgentAdapter):
     def command(self, instruction: str, context: RunContext) -> list[str]:
         # QGB_DISALLOWED_TOOLS is the only source; nothing is withheld by default.
         disallowed = [] if context.no_mcp else self._prefixed(context.disabled_tools or [])
+        # A server's own tool policy (a creation arm's QualGent-MCP surface, QUA-3507).
+        disallowed += self._withheld_tools(context)
         disallowed = list(dict.fromkeys(disallowed))
 
         # No --model by default: let the CLI use its own; the model actually used
@@ -212,6 +281,12 @@ class ClaudeCodeAdapter(AgentAdapter):
             cmd += ["--model", context.force_model]
         if context.tool_call_cap:
             cmd += ["--settings", str(context.run_dir / "hooks" / "settings.json")]
+        if context.developer_instructions:
+            # The creator template (private): by file, so the text is never in argv.
+            cmd += ["--append-system-prompt-file", str(self._system_prompt_path(context))]
+        mcp_config = context.mcp_config_path
+        if not context.no_mcp and self._mcp_config_copy(context).exists():
+            mcp_config = self._mcp_config_copy(context)
         # Raw condition: empty config + strict, so the CLI ignores the user's global
         # MCP servers — otherwise the raw arm silently inherits them.
         if context.no_mcp:
@@ -219,11 +294,11 @@ class ClaudeCodeAdapter(AgentAdapter):
         # When not injecting, reuse the agent's existing MCP server — a second
         # connection would split the device lock. --disallowedTools still gates it.
         elif context.isolate_mcp:
-            # MCP ablation: MCP-only config + strict, so the agent gets exactly one
-            # MCP server and none of the user's other global servers.
-            cmd += ["--mcp-config", str(context.mcp_config_path), "--strict-mcp-config"]
+            # MCP ablation: MCP-only config + strict, so the agent gets exactly the
+            # benchmark's MCP servers and none of the user's other global servers.
+            cmd += ["--mcp-config", str(mcp_config), "--strict-mcp-config"]
         elif context.inject_mcp:
-            cmd += ["--mcp-config", str(context.mcp_config_path)]
+            cmd += ["--mcp-config", str(mcp_config)]
         return cmd
 
     # A model id of this shape routes to Fireworks — the model itself declares

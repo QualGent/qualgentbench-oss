@@ -1618,7 +1618,7 @@ def _verify_episode(result: RunResult, progress=None, *,
                    "hunt, guided and journey in one run (reported separately), refused for "
                    "an app whose journey build is not its hunt build; create = CreateBench "
                    "v2: the agent AUTHORS one test case per case brief on the clean journey "
-                   "build, through QualGent-MCP (needs --agent codex-cli, --mcp-server and "
+                   "build, through QualGent-MCP (needs --agent codex-cli or claude-code, --mcp-server and "
                    "a creation arm: --qualgent-mcp/--devloop or `create_arm:` in --config).")
 @click.option("--config", "config_path", default=None,
               type=click.Path(exists=True, dir_okay=False, path_type=Path),
@@ -1959,20 +1959,23 @@ def _run_segment_hook(command: str, timeout_sec: int, runs_dir: Path, rc: int) -
 def _gate_create(agent: str, mcp_server: str | None, resume_plan, *, cfg_arm, base,
                  qualgent_mcp: str | None, devloop: str | None,
                  qualgent_tools: str | None, name: str | None):
-    """`--mode create` needs codex-cli (the creator template is delivered as Codex
-    `developer_instructions`, the way the desktop app installs it), the MCP arm (the
-    author explores through the device server) and a creation arm. Returns
-    `(CreateArm, base_dir)`, refused before anything is probed.
+    """`--mode create` needs a CLI author that can take the creator template (codex-cli:
+    Codex `developer_instructions`, the way the desktop app installs it; claude-code:
+    the appended system prompt, QUA-3507) on any provider its adapter supports, the
+    MCP arm (the author explores through the device server) and a creation arm.
+    Returns `(CreateArm, base_dir)`, refused before anything is probed.
 
     The arm comes from --qualgent-mcp/--devloop, else --config's `create_arm:`, else —
     on a resume — the plan's own `create_arm_spec`, pinned to the SHAs it resolved to."""
+    from . import providers
     from .config import CreateArm
     from .create.arm import ArmError, parse_pin
 
-    if agent != "codex-cli":
+    if agent not in providers.NATIVE_PROVIDER:
         raise click.ClickException(
-            f"--mode create runs --agent codex-cli only (got {agent}): the creator "
-            f"template reaches the author as Codex developer instructions.")
+            f"--mode create runs a CLI author ({', '.join(providers.NATIVE_PROVIDER)}; got "
+            f"{agent}): the creator template reaches the author as codex-cli developer "
+            "instructions or claude-code's appended system prompt.")
     if not mcp_server:
         raise click.ClickException(
             "--mode create needs --mcp-server: the author explores the app through the "
