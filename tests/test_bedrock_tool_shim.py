@@ -131,6 +131,46 @@ def test_relay_forwards_the_request_and_adds_the_namespace(upstream):
     assert shim.rewrites == 2 and shim.requests == 1
 
 
+def test_relay_passes_throttling_through_unchanged():
+    """A Bedrock 429 keeps its status, Retry-After and body, so codex's retry and the
+    harness's throttle detection (QUA-3505) see exactly what Bedrock sent."""
+    body = json.dumps({"error": {"message": "Too many tokens, please wait before trying again.",
+                                 "type": "ThrottlingException"}}).encode()
+
+    class Throttled(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Retry-After", "17")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    upstream = ThreadingHTTPServer(("127.0.0.1", 0), Throttled)
+    threading.Thread(target=upstream.serve_forever, daemon=True).start()
+    shim = BedrockToolShim(f"http://127.0.0.1:{upstream.server_address[1]}")
+    base = shim.start()
+    try:
+        request = {"tools": [{"type": "namespace", "name": "mcp__qualgent",
+                              "tools": [{"type": "function", "name": "qg_start"}]}]}
+        req = urllib.request.Request(base + "/responses", data=json.dumps(request).encode(),
+                                     headers={"Content-Type": "application/json"},
+                                     method="POST")
+        with pytest.raises(urllib.error.HTTPError) as err:
+            urllib.request.urlopen(req, timeout=10)
+        assert err.value.code == 429
+        assert err.value.headers.get("Retry-After") == "17"
+        assert err.value.read() == body
+        assert shim.rewrites == 0
+    finally:
+        shim.stop()
+        upstream.shutdown()
+
+
 def test_relay_answers_502_when_upstream_is_down():
     shim = BedrockToolShim("http://127.0.0.1:9")
     base = shim.start()
