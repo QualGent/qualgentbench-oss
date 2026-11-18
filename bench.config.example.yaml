@@ -14,6 +14,7 @@ image: qualgentbench:local
 
 agent: codex-cli            # claude-code | codex-cli | native
 model: gpt-5.5
+# provider: bedrock         # with an inference-profile model, e.g. us.moonshotai.kimi-k3
 
 scope:
   # tiers: [easy]               # and/or apps: [birday, easynotes]
@@ -39,6 +40,7 @@ devices:
 #                                                   models outside your Codex plan; else
 #                                                   the `codex login` session is used)
 #   FIREWORKS_API_KEY                              (Fireworks-hosted models)
+#   AWS_BEARER_TOKEN_BEDROCK + AWS_REGION          (provider: bedrock)
 env_file: .env
 
 # Where episodes land. Default: ~/.qualgentbench/runs for a host `run --config`;

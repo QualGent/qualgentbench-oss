@@ -236,6 +236,11 @@ class BenchConfig(BaseModel):
     # by default since QUA-2868. `true` opts in — same switch as `--allow-codex-login` /
     # QGB_ALLOW_CODEX_LOGIN=1; every episode records provenance.agent_auth.
     allow_codex_login: bool = False
+    # Which provider serves `model` (QUA-3502, `providers.py`): codex-cli runs on
+    # openai | bedrock, claude-code on anthropic | fireworks | bedrock. None = inferred
+    # from the model id (a Fireworks slug, a `us.<vendor>.<model>` Bedrock inference
+    # profile), else the agent's own. Same as `--provider` / QGB_PROVIDER.
+    provider: Literal["openai", "anthropic", "fireworks", "bedrock"] | None = None
     checkpoint: Checkpoint = Field(default_factory=Checkpoint)
     # A command run on the HOST after every segment — finished, credit-stopped or
     # failed — with QGB_HOOK_* in its environment (segment_hook.py, QUA-2842). Run by
