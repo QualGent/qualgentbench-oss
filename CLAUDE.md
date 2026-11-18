@@ -464,7 +464,14 @@ Wording stays generic: the repo is public. **One gate** (QUA-2841,
   Fireworks slug; a `us.<vendor>.<model>` Bedrock inference profile), else the agent's
   own. codex-cli: openai, or bedrock (`model_provider = "amazon-bedrock-runtime"` in the
   episode's config.toml; openai/moonshotai inference profiles only — Claude and bare ids
-  fail there). claude-code: anthropic, fireworks, or bedrock (`CLAUDE_CODE_USE_BEDROCK`,
+  fail there). codex sends MCP tools as a Responses `namespace` and routes a call by
+  (namespace, name); Kimi K3 on Bedrock answers with the bare name, so every MCP call
+  failed `unsupported call: <tool>` on codex 0.156-0.170 (QUA-3535). Each codex × Bedrock
+  episode therefore points the provider's `base_url` at a loopback relay
+  (`adapters/bedrock_tool_shim.py`) that forwards byte for byte and adds the namespace to
+  a `function_call` that lacks one (only for a name in exactly one namespace); a model
+  that names it (gpt-6-astra) passes untouched. Counts in `agent/bedrock_tool_shim.json`;
+  `QGB_CODEX_BEDROCK_TOOL_SHIM=0` turns it off. claude-code: anthropic, fireworks, or bedrock (`CLAUDE_CODE_USE_BEDROCK`,
   Claude only; the Haiku-class background model is pinned to the episode's own). Bedrock
   auth is `AWS_BEARER_TOKEN_BEDROCK` + `AWS_REGION`, the only AWS variables any agent
   gets (`strip_cloud_env` removes the host's AWS_* and CLAUDE_CODE_USE_BEDROCK/_VERTEX
