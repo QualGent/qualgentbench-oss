@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 from .base import AgentAdapter, RunContext
-from .. import credit, pricing
+from .. import credit, pricing, providers
 from ..interactions import BUDGET_HOOK
 from ..transcript import claude_code_version, claude_session_usage_line
 
@@ -39,23 +39,41 @@ class ClaudeCodeAdapter(AgentAdapter):
         return context.run_dir / "claude_home"
 
     @classmethod
-    def auth_source(cls, model: str | None = None) -> str | None:
+    def provider_for(cls, model: str | None, provider: str | None = None) -> str:
+        """The provider an episode on ``model`` runs against (`providers.resolve`:
+        an explicit choice, QGB_PROVIDER, the model id's shape, else Anthropic)."""
+        return providers.resolve(cls.name, model, provider) or providers.ANTHROPIC
+
+    @classmethod
+    def _provider(cls, context: RunContext) -> str:
+        return cls.provider_for(context.force_model or context.model, context.provider)
+
+    @classmethod
+    def auth_source(cls, model: str | None = None,
+                    provider: str | None = None) -> str | None:
         """Which env variable authenticates claude-code for ``model``, or None.
 
-        A Fireworks-routed model authenticates with the Fireworks key alone: the
-        adapter hands that key to the CLI and keeps every Anthropic credential away
-        from it (`env`, `inherited_env`), so an Anthropic token is neither needed nor
-        used. Any other model (None: the CLI's own default) needs an Anthropic one."""
-        if cls.is_fireworks_model(model):
+        A Fireworks-routed model authenticates with the Fireworks key alone, a
+        Bedrock one with the Bedrock API key: the adapter hands the CLI that one
+        credential and keeps every Anthropic credential away from it (`env`,
+        `inherited_env`), so an Anthropic token is neither needed nor used. Any other
+        model (None: the CLI's own default) needs an Anthropic one."""
+        route = cls.provider_for(model, provider)
+        if route == providers.FIREWORKS:
             return next((v for v in cls._FIREWORKS_KEY_ENV
                          if (os.environ.get(v) or "").strip()), None)
+        if route == providers.BEDROCK:
+            return (providers.BEDROCK_TOKEN_ENV
+                    if (os.environ.get(providers.BEDROCK_TOKEN_ENV) or "").strip() else None)
         return next((v for v in cls._AUTH_ENV if os.environ.get(v)), None)
 
     @classmethod
-    def needs_anthropic_auth(cls, models: list[str] | None) -> bool:
+    def needs_anthropic_auth(cls, models: list[str] | None,
+                             provider: str | None = None) -> bool:
         """Whether a run over ``models`` needs an Anthropic credential: True unless
-        every model routes to Fireworks (no models = the CLI's own Anthropic default)."""
-        return any(not cls.is_fireworks_model(m) for m in models or [None])
+        every model routes elsewhere (no models = the CLI's own Anthropic default)."""
+        return any(cls.provider_for(m, provider) == providers.ANTHROPIC
+                   for m in models or [None])
 
     @classmethod
     def subscription_auth(cls) -> bool:
@@ -74,16 +92,19 @@ class ClaudeCodeAdapter(AgentAdapter):
         return cls.auth_source() == "CLAUDE_CODE_OAUTH_TOKEN"
 
     @classmethod
-    def credit_guard_note(cls, model: str | None = None) -> str | None:
+    def credit_guard_note(cls, model: str | None = None,
+                          provider: str | None = None) -> str | None:
         """Why the credit guard will not fire on this run, or None when it will.
 
         One sentence, printed by preflight: a user who set a seven-day stop threshold
         and is quietly running on an API key would otherwise believe the sweep is
         being watched.
         """
-        if cls.is_fireworks_model(model):
+        route = cls.provider_for(model, provider)
+        if route in (providers.FIREWORKS, providers.BEDROCK):
+            where = "Fireworks" if route == providers.FIREWORKS else "Amazon Bedrock"
             return (f"credit guard inactive (no subscription windows) — {model} runs on "
-                    f"Fireworks, which reports no Claude usage windows")
+                    f"{where}, which reports no Claude usage windows")
         if not cls.subscription_auth():
             return ("credit guard inactive (no subscription windows) — ANTHROPIC_API_KEY "
                     "auth emits no rate_limit_event; run on CLAUDE_CODE_OAUTH_TOKEN to "
@@ -97,7 +118,8 @@ class ClaudeCodeAdapter(AgentAdapter):
         Fireworks-routed model there are none, and a watcher would be a file handle
         and a per-chunk scan bought for nothing.
         """
-        if self.credit_guard_note(context.force_model or context.model) is not None:
+        if self.credit_guard_note(context.force_model or context.model,
+                                  context.provider) is not None:
             return None
         return credit.RateLimitWatcher(context.run_dir, context.run_meta_dir)
 
@@ -243,6 +265,30 @@ class ClaudeCodeAdapter(AgentAdapter):
             "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "16384",
         }
 
+    @staticmethod
+    def _bedrock_env(model: str | None) -> dict[str, str]:
+        """Run claude-code on Amazon Bedrock (`CLAUDE_CODE_USE_BEDROCK`), Claude models
+        only — Kimi and other vendors are refused here (`providers.pair_refusal`), as
+        the CLI itself fails on them with "unrecognized model".
+
+        Authenticated by the Bedrock API key alone (`AWS_BEARER_TOKEN_BEDROCK`) in
+        `AWS_REGION`; `inherited_env` has already removed the host's AWS profile, keys
+        and every Anthropic credential. The small/fast (Haiku-class) model the CLI uses
+        for background work is pinned to the episode's own model: the episode then
+        runs, and prices, as ONE model of record, and never calls a Haiku id the
+        account may not be entitled to."""
+        if refusal := providers.pair_refusal("claude-code", providers.BEDROCK, model):
+            raise providers.ProviderError(refusal)
+        assert model is not None
+        return {
+            **providers.bedrock_env(),
+            "CLAUDE_CODE_USE_BEDROCK": "1",
+            "ANTHROPIC_MODEL": model,
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL": model,
+            "ANTHROPIC_SMALL_FAST_MODEL": model,
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        }
+
     def env(self, context: RunContext) -> dict[str, str]:
         env: dict[str, str] = {"CLAUDE_CONFIG_DIR": str(self._config_dir(context))}
         # Long device routines can run minutes; pin the per-tool MCP timeout to 5 min
@@ -250,22 +296,29 @@ class ClaudeCodeAdapter(AgentAdapter):
         env["MCP_TOOL_TIMEOUT"] = "300000"
 
         model = context.force_model or context.model
-        if self.is_fireworks_model(model):
+        route = self._provider(context)
+        if route == providers.FIREWORKS:
+            if refusal := providers.pair_refusal(self.name, route, model):
+                raise providers.ProviderError(refusal)
             env.update(self._fireworks_env(model))
+        elif route == providers.BEDROCK:
+            env.update(self._bedrock_env(model))
         return env
 
     def inherited_env(self, context: RunContext) -> dict[str, str]:
-        """This process's environment, less every Anthropic credential when the episode
-        routes to Fireworks.
+        """This process's environment, less every cloud-account variable, and less
+        every Anthropic credential when the episode routes off Anthropic.
 
         claude-code sends whatever Anthropic credential it finds to ANTHROPIC_BASE_URL.
         For a Fireworks episode that is Fireworks: a CLAUDE_CODE_OAUTH_TOKEN left in the
         environment went there as `Authorization: Bearer` on every request, beside the
         Fireworks key. So the Anthropic credentials are dropped here, before `env()`
-        sets ANTHROPIC_API_KEY to the Fireworks key. An Anthropic-model episode
-        inherits the environment unchanged."""
-        env = super().inherited_env(context)
-        if not self.is_fireworks_model(context.force_model or context.model):
+        sets ANTHROPIC_API_KEY to the Fireworks key; a Bedrock episode drops them too.
+        The host's AWS variables (profile, keys, region) and any CLAUDE_CODE_USE_BEDROCK
+        / _VERTEX switch never reach any episode (`providers.strip_cloud_env`): a
+        Bedrock episode gets exactly its two AWS variables back from `env()`."""
+        env = providers.strip_cloud_env(super().inherited_env(context))
+        if self._provider(context) == providers.ANTHROPIC:
             return env
         return {k: v for k, v in env.items()
                 if not self._ANTHROPIC_CREDENTIAL.fullmatch(k)}

@@ -137,6 +137,10 @@ class RunContext:
     # Pin the CLI agent to a model. None = the CLI's own default; set for
     # ablations so both conditions use the same model.
     force_model: str | None = None
+    # The model provider (QUA-3502, `providers.py`): openai | anthropic | fireworks |
+    # bedrock. None = `providers.resolve` decides (QGB_PROVIDER, the model id's shape,
+    # else the harness's own provider). Recorded as the result's `provider`.
+    provider: str | None = None
     # Per-episode tool-call budget, enforced for CLI agents by a PreToolUse hook
     # that denies calls past the cap. None = no cap (timeout_sec still applies).
     tool_call_cap: int | None = None
@@ -196,11 +200,12 @@ class AgentAdapter(ABC):
     def prepare(self, context: RunContext) -> None:
         """Optional setup before the subprocess launches."""
 
-    def auth_refusal(self) -> str | None:
+    def auth_refusal(self, provider: str | None = None) -> str | None:
         """Why this adapter must not launch an agent on the credentials it would use
-        now, or None (the default). Read without side effects: `run_episode` asks it
-        before the agent starts and records a refusal as a staging failure, and the
-        CLIs ask it before any device is touched (codex-cli: QUA-2868)."""
+        now (for ``provider``; None = the adapter's own resolution), or None (the
+        default). Read without side effects: `run_episode` asks it before the agent
+        starts and records a refusal as a staging failure, and the CLIs ask it before
+        any device is touched (codex-cli: QUA-2868)."""
         return None
 
     def stream_watcher(self, context: RunContext) -> Any | None:

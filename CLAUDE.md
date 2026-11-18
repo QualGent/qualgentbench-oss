@@ -459,6 +459,24 @@ Wording stays generic: the repo is public. **One gate** (QUA-2841,
   adapter hands the CLI that key as its `ANTHROPIC_API_KEY` and strips every Anthropic
   credential from the CLI's env (`inherited_env`) — an OAuth token left there was sent
   to Fireworks as `Authorization: Bearer` on every request.
+  **Providers** (QUA-3502, `providers.py`): one place decides harness × provider ×
+  model — `run --provider` / `provider:` / `QGB_PROVIDER`, else the model id's shape (a
+  Fireworks slug; a `us.<vendor>.<model>` Bedrock inference profile), else the agent's
+  own. codex-cli: openai, or bedrock (`model_provider = "amazon-bedrock-runtime"` in the
+  episode's config.toml; openai/moonshotai inference profiles only — Claude and bare ids
+  fail there). claude-code: anthropic, fireworks, or bedrock (`CLAUDE_CODE_USE_BEDROCK`,
+  Claude only; the Haiku-class background model is pinned to the episode's own). Bedrock
+  auth is `AWS_BEARER_TOKEN_BEDROCK` + `AWS_REGION`, the only AWS variables any agent
+  gets (`strip_cloud_env` removes the host's AWS_* and CLAUDE_CODE_USE_BEDROCK/_VERTEX
+  from every CLI episode). An unsupported pair or a missing variable is refused by
+  name in `run`'s preflight, `preflight`, and per episode (`staging_failed`). The
+  provider is on every result (`provider`, omitted while None) and in plan.json; a
+  resume takes the plan's. On Bedrock and Fireworks the REQUESTED id is the model of
+  record and claude-code's `total_cost_usd` is never `reported` (AWS bills its own rates:
+  a `us.` profile is 1.1x `global.`, `pricing.BEDROCK_PRICING`, from the AWS Price List
+  API). Cache writes are counted (`cache_write_input_tokens`) and priced at a row's
+  `cache_write` rate where it has one (Bedrock rows only, so first-party boards are
+  unmoved).
   **codex-cli auth: an API key, or an explicit opt-in to the operator's login**
   (QUA-2868). codex exchanges `CODEX_API_KEY`/`OPENAI_API_KEY` for a per-episode
   `auth.json` (`codex login --with-api-key`). With no key (or a failed exchange) it used

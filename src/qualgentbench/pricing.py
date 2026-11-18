@@ -23,11 +23,12 @@ COST_UNAVAILABLE = "unavailable"    # the transcript reported no usage at all
 # $0 — nothing ran — and never the "unavailable" an empty transcript would read as.
 COST_NOT_LAUNCHED = "not_launched"
 
-# model name → {input, cached_input, output} USD per million tokens.
-# `cached_input` is the cache-READ rate. Cache WRITES are billed at the plain
-# input rate here (see compute_cost_usd), which understates them slightly; the
-# claude `result`/stream usage shapes report reads and writes separately and the
-# read side is where the volume is.
+# model name → {input, cached_input, output[, cache_write]} USD per million tokens.
+# `cached_input` is the cache-READ rate. Cache WRITES are billed at `cache_write` when
+# the row has one, else at the plain input rate (see compute_cost_usd), which
+# understates them slightly; the read side is where the volume is. Only the Bedrock
+# rows carry `cache_write` today: adding it to a first-party row would move every
+# board already priced under that row.
 PRICING: dict[str, dict[str, float]] = {
     "gpt-5.5": {"input": 5.00, "cached_input": 0.50, "output": 30.00},
     "gpt-5.5-pro": {"input": 30.00, "cached_input": 3.00, "output": 180.00},
@@ -102,14 +103,88 @@ PRICING: dict[str, dict[str, float]] = {
         "input": 2.00, "cached_input": 0.25, "output": 6.00},
 }
 
+# Amazon Bedrock rows (QUA-3502), keyed by the normalized model id and by inference
+# scope: `regional` is a geo inference profile (`us.…`, `eu.…`, `apac.…` — the ids this
+# harness runs, which AWS bills at the "Standard" rate) and `global` a `global.…`
+# profile ("Standard, Global"). Bedrock prices separately from each vendor's own API:
+# a regional profile is 1.1x the global rate, and claude-code's `total_cost_usd` is
+# Anthropic list price, so it is never `reported` for a Bedrock model (usage_metrics).
+# Source: the AWS Price List API, read 2026-11-18 (`aws pricing get-products
+# --region us-east-1 --service-code AmazonBedrockFoundationModels|AmazonBedrock
+# --filters Type=TERM_MATCH,Field=regionCode,Value=us-east-2`), on-demand Standard
+# tier, short-context rows: Claude `*_tokens_standard` / `*_global_standard` (cache
+# write = the 5-minute TTL row), GPT-6 Astra the same (cache write = its 30-minute
+# row), Kimi K3 `moonshotai.kimi-k3-mantle-*-standard` / `-global-standard`
+# (cache write 30m). Also on https://aws.amazon.com/bedrock/pricing/ for Kimi.
+# Not modelled: Claude's long-context (>200K-token request) rows and 1-hour cache
+# writes, GPT-6 Astra's >272K surcharge — this table prices summed usage.
+BEDROCK_PRICING: dict[str, dict[str, dict[str, float] | None]] = {
+    "claude-opus-5-5": {
+        "regional": {"input": 4.40, "cached_input": 0.22, "cache_write": 5.50,
+                     "output": 22.00},
+        "global": {"input": 4.00, "cached_input": 0.20, "cache_write": 5.00,
+                   "output": 20.00}},
+    "claude-sonnet-5-5": {
+        "regional": {"input": 2.20, "cached_input": 0.11, "cache_write": 2.75,
+                     "output": 11.00},
+        "global": {"input": 2.00, "cached_input": 0.10, "cache_write": 2.50,
+                   "output": 10.00}},
+    "claude-haiku-5-5": {
+        "regional": {"input": 0.11, "cached_input": 0.011, "cache_write": 0.1375,
+                     "output": 0.55},
+        "global": {"input": 0.10, "cached_input": 0.01, "cache_write": 0.125,
+                   "output": 0.50}},
+    "gpt-6-astra": {
+        "regional": {"input": 11.00, "cached_input": 1.10, "cache_write": 13.75,
+                     "output": 55.00},
+        "global": {"input": 10.00, "cached_input": 1.00, "cache_write": 12.50,
+                   "output": 50.00}},
+    "kimi-k3": {
+        "regional": {"input": 3.30, "cached_input": 0.33, "cache_write": 4.125,
+                     "output": 16.50},
+        "global": {"input": 3.00, "cached_input": 0.30, "cache_write": 3.75,
+                   "output": 15.00}},
+    # TODO(QUA-3502): no Bedrock price for Kimi K3.1 — the Price List API has no
+    # `kimi-k3.1` row for us-east-2 on 2026-11-18, and the pricing page lists only
+    # "Kimi K3.1 Pro - Highspeed", a different SKU. Left None: an episode on it reports
+    # `cost_source: "unpriced"` rather than a number borrowed from another model. Add
+    # the row from the Price List API once AWS publishes it.
+    "kimi-k3.1": None,
+}
+
 # A model id of this shape is served by Fireworks (the claude-code adapter routes on
 # the same prefix). For such a model, claude-code's `total_cost_usd` is Anthropic list
 # price applied to Fireworks tokens, so `usage_metrics` never reports it.
 FIREWORKS_PREFIX = "accounts/fireworks/models/"
 
+# A Bedrock inference-profile id: `<scope>.<vendor>.<model>` — `us.moonshotai.kimi-k3`,
+# `global.anthropic.claude-sonnet-5-5`. The vendor segment is letters only, so a dotted
+# model name (`gpt-5.5`) never reads as one.
+_BEDROCK_ID = re.compile(r"^(us|eu|apac|jp|au|ca|us-gov|global)\.([a-z]+)\.(.+)$")
+
 
 def is_fireworks_model(model: str | None) -> bool:
     return bool(model and model.startswith(FIREWORKS_PREFIX))
+
+
+def bedrock_parts(model: str | None) -> tuple[str, str, str] | None:
+    """`(scope, vendor, model)` of a Bedrock inference-profile id, else None."""
+    m = _BEDROCK_ID.match((model or "").strip().lower())
+    return (m.group(1), m.group(2), m.group(3)) if m else None
+
+
+def is_bedrock_model(model: str | None) -> bool:
+    return bedrock_parts(model) is not None
+
+
+def provider_of_model(model: str | None) -> str | None:
+    """The provider a model id's SHAPE names (`fireworks` | `bedrock`), else None —
+    a bare id (`gpt-6-astra`, `claude-sonnet-5-5`) names no provider by itself."""
+    if is_fireworks_model(model):
+        return "fireworks"
+    if is_bedrock_model(model):
+        return "bedrock"
+    return None
 
 
 # A dated snapshot suffix a provider appends to a model id: `-2026-09-01` (OpenAI)
@@ -122,46 +197,68 @@ def normalize_model(model: str | None) -> str:
     (`TranscriptParser.model()`), which is not always the one the harness asked for.
 
     Removes, in order: surrounding whitespace and case; a provider routing prefix
-    (`openai/gpt-6-astra`, `us.anthropic.claude-...` → the last path segment, then any
-    `<region>.anthropic.` / `anthropic.` prefix); a Bedrock `-v1:0` version tail; a
-    claude-code context tag (`claude-fable-5-1[1m]`); a dated snapshot suffix
-    (`gpt-6-astra-2026-09-01`). Nothing else — in particular no family guessing: an id
-    this does not reduce to a PRICING key stays unpriced, which is the honest outcome.
-    Fireworks slugs are keyed on the full path and are looked up before this runs."""
+    (`openai/gpt-6-astra` → the last path segment); a Bedrock scope and vendor prefix
+    (`us.anthropic.claude-…`, `us.moonshotai.kimi-k3`, `global.openai.gpt-6-astra`, a
+    bare `anthropic.claude-…`); a Bedrock `-v1:0` version tail; a claude-code context
+    tag (`claude-fable-5-1[1m]`); a dated snapshot suffix (`gpt-6-astra-2026-09-01`).
+    Nothing else — in particular no family guessing: an id this does not reduce to a
+    PRICING key stays unpriced, which is the honest outcome. Fireworks slugs are keyed
+    on the full path and are looked up before this runs."""
     m = (model or "").strip().lower()
     m = m.rsplit("/", 1)[-1]
+    if parts := bedrock_parts(m):
+        m = parts[2]
     m = re.sub(r"^(?:[a-z]{2,4}\.)?anthropic\.", "", m)
     m = re.sub(r"-v\d+(?::\d+)?$", "", m)
     m = re.sub(r"\[[^\]]*\]$", "", m)
     return _SNAPSHOT.sub("", m)
 
 
-def _rates(model: str) -> dict[str, float] | None:
+def _rates(model: str, provider: str | None = None) -> dict[str, float] | None:
+    """The row ``model`` prices under on ``provider`` (default: the provider its id's
+    shape names). A Bedrock model prices ONLY from BEDROCK_PRICING — never from the
+    vendor's first-party row, which is a different price."""
+    provider = provider or provider_of_model(model)
+    if provider == "bedrock":
+        row = BEDROCK_PRICING.get(normalize_model(model))
+        if row is None:
+            return None
+        parts = bedrock_parts(model)
+        return row["global" if parts and parts[0] == "global" else "regional"]
     if model in PRICING:
         return PRICING[model]
     return PRICING.get(normalize_model(model))
 
 
-def compute_cost_usd(model: str, usage: Mapping[str, Any]) -> float | None:
-    """Estimate cost from a token-usage dict (input_tokens incl. cached,
-    cached_input_tokens, output_tokens) using the PRICING table. Returns None
-    if the model isn't in the table."""
-    rates = _rates(model)
+def compute_cost_usd(model: str, usage: Mapping[str, Any],
+                     provider: str | None = None) -> float | None:
+    """Estimate cost from a token-usage dict (input_tokens incl. cached reads and
+    cache writes, cached_input_tokens, cache_write_input_tokens, output_tokens) using
+    the pricing tables. Returns None if the model isn't priced there."""
+    rates = _rates(model, provider)
     if not rates:
         return None
     input_tokens = int(usage.get("input_tokens", 0) or 0)
     cached = int(usage.get("cached_input_tokens", 0) or 0)
+    writes = int(usage.get("cache_write_input_tokens", 0) or 0)
     output = int(usage.get("output_tokens", 0) or 0)
-    uncached_input = max(input_tokens - cached, 0)
+    # Writes are part of the billed input. A row with no write rate bills them at
+    # `input`, which is exactly what it did before writes were counted separately.
+    write_rate = rates.get("cache_write")
+    if write_rate is None:
+        writes, write_rate = 0, 0.0
+    uncached_input = max(input_tokens - cached - writes, 0)
     cost = (
         uncached_input * rates["input"]
         + cached * rates["cached_input"]
+        + writes * write_rate
         + output * rates["output"]
     ) / 1_000_000
     return round(cost, 6)
 
 
-def usage_metrics(model: str, usage: Mapping[str, Any]) -> dict[str, Any]:
+def usage_metrics(model: str, usage: Mapping[str, Any],
+                  provider: str | None = None) -> dict[str, Any]:
     """The cost/token block every scorer writes into `result.json`, built once.
 
     Six scorers used to inline the same three lines and the same
@@ -180,8 +277,10 @@ def usage_metrics(model: str, usage: Mapping[str, Any]) -> dict[str, Any]:
     reported = float(reported) if isinstance(reported, (int, float)) else None
     # claude-code prices every request at Anthropic's list rate, whoever served it:
     # a Fireworks GLM-5.3-Flash episode reported $0.56 for ~$0.06 of tokens. The
-    # tokens are real; the number is not, so price the tokens instead.
-    if is_fireworks_model(model):
+    # tokens are real; the number is not, so price the tokens instead. Bedrock the
+    # same: AWS bills its own (regional: 1.1x) rates, not Anthropic's list price.
+    provider = provider or provider_of_model(model)
+    if provider in ("fireworks", "bedrock"):
         reported = None
 
     if source == "none":
@@ -189,6 +288,7 @@ def usage_metrics(model: str, usage: Mapping[str, Any]) -> dict[str, Any]:
             "input_tokens": None,
             "output_tokens": None,
             "cached_input_tokens": None,
+            "cache_write_input_tokens": None,
             "total_tokens": None,
             # A reported cost with no token breakdown is still a real number.
             "cost_usd": reported,
@@ -196,7 +296,7 @@ def usage_metrics(model: str, usage: Mapping[str, Any]) -> dict[str, Any]:
             "usage_source": source,
         }
 
-    cost = reported if reported is not None else compute_cost_usd(model, usage)
+    cost = reported if reported is not None else compute_cost_usd(model, usage, provider)
     if reported is not None:
         cost_source = COST_REPORTED
     elif cost is not None:
@@ -207,6 +307,7 @@ def usage_metrics(model: str, usage: Mapping[str, Any]) -> dict[str, Any]:
         "input_tokens": usage.get("input_tokens", 0),
         "output_tokens": usage.get("output_tokens", 0),
         "cached_input_tokens": usage.get("cached_input_tokens", 0),
+        "cache_write_input_tokens": usage.get("cache_write_input_tokens", 0),
         "total_tokens": usage.get("total_tokens", 0),
         "cost_usd": cost,
         "cost_source": cost_source,

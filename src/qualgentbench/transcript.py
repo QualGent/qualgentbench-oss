@@ -328,8 +328,8 @@ def codex_rollout_usage(codex_home: Path) -> dict | None:
     sessions = Path(codex_home) / "sessions"
     if not sessions.is_dir():
         return None
-    fields = ("input_tokens", "cached_input_tokens", "output_tokens",
-              "reasoning_output_tokens", "total_tokens")
+    fields = ("input_tokens", "cached_input_tokens", "cache_write_input_tokens",
+              "output_tokens", "reasoning_output_tokens", "total_tokens")
     total = dict.fromkeys(fields, 0)
     counted = 0
     for rollout in sorted(sessions.rglob("rollout-*.jsonl")):
@@ -430,8 +430,9 @@ def claude_session_usage(config_dir: Path) -> dict | None:
     inp, cached, out = _anthropic_totals(usages.values())
     if not (inp or cached or out):
         return None
-    return {"input_tokens": inp, "cached_input_tokens": cached, "output_tokens": out,
-            "requests": len(usages)}
+    return {"input_tokens": inp, "cached_input_tokens": cached,
+            "cache_write_input_tokens": _anthropic_cache_writes(usages.values()),
+            "output_tokens": out, "requests": len(usages)}
 
 
 def claude_session_usage_line(config_dir: Path, transcript: str) -> str | None:
@@ -536,8 +537,9 @@ class TranscriptParser:
         full input, cache reads at the cache rate. Folded exactly as the `result`
         branch folds its one dict, so the two shapes stay comparable.
         """
-        turn_in = turn_out = turn_cached = 0
+        turn_in = turn_out = turn_cached = turn_writes = 0
         codex_state: tuple[int, int, int] = (0, 0, 0)
+        codex_state_writes = claude_session_writes = 0
         claude_session: tuple[int, int, int] = (0, 0, 0)
         claude_result: dict | None = None
         # message id → that request's usage. dict, not a list: see the docstring.
@@ -557,14 +559,17 @@ class TranscriptParser:
             elif etype == "turn.completed" and isinstance(e.get("usage"), dict):
                 i, c, o = _codex_totals(e["usage"])
                 turn_in, turn_cached, turn_out = turn_in + i, turn_cached + c, turn_out + o
+                turn_writes += _usage_int(e["usage"], "cache_write_input_tokens")
             elif etype == CODEX_STATE_USAGE_EVENT and isinstance(e.get("usage"), dict):
                 # A running total, not a delta: the last one wins.
                 codex_state = _codex_totals(e["usage"])
+                codex_state_writes = _usage_int(e["usage"], "cache_write_input_tokens")
             elif etype == CLAUDE_SESSION_USAGE_EVENT and isinstance(e.get("usage"), dict):
                 u = e["usage"]
                 claude_session = (_usage_int(u, "input_tokens"),
                                   _usage_int(u, "cached_input_tokens"),
                                   _usage_int(u, "output_tokens"))
+                claude_session_writes = _usage_int(u, "cache_write_input_tokens")
             elif etype == "assistant":
                 message = e.get("message")
                 if not isinstance(message, dict) or not isinstance(message.get("usage"), dict):
@@ -581,28 +586,34 @@ class TranscriptParser:
             cost = claude_result.get("total_cost_usd")
             reported_cost = float(cost) if isinstance(cost, (int, float)) else None
 
+        result_usage = [claude_result["usage"]] if claude_result is not None else []
+        # (source, (input, cache reads, output), cache writes). Writes are part of
+        # `input` in every shape; they are counted apart only so a row with a write
+        # rate (Bedrock) can price them (`pricing.compute_cost_usd`).
         candidates = (
-            ("result", _anthropic_totals(
-                [claude_result["usage"]] if claude_result is not None else [])),
-            ("turns", (turn_in, turn_cached, turn_out)),
-            ("stream", _anthropic_totals(stream.values())),
+            ("result", _anthropic_totals(result_usage),
+             _anthropic_cache_writes(result_usage)),
+            ("turns", (turn_in, turn_cached, turn_out), turn_writes),
+            ("stream", _anthropic_totals(stream.values()),
+             _anthropic_cache_writes(stream.values())),
             # Appended only when stdout carried no usage, so it never blends with the
             # two claude shapes above.
-            ("claude_session", claude_session),
+            ("claude_session", claude_session, claude_session_writes),
             # Last on purpose: it is read only when no `turn.completed` answered, so
             # it can never be added to or blended with a turn-measured episode.
-            ("codex_state", codex_state),
+            ("codex_state", codex_state, codex_state_writes),
         )
-        source, (inp, cached, out) = "none", (0, 0, 0)
-        for name, totals in candidates:
+        source, (inp, cached, out), writes = "none", (0, 0, 0), 0
+        for name, totals, cache_writes in candidates:
             if any(totals):
-                source, (inp, cached, out) = name, totals
+                source, (inp, cached, out), writes = name, totals, cache_writes
                 break
 
         return {
             "input_tokens": inp,
             "output_tokens": out,
             "cached_input_tokens": cached,
+            "cache_write_input_tokens": writes,
             "total_tokens": inp + out,
             "reported_cost_usd": reported_cost,
             # Which shape answered, or "none" when the transcript reported no usage
@@ -1231,6 +1242,12 @@ def _anthropic_totals(usages) -> tuple[int, int, int]:
         cached += cache_read
         out += int(u.get("output_tokens", 0) or 0)
     return inp, cached, out
+
+
+def _anthropic_cache_writes(usages) -> int:
+    """The cache-WRITE part of `_anthropic_totals`' input, summed."""
+    return sum(int(u.get("cache_creation_input_tokens", 0) or 0)
+               for u in usages if isinstance(u, dict))
 
 
 def _codex_totals(u: dict) -> tuple[int, int, int]:
