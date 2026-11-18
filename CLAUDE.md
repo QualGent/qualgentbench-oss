@@ -1730,8 +1730,13 @@ uv run qualgent-bench run --mode create --agent codex-cli --models gpt-6-astra \
 One unit = one case BRIEF (`brief:`, QUA-2853; `--case` selects by case id) × trial,
 task id `<case>~create`, kind `create_case` (`create/runner.py`). Staged exactly as the
 case's CLEAN journey episode (journey build, fixture, no flag, pinned clock, the same
-precondition anchor). codex-cli only (the template goes in as Codex
-`developer_instructions`), MCP arm only; the arm comes from `--qualgent-mcp/--devloop`,
+precondition anchor). codex-cli or claude-code on any provider their adapters support
+(QUA-3507: the template goes in as Codex `developer_instructions`, or as claude-code's
+`--append-system-prompt-file` from its own `claude_home/`; the arm's QualGent tool list is
+Codex `enabled_tools`, or for claude-code `--disallowedTools` over the server's other tools,
+`withheld_tools`, from the smoke's `server_tools`). Changing the author's or the grader's
+harness/provider/model is a new treatment; a different grader is never comparable with
+earlier grades. MCP arm only; the arm comes from `--qualgent-mcp/--devloop`,
 `create_arm:` in `--config`, or on `--resume` from plan.json's `create_arm_spec` (pins at
 their resolved SHAs). Before any device time `run` resolves the arm, installs
 QualGent-MCP at its SHA and smokes it against a fake (`<runs>/_create_smoke/`). The
