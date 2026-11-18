@@ -1,4 +1,4 @@
-from qualgentbench.failures import RATE_LIMITED, classify, exclusion_reason, is_excluded
+from qualgentbench.failures import RATE_LIMITED, classify, exclusion_reason, is_excluded, retry_after_seconds
 
 
 def test_a_limit_at_the_end_of_the_transcript_is_the_stop_reason():
@@ -34,3 +34,22 @@ def test_exclusion_predicate_covers_rate_limits():
     assert not is_excluded({"truncated": True, "f1": 0.2})
     assert exclusion_reason({"failure_class": RATE_LIMITED}).startswith("rate_limited")
     assert exclusion_reason({"f1": 0.2}) == ""
+
+
+def test_bedrock_and_claude_code_api_throttling_is_rate_limited():
+    # codex on amazon-bedrock-runtime, claude-code on Bedrock, claude-code's API error line, Fireworks.
+    for tail in ('{"type":"error","message":"ThrottlingException: Rate exceeded"}',
+                 "API Error: 429 Too many tokens, please wait before trying again.",
+                 'API Error: 429 {"type":"error","error":{"type":"rate_limit_error"}}',
+                 '{"type":"turn.failed","error":{"message":"exceeded retry limit, last status: 429"}}'):
+        assert classify("x" * 9000 + tail, 1) == RATE_LIMITED, tail
+
+
+def test_retry_after_is_read_from_the_last_mention():
+    assert retry_after_seconds("429 Too Many Requests; retry-after: 20") == 20
+    assert retry_after_seconds('{"retry_after_ms": 1500}') == 1.5
+    assert retry_after_seconds("Rate limit reached. Please try again in 12s.") == 12
+    assert retry_after_seconds("please retry after 2 minutes") == 120
+    assert retry_after_seconds("retry-after: 5 ... later: Retry-After: 30") == 30
+    assert retry_after_seconds("ThrottlingException: Too many tokens") is None
+    assert retry_after_seconds("") is None

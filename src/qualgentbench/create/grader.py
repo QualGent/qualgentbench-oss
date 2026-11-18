@@ -151,6 +151,7 @@ import difflib
 import hashlib
 import json
 import logging
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -808,17 +809,27 @@ def summarize(grades: list[dict[str, Any]]) -> dict[str, Any]:
 
 # ── the runner fingerprint ─────────────────────────────────────────────────────
 
-def runner_fingerprint(agent: str, model: str, tooling: str = "mcp") -> dict[str, Any]:
-    """What makes the runner FROZEN, recorded on every grade: the agent and model, the
-    journey brief's version and a hash of its rendered template (placeholder case, so a
-    template edit moves it and an authored case does not), the budget rule and the
-    oracle binding."""
+def runner_fingerprint(agent: str, model: str, tooling: str = "mcp",
+                       provider: str | None = None) -> dict[str, Any]:
+    """What makes the runner FROZEN, recorded on every grade: the agent, model and
+    provider (QUA-3507: any harness x provider can grade, and grades made by different
+    runners are not comparable), the journey brief's version and a hash of its rendered
+    template (placeholder case, so a template edit moves it and an authored case does
+    not), the budget rule and the oracle binding. ``provider`` None = what
+    `providers.resolve` picks for the pair (QGB_PROVIDER, the model id's shape, else the
+    harness's own)."""
+    from .. import providers
+
+    try:
+        provider = providers.resolve(agent, model, provider)
+    except providers.ProviderError:
+        pass                                  # recorded as given; run_episode refuses it
     probe = BenchmarkTask(id="x~clean", name="x", instruction="", app_file_id="",
                           app_name="APP", platform="android", bundle_id="PKG",
                           bug_spec={"name": "NAME", "steps": ["STEP"],
                                     "expected_outcome": "OUTCOME"})
     text = journey.brief(probe, "DEVICE", tooling)
-    return {"agent": agent, "model": model, "tooling": tooling,
+    return {"agent": agent, "model": model, "provider": provider, "tooling": tooling,
             "brief_version": _brief.BRIEF_VERSION,
             "brief_sha": hashlib.sha256(text.encode()).hexdigest()[:12],
             "budget_rule": BUDGET_RULE, "oracle_binding": ORACLE_BINDING,
@@ -947,7 +958,8 @@ async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
                     device: str, runs_dir: Path, run_id: str | None = None,
                     max_attempts: int = 2, yes: bool = False,
                     extra: dict[str, Any] | None = None,
-                    manifest_name: str | None = None) -> Path:
+                    manifest_name: str | None = None,
+                    provider: str | None = None) -> Path:
     """Execute the plan on one device and write the manifest after every run (a killed
     grade keeps what it finished). An EXCLUDED run is retried once (`max_attempts`): a
     rate limit or a dead staging measures nothing, and only the last attempt is graded.
@@ -972,13 +984,13 @@ async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
     from ..session import DeviceSession
 
     run_id = run_id or new_run_id()
-    runner = runner_fingerprint(agent, model, "mcp" if mcp_server else "raw")
+    runner = runner_fingerprint(agent, model, "mcp" if mcp_server else "raw", provider)
     path = manifest_path(runs_dir, run_id, manifest_name or plan.grade_id)
     if plan.status != GRADED:
         write_manifest(path, plan, runner=runner, run_id=run_id, result=grade(plan, {}),
                        extra=extra)
         return path
-    if refusal := auth_refusal(agent):
+    if refusal := auth_refusal(agent, runner.get("provider")):
         raise AuthRefused(refusal)
     suite = next(s for s in bugs.load_apps() if s["app"]["id"] == plan.app_id)
     apk = _resolve_app_apk(suite["app"], suite, mode="journey")
@@ -1003,7 +1015,7 @@ async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
                 task_type=TASK_TYPE, device_serial=device,
                 tooling=("mcp" if mcp_server else "raw"), apk_path=apk, force_model=model,
                 run_id=run_id, attempt=attempt, app_id=plan.app_id,
-                mcp_server_identity=identity)
+                mcp_server_identity=identity, provider=provider)
             logger.info("create grade %s: %s attempt %d", plan.grade_id, run.key, attempt)
             try:
                 result = await run_episode(task, opts)
@@ -1089,8 +1101,14 @@ def main(argv: list[str] | None = None) -> int:
                        help="0-based trial index that rotates the control (default 0)")
         p.add_argument("--json", action="store_true")
         if name == "run":
-            p.add_argument("--agent", default="codex-cli")
+            p.add_argument("--agent", default="codex-cli",
+                           help="the runner's CLI: codex-cli or claude-code")
             p.add_argument("--model", required=True)
+            p.add_argument("--provider", default=None,
+                           help="who serves the runner's model (openai, anthropic, "
+                                "fireworks, bedrock); default: QGB_PROVIDER, else the model "
+                                "id's shape, else the agent's own. Recorded on the grade's "
+                                "runner fingerprint")
             p.add_argument("--mcp-server", required=True)
             p.add_argument("--device", required=True)
             p.add_argument("--runs-dir", default=None)
@@ -1140,6 +1158,15 @@ def main(argv: list[str] | None = None) -> int:
         from ..adapters.codex_cli import allow_login
         if args.allow_codex_login:
             allow_login()
+        if args.provider:
+            # The one switch the adapters, preflight and the episode runner read
+            # (QGB_PROVIDER, as `qualgent-bench run --provider` sets it).
+            from .. import providers
+            try:
+                os.environ[providers.PROVIDER_ENV] = providers.normalize(args.provider) or ""
+            except providers.ProviderError as exc:
+                print(f"refused: {exc}", file=sys.stderr)
+                return 2
         runs_dir = resolve_runs_dir(args.runs_dir)
         # The board's link from this grade to the creation episode it grades (so that
         # episode stops counting as pending); author and arm are unknown by hand.
@@ -1157,7 +1184,7 @@ def main(argv: list[str] | None = None) -> int:
                                          mcp_server=args.mcp_server, device=args.device,
                                          runs_dir=runs_dir, run_id=args.run_id,
                                          max_attempts=args.max_attempts,
-                                         extra={"cell": cell}))
+                                         extra={"cell": cell}, provider=args.provider))
         except AuthRefused as exc:
             print(f"refused: {exc}", file=sys.stderr)
             return 2

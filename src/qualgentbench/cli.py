@@ -247,9 +247,13 @@ def _print_checks(results) -> int:
               help="codex-cli with no API key: accept the operator's `codex login` "
                    "(a ChatGPT workspace's credits). Same as `allow_codex_login: true` "
                    "in the config or QGB_ALLOW_CODEX_LOGIN=1; refused without it.")
+@click.option("--provider", default=None,
+              type=click.Choice(["openai", "anthropic", "fireworks", "bedrock"]),
+              help="Override the config's `provider:` (see `run --provider`).")
 def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: bool,
                   mcp_server: str | None, runs_dir: str | None = None,
-                  allow_no_heldout: bool = False, allow_codex_login: bool = False) -> None:
+                  allow_no_heldout: bool = False, allow_codex_login: bool = False,
+                  provider: str | None = None) -> None:
     """Check that CONFIG_PATH is runnable — agent, auth, tiers, apps, APKs, MCP,
     devices — and optionally print the plan, before anything boots."""
     from dataclasses import asdict
@@ -275,6 +279,11 @@ def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: b
     cfg.allow_no_heldout = _apply_heldout_optout(cfg.allow_no_heldout or allow_no_heldout)
     cfg.allow_codex_login = _apply_codex_login_optin(cfg.allow_codex_login
                                                      or allow_codex_login)
+    cfg.provider = provider or cfg.provider
+    try:
+        _apply_provider(cfg.provider)
+    except click.ClickException:
+        pass  # preflight reports the bad name as a failed check instead
     results, selected = _run_async(run_preflight(cfg, config_dir=config_path.parent))
     failures = len(failed(results))
     serials = [d.strip() for d in (devices or "").split(",") if d.strip()] \
@@ -338,7 +347,28 @@ def _apply_codex_login_optin(allow: bool) -> bool:
     return login_allowed()
 
 
-def _gate_agent_auth(agent: str, allow_codex_login: bool = False) -> None:
+def _apply_provider(provider: str | None) -> str | None:
+    """`--provider` / `provider:` → QGB_PROVIDER, the one place the adapters, the
+    episode runner and preflight read the run's provider choice (QUA-3502; the same
+    pattern as `_apply_codex_login_optin`). None leaves an env value from `.env` alone.
+    Returns the provider in force, or None (inferred per model)."""
+    from . import providers as _providers
+    try:
+        if provider:
+            os.environ[_providers.PROVIDER_ENV] = _providers.normalize(provider) or ""
+        return _providers.normalize(os.environ.get(_providers.PROVIDER_ENV))
+    except _providers.ProviderError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+def _resolve_provider(agent: str, model: str | None) -> str | None:
+    """The provider plan.json records for the run (`providers.resolve`)."""
+    from . import providers as _providers
+    return _providers.resolve(agent, model)
+
+
+def _gate_agent_auth(agent: str, allow_codex_login: bool = False,
+                     models: str | None = None) -> None:
     """Refuse, before any device or model is probed, an agent that would run on
     credentials the run did not opt in to: codex-cli with no API key runs on the
     operator's own `codex login` and bills that ChatGPT workspace (QUA-2868; a hunt or
@@ -349,9 +379,14 @@ def _gate_agent_auth(agent: str, allow_codex_login: bool = False) -> None:
     from .adapters.codex_cli import AUTH_ACCOUNT_LOGIN, CodexCliAdapter
 
     _apply_codex_login_optin(allow_codex_login)
-    if refusal := auth_refusal(agent):
+    # Off the agent's own provider (a Bedrock model), the login question does not
+    # arise: the episode authenticates with the provider's credential instead.
+    first = next((m.strip() for m in (models or "").split(",") if m.strip()), None)
+    provider = _resolve_provider(agent, first)
+    if refusal := auth_refusal(agent, provider):
         raise click.ClickException(refusal)
-    if agent == "codex-cli" and CodexCliAdapter.configured_auth_mode() == AUTH_ACCOUNT_LOGIN:
+    if (agent == "codex-cli" and provider == "openai"
+            and CodexCliAdapter.configured_auth_mode() == AUTH_ACCOUNT_LOGIN):
         console.print("[yellow]codex-cli auth: account login (opted in with "
                       "--allow-codex-login / QGB_ALLOW_CODEX_LOGIN)[/] — the episodes bill "
                       "that ChatGPT workspace, recorded as provenance.agent_auth="
@@ -721,6 +756,7 @@ async def _run_episodes(
     if resume is None:
         _write_plan(runs_dir, run_id, plan.summary, apps=planned, mode=mode,
                     mcp_identity=mcp_identity, agent=agent, model=model, devices=devices,
+                    provider=_resolve_provider(agent, model),
                     create_stamp=(creation.stamp() if creation else None),
                     **({"create_arm_spec": creation.spec} if creation else {}))
 
@@ -1582,7 +1618,7 @@ def _verify_episode(result: RunResult, progress=None, *,
                    "hunt, guided and journey in one run (reported separately), refused for "
                    "an app whose journey build is not its hunt build; create = CreateBench "
                    "v2: the agent AUTHORS one test case per case brief on the clean journey "
-                   "build, through QualGent-MCP (needs --agent codex-cli, --mcp-server and "
+                   "build, through QualGent-MCP (needs --agent codex-cli or claude-code, --mcp-server and "
                    "a creation arm: --qualgent-mcp/--devloop or `create_arm:` in --config).")
 @click.option("--config", "config_path", default=None,
               type=click.Path(exists=True, dir_okay=False, path_type=Path),
@@ -1680,6 +1716,14 @@ def _verify_episode(result: RunResult, progress=None, *,
                    "without it since QUA-2868. Same as `allow_codex_login: true` in "
                    "--config or QGB_ALLOW_CODEX_LOGIN=1; recorded as "
                    "provenance.agent_auth=account_login.")
+@click.option("--provider", default=None,
+              type=click.Choice(["openai", "anthropic", "fireworks", "bedrock"]),
+              help="Which provider serves the model (QUA-3502): codex-cli runs on openai "
+                   "or bedrock, claude-code on anthropic, fireworks or bedrock. Default: "
+                   "inferred from the model id (a Fireworks slug is fireworks, a "
+                   "`us.<vendor>.<model>` inference profile is bedrock), else the agent's "
+                   "own. Same as `provider:` in --config or QGB_PROVIDER; recorded on "
+                   "every result. An unsupported agent x provider x model is refused.")
 @click.option("--qualgent-mcp", "create_qualgent_mcp", default=None, metavar="SRC@REF",
               help="--mode create: the QualGent-MCP checkout path or git URL, '@', and a "
                    "ref (the PRIVATE creation server; only its committed tree is used).")
@@ -1721,6 +1765,7 @@ def run_benchmark(
     on_segment_end: str | None,
     on_segment_end_timeout: int | None,
     allow_codex_login: bool,
+    provider: str | None,
     create_qualgent_mcp: str | None,
     create_devloop: str | None,
     create_qualgent_tools: str | None,
@@ -1756,6 +1801,7 @@ def run_benchmark(
         _apply_heldout_dir(cfg, config_path.parent)
         allow_no_heldout = allow_no_heldout or cfg.allow_no_heldout
         allow_codex_login = allow_codex_login or cfg.allow_codex_login
+        provider = provider or cfg.provider
         if not resume_run_id:
             # On a resume the scope is the plan's, so the file's scope is ignored —
             # the launcher passes the same --config on every iteration of its loop.
@@ -1787,6 +1833,14 @@ def run_benchmark(
             raise click.ClickException(str(exc)) from exc
         agent, mode, trials = resume_plan.agent or agent, resume_plan.mode, resume_plan.trials
         models = resume_plan.model
+        # The provider is part of what the run measures, like the model: a resume runs
+        # on the plan's, and a different one asked for now is a contradiction.
+        planned_provider = resume_plan.raw.get("provider")
+        if provider and planned_provider and provider != planned_provider:
+            raise click.ClickException(
+                f"--provider {provider} contradicts the run's plan (provider "
+                f"{planned_provider}); drop it to resume, or start a new run.")
+        provider = planned_provider or provider
         if agent not in ADAPTER_REGISTRY:
             raise click.ClickException(
                 f"{resume_plan.path} names agent {agent!r}, which this harness does not "
@@ -1814,7 +1868,8 @@ def run_benchmark(
             scope = _select_apps(tier_filter, app_filter)
         _gate_mode_all_builds(mode, scope)
     _gate_heldout(mode, require_heldout, allow_no_heldout)
-    _gate_agent_auth(agent, allow_codex_login)
+    _apply_provider(provider)
+    _gate_agent_auth(agent, allow_codex_login, models)
     _gate_clock_tolerance()
     _gate_device_class()
     create_arm = None
@@ -1904,20 +1959,23 @@ def _run_segment_hook(command: str, timeout_sec: int, runs_dir: Path, rc: int) -
 def _gate_create(agent: str, mcp_server: str | None, resume_plan, *, cfg_arm, base,
                  qualgent_mcp: str | None, devloop: str | None,
                  qualgent_tools: str | None, name: str | None):
-    """`--mode create` needs codex-cli (the creator template is delivered as Codex
-    `developer_instructions`, the way the desktop app installs it), the MCP arm (the
-    author explores through the device server) and a creation arm. Returns
-    `(CreateArm, base_dir)`, refused before anything is probed.
+    """`--mode create` needs a CLI author that can take the creator template (codex-cli:
+    Codex `developer_instructions`, the way the desktop app installs it; claude-code:
+    the appended system prompt, QUA-3507) on any provider its adapter supports, the
+    MCP arm (the author explores through the device server) and a creation arm.
+    Returns `(CreateArm, base_dir)`, refused before anything is probed.
 
     The arm comes from --qualgent-mcp/--devloop, else --config's `create_arm:`, else —
     on a resume — the plan's own `create_arm_spec`, pinned to the SHAs it resolved to."""
+    from . import providers
     from .config import CreateArm
     from .create.arm import ArmError, parse_pin
 
-    if agent != "codex-cli":
+    if agent not in providers.NATIVE_PROVIDER:
         raise click.ClickException(
-            f"--mode create runs --agent codex-cli only (got {agent}): the creator "
-            f"template reaches the author as Codex developer instructions.")
+            f"--mode create runs a CLI author ({', '.join(providers.NATIVE_PROVIDER)}; got "
+            f"{agent}): the creator template reaches the author as codex-cli developer "
+            "instructions or claude-code's appended system prompt.")
     if not mcp_server:
         raise click.ClickException(
             "--mode create needs --mcp-server: the author explores the app through the "
@@ -2346,22 +2404,32 @@ async def _preflight(session, mcp_server: str, agent: str,
     #    episode, with the cost already incurred.
     #    A Fireworks model needs only its Fireworks key (checked below): the adapter
     #    authenticates the CLI with it and hands it no Anthropic credential.
+    #    The provider (QUA-3502) decides which credential that is: a Fireworks model
+    #    needs its Fireworks key, a Bedrock one AWS_BEARER_TOKEN_BEDROCK + AWS_REGION,
+    #    and an unsupported agent x provider x model pair is refused here by name.
+    from . import pricing as _pricing
+    from . import providers as _providers
     from .adapters.claude_code import ClaudeCodeAdapter
     if (agent == "claude-code" and ClaudeCodeAdapter.needs_anthropic_auth(models)
             and not ClaudeCodeAdapter.auth_source()):
         problems.append(ClaudeCodeAdapter.auth_fix())
-    for m in models or []:
-        if ClaudeCodeAdapter.is_fireworks_model(m):
-            if not (os.environ.get("FIREWORKS_API_KEY")
-                    or os.environ.get("FIREWORKS_AI_API_KEY")):
-                problems.append(
-                    f"Model {m} runs on Fireworks, but no API key is set.\n"
-                    f"    Add to .env:  FIREWORKS_API_KEY=fw_...\n"
-                    f"    Key from https://fireworks.ai/account/api-keys")
-            if agent != "claude-code":
-                problems.append(
-                    f"Model {m} is a Fireworks model, which is only wired for\n"
-                    f"    --agent claude-code (you passed --agent {agent}).")
+    seen: set[str] = set()
+    for m in models or [None]:
+        route = _providers.resolve(agent, m)
+        if route is None and _pricing.is_fireworks_model(m):
+            problems.append(
+                f"Model {m} is a Fireworks model, which is only wired for\n"
+                f"    --agent claude-code (you passed --agent {agent}).")
+            continue
+        for problem in _providers.problems(agent, route, m):
+            if problem in seen:
+                continue
+            seen.add(problem)
+            if route == _providers.FIREWORKS and "FIREWORKS_API_KEY" in problem:
+                problem = (f"Model {m} runs on Fireworks, but no API key is set.\n"
+                           f"    Add to .env:  FIREWORKS_API_KEY=fw_...\n"
+                           f"    Key from https://fireworks.ai/account/api-keys")
+            problems.append(problem)
 
     if problems:
         raise click.ClickException(

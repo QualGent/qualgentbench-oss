@@ -19,8 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import brief as _brief
-from . import pricing, submission
-from .adapters import get_adapter
+from . import pricing, providers, submission
+from .adapters import ask_auth_refusal, get_adapter
 from .adb_meter import AdbMeter
 from .checkpoint import (harness_identity, image_digest, run_meta_dir, server_stamp,
                          write_blinded_marker)
@@ -167,6 +167,9 @@ class EpisodeOptions:
     source_dir: Path | None = None
     # Model forwarded to the adapter; None = the CLI's own default model.
     force_model: str | None = None
+    # The model provider (QUA-3502): None = `providers.resolve` (QGB_PROVIDER, the
+    # model id's shape, else the harness's own). Recorded as the result's `provider`.
+    provider: str | None = None
 
     # Overrides the recorded run condition (run dir + result.json `condition`).
     condition_label: str | None = None
@@ -1547,17 +1550,22 @@ def _inherited_instructions(path: Path) -> list[str]:
     return problems
 
 
-def model_of_record(transcript: str, model: str, force_model: str | None = None) -> str:
+def model_of_record(transcript: str, model: str, force_model: str | None = None,
+                    provider: str | None = None) -> str:
     """The model an episode is scored, priced and boarded under.
 
     The model the transcript reports, over the requested label, because a CLI left to
     its own default reports what it actually ran. Except on Fireworks, which can answer
     with a display name instead of the id it served (`qwen3p8-2p4t-a95b` replies
     `"model": "Qwen 3.8 Max"`): that name misses its pricing row and splits the board
-    into a second row. There the requested slug IS the route, so it is the record.
+    into a second row. There the requested slug IS the route, so it is the record. The
+    same on Bedrock (QUA-3502): claude-code reports `claude-sonnet-5-5` for
+    `us.anthropic.claude-sonnet-5-5`, which would price at Anthropic's rate instead of
+    AWS's, and codex reports no model at all — the inference-profile id is the record.
     """
     requested = force_model or model
-    if pricing.is_fireworks_model(requested):
+    if requested and (provider in (providers.FIREWORKS, providers.BEDROCK)
+                      or pricing.provider_of_model(requested)):
         return requested
     return TranscriptParser(transcript).model() or model
 
@@ -1733,6 +1741,16 @@ async def run_episode(
     # Enforced per-episode step budget (see _step_budget).
     step_cap = _step_budget(task)
 
+    # Which provider the agent runs against (QUA-3502). An unknown name or a pair the
+    # harness cannot run is refused below, before the agent, like a credential refusal.
+    try:
+        provider = providers.resolve(opts.agent, opts.force_model or opts.model,
+                                     opts.provider)
+        provider_problems = providers.problems(opts.agent, provider,
+                                               opts.force_model or opts.model)
+    except providers.ProviderError as exc:
+        provider, provider_problems = None, [str(exc)]
+
     context = RunContext(
         task=_TaskShim(task, max_tool_calls=step_cap),  # adapters read .agent.timeout_sec etc. (see shim)
         agent=opts.agent,
@@ -1757,6 +1775,7 @@ async def run_episode(
         # whole global claude-code environment.
         isolate_mcp=bool(opts.mcp_server),
         force_model=opts.force_model,
+        provider=provider,
         # The PreToolUse hook denies tool calls past the cap but leaves the agent
         # running, so it still reports from what it saw — truncated, never voided.
         # qg_release_device stays exempt so the device lock is always returned.
@@ -1857,8 +1876,11 @@ async def run_episode(
     # $0, excluded from every board. Asked of every path into an episode — the CLIs
     # refuse earlier, but a library caller (`grader.run_grade`, a probe script) reaches
     # this point too. The adapter's `prepare` refuses as well, for a bare `adapter.run`.
+    # An unsupported harness × provider × model pair, or a provider credential that is
+    # not set (QUA-3502), is refused the same way.
     adapter = get_adapter(opts.agent)
-    if agent_launched and (auth_refusal := adapter.auth_refusal()):
+    if agent_launched and (auth_refusal := ("; ".join(provider_problems)
+                                            or ask_auth_refusal(adapter, provider))):
         logger.error("%s on %s — %s", task.id, device_serial, auth_refusal)
         if task.bug_spec is None:
             raise RuntimeError(auth_refusal)
@@ -2005,19 +2027,27 @@ async def run_episode(
             creation.record(task.bug_spec)
 
     # ── 7. Verdict + result ─────────────────────────────────────────────────
-    actual_model = model_of_record(transcript, opts.model, opts.force_model)
+    actual_model = model_of_record(transcript, opts.model, opts.force_model, provider)
     if opts.verdict_fn is not None:
         verifier = opts.verdict_fn(transcript, actual_model, task)
     else:
         verifier = _verdict(transcript, actual_model)
     # A provider limit that stopped the episode is not a QA result; the scheduler
     # requeues it and every board excludes it.
+    from .failures import RATE_LIMITED as _RATE_LIMITED
     from .failures import classify as _classify_failure
+    from .failures import retry_after_seconds as _retry_after_seconds
     verifier.metrics["failure_class"] = _classify_failure(
         transcript, exit_code, verifier.metrics,
         # The adapter watched the provider reject the request and killed the agent;
         # the transcript's structured event matches no prose pattern.
         rejected=(run_dir / RATE_LIMITED_SENTINEL).exists())
+    if verifier.metrics["failure_class"] == _RATE_LIMITED:
+        # How long the provider asked us to wait, when it said: the lane backoff
+        # and the lab's controller hold the retry at least this long (QUA-3505).
+        retry_after = _retry_after_seconds(transcript)
+        if retry_after is not None:
+            verifier.metrics["retry_after_s"] = retry_after
     if not agent_launched:
         # Nobody ran, so nobody spent: a known $0, not the "unavailable" an empty
         # transcript would otherwise print as "cost unknown, not $0" in the footer.
@@ -2051,6 +2081,7 @@ async def run_episode(
         artifact_dir=run_dir,
         runs_dir=opts.runs_dir,
         run_id=opts.run_id,
+        provider=provider,
         provenance=await _provenance(opts, device_serial, u2_stopped=u2_stopped,
                                      inherited=inherited, adbd_at_end=adbd_at_end,
                                      mcp_isolation=mcp_isolation,

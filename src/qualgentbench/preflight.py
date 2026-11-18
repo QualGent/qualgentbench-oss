@@ -53,12 +53,36 @@ def check_agent(cfg: BenchConfig) -> list[CheckResult]:
     return [check_agent_cli(cfg.agent), _check_auth(cfg)]
 
 
+def _provider(cfg: BenchConfig) -> str | None:
+    """The config's provider (`providers.resolve`); an unknown name reads as None and
+    is reported by `check_model`."""
+    from . import providers
+    try:
+        return providers.resolve(cfg.agent, cfg.model, cfg.provider)
+    except providers.ProviderError:
+        return None
+
+
 def _check_auth(cfg: BenchConfig) -> CheckResult:
+    from . import providers
+    route = _provider(cfg)
+    if route == providers.BEDROCK and cfg.agent in providers.NATIVE_PROVIDER:
+        # The Bedrock API key and region are the agent's only credentials: no OpenAI
+        # key, no codex login, no Anthropic token is needed or handed to it.
+        if missing := providers.missing_env(route):
+            return CheckResult(f"{cfg.agent} auth", False,
+                               f"{cfg.model} runs on Bedrock but {', '.join(missing)} "
+                               f"{'is' if len(missing) == 1 else 'are'} not set",
+                               fix="Add AWS_BEARER_TOKEN_BEDROCK=<Bedrock API key> and "
+                                   "AWS_REGION=<region> to env_file.")
+        return CheckResult(f"{cfg.agent} auth", True,
+                           f"{providers.BEDROCK_TOKEN_ENV} + {providers.BEDROCK_REGION_ENV} "
+                           f"set — Bedrock")
     if cfg.agent == "codex-cli":
         return check_codex_auth()
     if cfg.agent == "claude-code":
         from .adapters.claude_code import ClaudeCodeAdapter
-        if ClaudeCodeAdapter.is_fireworks_model(cfg.model):
+        if route == providers.FIREWORKS:
             # The Fireworks key is the CLI's only credential on a Fireworks model; an
             # Anthropic one is neither needed nor handed to it. No subscription windows
             # either way, so the credit-guard note is a fact, not something to fix.
@@ -88,7 +112,22 @@ def _check_auth(cfg: BenchConfig) -> CheckResult:
 
 
 def check_model(cfg: BenchConfig) -> CheckResult:
+    from . import providers
     from .adapters.claude_code import ClaudeCodeAdapter
+    try:
+        route = providers.resolve(cfg.agent, cfg.model, cfg.provider)
+    except providers.ProviderError as exc:
+        return CheckResult("Model", False, str(exc),
+                           fix=f"provider: one of {', '.join(providers.PROVIDERS)}")
+    if ClaudeCodeAdapter.is_fireworks_model(cfg.model) and cfg.agent != "claude-code":
+        return CheckResult("Model", False,
+                           f"{cfg.model} is a Fireworks model, only wired for claude-code",
+                           fix="Use agent: claude-code, or a different model.")
+    if refusal := providers.pair_refusal(cfg.agent, route, cfg.model):
+        return CheckResult("Model", False, refusal,
+                           fix="Pick a supported agent x provider x model (README).")
+    if route == providers.BEDROCK:
+        return CheckResult("Model", True, f"{cfg.model} on Bedrock")
     if ClaudeCodeAdapter.is_fireworks_model(cfg.model):
         if cfg.agent != "claude-code":
             return CheckResult("Model", False,
