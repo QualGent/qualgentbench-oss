@@ -457,7 +457,7 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
         failures = 0
 
         if result.metrics.get("failure_class") == RATE_LIMITED:
-            event = s.backoff.note_rate_limit()
+            event = s.backoff.note_rate_limit(result.metrics.get("retry_after_s"))
             _discard_if_rejected(result, i, device, s)
             s.results.append(result)
             note = f"[yellow]RATE LIMITED[/] — all lanes hold {event['hold_sec']}s"
