@@ -12,12 +12,26 @@ import re
 RATE_LIMITED = "rate_limited"
 
 # Provider limit signals as they appear in claude-code stream-json and codex
-# output. Matched case-insensitively.
+# output. Matched case-insensitively. Amazon Bedrock throttles with a
+# `ThrottlingException` (codex's amazon-bedrock-runtime provider prints the
+# exception name) or, behind claude-code, an HTTP 429 "Too many tokens, please
+# wait before trying again."; claude-code prints API failures as
+# "API Error: 429 {...}"; Fireworks answers 429.
 _RATE_LIMIT_RE = re.compile(
     r"rate_limit_error|overloaded_error|rate limit (?:reached|exceeded)|"
     r"rate_limit_exceeded|too many requests|usage_limit_reached|"
+    r"ThrottlingException|too many tokens,? please wait|"
+    r"\bAPI Error:?\s*(?:429|529)\b|"
     r"\b(?:status|code)\W{0,3}(?:429|529)\b|\bHTTP/?\S* (?:429|529)\b|"
     r"\b(?:429|529) (?:Too Many Requests|Overloaded)",
+    re.IGNORECASE,
+)
+# How long the provider asked us to wait: a Retry-After header or field as the
+# CLIs echo it ("retry-after: 20", "retry_after_ms": 1500, "retryAfter": 3) or
+# prose ("try again in 12s", "please retry after 30 seconds").
+_RETRY_AFTER_RE = re.compile(
+    r"retry[-_ ]?after(?P<ms>[-_ ]?ms)?[\"']?\W{0,4}(?P<n>\d+(?:\.\d+)?)\s*(?P<unit>ms|s|sec|secs|seconds?|m|min|minutes?)?\b"
+    r"|(?:try again|retry) in (?P<n2>\d+(?:\.\d+)?)\s*(?P<unit2>ms|s|sec|secs|seconds?|m|min|minutes?)\b",
     re.IGNORECASE,
 )
 # A signal in the last few KB is how the episode ENDED, not a retried blip.
@@ -49,6 +63,27 @@ def classify(transcript: str, exit_code: int, metrics: dict | None = None, *,
     if died and _RATE_LIMIT_RE.search(transcript):
         return RATE_LIMITED
     return None
+
+
+def retry_after_seconds(transcript: str) -> float | None:
+    """The provider's Retry-After, in seconds, from the last one the transcript
+    mentions (the limit that stopped the episode is at the end); None when it
+    names none. The lab's controller holds the unit at least this long before it
+    retries it (metrics `retry_after_s`)."""
+    if not transcript:
+        return None
+    last = None
+    for last in _RETRY_AFTER_RE.finditer(transcript):
+        pass
+    if last is None:
+        return None
+    n = float(last.group("n") or last.group("n2"))
+    unit = (last.group("unit") or last.group("unit2") or "").lower()
+    if last.group("ms") or unit == "ms":
+        return n / 1000
+    if unit.startswith("m"):
+        return n * 60
+    return n
 
 
 # ── MCP session integrity (QUA-2806) ─────────────────────────────────────────

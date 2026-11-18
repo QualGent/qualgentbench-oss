@@ -253,11 +253,15 @@ class RateLimitBackoff:
     _clean_streak: int = 0
     log: list[dict[str, Any]] = field(default_factory=list)
 
-    def note_rate_limit(self) -> dict[str, Any]:
+    def note_rate_limit(self, retry_after: float | None = None) -> dict[str, Any]:
+        """`retry_after`: the provider's Retry-After (seconds) when the episode
+        recorded one; the hold is never shorter than it (capped at `cap_sec`)."""
         self.k += 1
         self._clean_streak = 0
         raw = min(self.base_sec * 2 ** (self.k - 1), self.cap_sec)
         delay = max(5.0, raw * self.rng())
+        if retry_after is not None and retry_after > 0:
+            delay = max(delay, min(float(retry_after), self.cap_sec))
         self.resume_at = max(self.resume_at, self.clock() + delay)
         self._events_in_window += 1
         parked_now = False

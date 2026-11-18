@@ -2034,12 +2034,20 @@ async def run_episode(
         verifier = _verdict(transcript, actual_model)
     # A provider limit that stopped the episode is not a QA result; the scheduler
     # requeues it and every board excludes it.
+    from .failures import RATE_LIMITED as _RATE_LIMITED
     from .failures import classify as _classify_failure
+    from .failures import retry_after_seconds as _retry_after_seconds
     verifier.metrics["failure_class"] = _classify_failure(
         transcript, exit_code, verifier.metrics,
         # The adapter watched the provider reject the request and killed the agent;
         # the transcript's structured event matches no prose pattern.
         rejected=(run_dir / RATE_LIMITED_SENTINEL).exists())
+    if verifier.metrics["failure_class"] == _RATE_LIMITED:
+        # How long the provider asked us to wait, when it said: the lane backoff
+        # and the lab's controller hold the retry at least this long (QUA-3505).
+        retry_after = _retry_after_seconds(transcript)
+        if retry_after is not None:
+            verifier.metrics["retry_after_s"] = retry_after
     if not agent_launched:
         # Nobody ran, so nobody spent: a known $0, not the "unavailable" an empty
         # transcript would otherwise print as "cost unknown, not $0" in the footer.
