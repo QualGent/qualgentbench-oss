@@ -237,6 +237,22 @@ def test_tool_policy_template_narrows_to_the_templates_list(repos, tmp_path):
     assert arm.manifest()["tools_policy"] == "template"
 
 
+def test_withheld_tools_is_the_deny_list_form_of_the_policy(repos, tmp_path):
+    """QUA-3507: claude-code can only deny tools, so the arm's list reaches it as every
+    tool the server offers minus the list. Unknown until the server was probed."""
+    qg, dl = repos
+    arm = resolve_arm(_spec(qg, dl), cache_root=tmp_path)
+    assert arm.withheld_tools() is None
+    assert "withheld_tools" not in arm.qualgent_server_entry("u", "c")
+    arm.server_tools = ("create_test_case", "delete_apps", "list_categories",
+                        "list_test_cases", "run_tests")
+    assert arm.withheld_tools() == ["delete_apps", "run_tests"]
+    assert arm.qualgent_server_entry("u", "c")["withheld_tools"] == ["delete_apps",
+                                                                     "run_tests"]
+    everything = resolve_arm(_spec(qg, dl, qualgent_tools="all"), cache_root=tmp_path)
+    assert everything.withheld_tools() == []
+
+
 def test_tool_policy_all_and_list(repos, tmp_path):
     qg, dl = repos
     arm = resolve_arm(_spec(qg, dl, qualgent_tools="all"), cache_root=tmp_path)
@@ -390,6 +406,11 @@ async def test_probe_arm_creates_a_case_and_lands_the_artifact(repos, tmp_path,
     manifest = json.loads((ep / "arm.json").read_text())
     assert manifest["qualgent_mcp"]["sha"] == arm.qualgent_mcp.sha
     assert len(manifest["guide_sha256"]) == 64
+    # The server's whole tool list (QUA-3507): what a deny-list host withholds.
+    assert set(arm.qualgent_tools) <= set(arm.server_tools)
+    entry = arm.qualgent_server_entry("u", "c")
+    assert entry["withheld_tools"] == [t for t in arm.server_tools
+                                       if t not in arm.qualgent_tools]
 
 
 async def test_probe_arm_fails_when_an_offered_tool_is_missing(repos, tmp_path,
