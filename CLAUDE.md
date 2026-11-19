@@ -1562,7 +1562,7 @@ no bare `gpt-6` id, so there is no `gpt-6` row. Its cache writes ($12.50) and it
 >272K-input-per-request surcharge are not modelled (the table prices summed usage).
 `gpt-6-sol` ($2/$0.20/$10), `gpt-6.1-sol` ($2/$0.10/$10) and `gpt-6-luna` ($0.10/$0.01/$0.50)
 are from the same page (2026-10-06), same caveats. `claude-opus-5-5` is $4/$0.20/$20 —
-cheaper than Opus 5 — and `claude-sonnet-5-5` $2/$0.20/$10 (`claude-api` skill, 2026-10-06).
+cheaper than Opus 5 — and `claude-sonnet-5-5` $2/$0.10/$10 (`claude-api` skill; cache reads corrected from $0.20 on 2026-11-19).
 Deliberately absent, because a plausible number in a table the board MULTIPLIES BY is
 worse than a missing row: `claude-mythos-5/5.1` (limited access, rate open).
 `claude-opus-4-8` was carrying $15/$75 — Opus 4.1-era numbers, 3× the real $5/$25 — and
