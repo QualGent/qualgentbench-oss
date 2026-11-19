@@ -397,3 +397,62 @@ def test_write_bug_flags_reuses_a_preset_nonce(monkeypatch):
     asyncio.run(er.write_bug_flags("emulator-5554", "com.x", spec))
     assert spec["flag_nonce"] == "QGB-NONCE-preset"
     assert spec["active_bugs_written"] == []
+
+
+# ── QUA-3539: a flags write that fails must not leave every fault live ─────────
+
+def _flaky_adb(fail_first: int):
+    """`_adb` that refuses the run-as write `fail_first` times (a freshly installed
+    package run-as cannot see yet), then succeeds."""
+    calls: list[str] = []
+
+    async def fake_adb(*args):
+        calls.append(args[-1])
+        if len(calls) <= fail_first:
+            return 1, b"run-as: package not found: com.x"
+        return 0, b""
+
+    return calls, fake_adb
+
+
+def test_write_bug_flags_retries_until_run_as_sees_the_package(monkeypatch):
+    calls, fake_adb = _flaky_adb(fail_first=3)
+    monkeypatch.setattr(er, "_adb", fake_adb)
+    monkeypatch.setattr(er, "FLAG_WRITE_RETRY_S", 0.0)
+    spec = {"active_bugs": [], "type": "clean", "mode": "journey"}
+    asyncio.run(er.write_bug_flags("emulator-5554", "com.x", spec))
+    assert len(calls) == 4
+    assert spec["active_bugs_written"] == []          # the clean arm's empty set took
+    assert not spec.get("staging_failed")
+
+
+def test_a_journey_flags_write_that_never_lands_fails_the_episode_closed(monkeypatch):
+    """A missing flags file is ALL faults live (the shim's legacy default): a clean
+    journey episode must not run on it, so staging fails and the agent never starts."""
+    calls, fake_adb = _flaky_adb(fail_first=10_000)
+    monkeypatch.setattr(er, "_adb", fake_adb)
+    monkeypatch.setattr(er, "FLAG_WRITE_RETRY_S", 0.0)
+    spec = {"active_bugs": [], "type": "clean", "mode": "journey"}
+    asyncio.run(er.write_bug_flags("emulator-5554", "com.x", spec))
+    assert len(calls) == er.FLAG_WRITE_ATTEMPTS
+    assert "active_bugs_written" not in spec
+    assert "bug-flag file" in spec["staging_failed"]
+    assert "every seeded fault live" in spec["staging_failed"]
+
+
+def test_a_failed_flags_write_outside_journey_keeps_the_legacy_behaviour(monkeypatch):
+    _, fake_adb = _flaky_adb(fail_first=10_000)
+    monkeypatch.setattr(er, "_adb", fake_adb)
+    monkeypatch.setattr(er, "FLAG_WRITE_RETRY_S", 0.0)
+    spec = {"mode": "explore", "features": [{"bug_id": "b", "state": "broken"}]}
+    asyncio.run(er.write_bug_flags("emulator-5554", "com.x", spec))
+    assert "staging_failed" not in spec and "active_bugs_written" not in spec
+
+
+def test_a_journey_episode_whose_flags_never_landed_never_launches_the_agent():
+    """The run_episode gate this relies on: in journey mode ANY staging_failed (the
+    flags write's included) ends the episode before the agent (QUA-3476's rule)."""
+    import inspect
+    src = inspect.getsource(er.run_episode)
+    assert 'get("mode") or "") == "journey"' in src and "agent_launched = False" in src
+    assert src.index("await write_bug_flags(") < src.index("agent_launched = precondition")
