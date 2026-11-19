@@ -1075,10 +1075,25 @@ def flag_file_lines(nonce: str, active_bugs) -> list[str]:
     return [ln.ljust(FLAG_FILE_WIDTH) for ln in lines]
 
 
+FLAG_WRITE_ATTEMPTS = 8
+FLAG_WRITE_RETRY_S = 2.0
+# Modes whose verdict depends on exactly the episode's own faults being live: there a flags
+# write that never succeeded fails the episode closed (`staging_failed`) instead of running
+# it with every seeded fault on.
+FLAG_GATE_REQUIRED_MODES = ("journey", "create")
+
+
+def _text(out) -> str:
+    return out.decode("utf-8", "replace") if isinstance(out, (bytes, bytearray)) else str(out or "")
+
+
 async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) -> None:
     """Activate exactly this episode's seeded bugs via files/qgb_flags.txt (run-as,
     debug build). Clean episodes get no active id; pre-gate apps ignore it.
-    Best-effort — a failed write leaves the legacy all-bugs-live behaviour.
+    A failed write is retried (`FLAG_WRITE_ATTEMPTS`, `FLAG_WRITE_RETRY_S` apart): the
+    shim treats a missing file as ALL bugs live. If it never succeeds, a journey or
+    create episode records `staging_failed` (env_failure, agent not launched); other
+    modes keep the legacy all-bugs-live behaviour, logged as an error.
 
     The file is padded to a fixed line count and byte size (`flag_file_lines`) so its
     METADATA never reveals the arm. What the nonce backstop covers: a whole-file read
@@ -1129,9 +1144,29 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
              f"printf '%s\\n' {ids} > files/qgb_flags.txt && "
              f"printf %s {shlex.quote(nonce)} > files/.qgb/nonce")
     cmd = f"run-as {shlex.quote(bundle_id)} sh -c {shlex.quote(inner)}"
-    rc, out = await _adb("-s", device, "shell", cmd)
-    if rc != 0:
-        logger.warning("could not write bug flags for %s: %s", bundle_id, out.strip()[:200])
+    # Retried, because a missing file is not "no bugs": the shim reads a MISSING flags
+    # file as every seeded fault live (`build_app._FLAG_SHIM`). Right after the FIRST
+    # install of a package on a device, `run-as` can refuse it ("package not found")
+    # until the package manager rewrites packages.list, seconds later — the cloud lab's
+    # retry on a fresh emulator hit exactly that and ran a clean episode with two faults
+    # live (QUA-3539).
+    out = b""
+    for attempt in range(1, FLAG_WRITE_ATTEMPTS + 1):
+        rc, out = await _adb("-s", device, "shell", cmd)
+        if rc == 0:
+            break
+        logger.warning("could not write bug flags for %s (attempt %d/%d): %s", bundle_id,
+                       attempt, FLAG_WRITE_ATTEMPTS, _text(out).strip()[:200])
+        if attempt < FLAG_WRITE_ATTEMPTS:
+            await asyncio.sleep(FLAG_WRITE_RETRY_S)
+    else:
+        reason = (f"could not write the bug-flag file for {bundle_id} after "
+                  f"{FLAG_WRITE_ATTEMPTS} attempts ({_text(out).strip()[:200]}); the app "
+                  f"would run with every seeded fault live")
+        logger.error(reason)
+        if str(bug_spec.get("mode") or "") in FLAG_GATE_REQUIRED_MODES:
+            # Fail closed: `staging_failed` -> env_failure, and the agent is not launched.
+            bug_spec.setdefault("staging_failed", reason)
         return
     bug_spec["active_bugs_written"] = active
     logger.info("bug flags for %s → %s", bundle_id, active or "(none: clean episode)")
