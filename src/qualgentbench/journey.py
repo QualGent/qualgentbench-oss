@@ -1844,7 +1844,13 @@ BLOCKER_TIERS = ("L4", "L3")
 #:   token boundary. Under v2 the `n` of `\n` glued onto the line's first word, and
 #:   markor-move-two-recipes scored correct runs as not witnessed on both builds. It can
 #:   move a v2 verdict: a witness or grounded quote at a line start now matches.
-SCORER_VERSION = 3
+#: 4 (QUA-3543): the contamination scan reads a wildcard path in the agent's command text
+#:   whole (it used to cut at the first `*`, so `<runs>/<case>/*_<own ep id>/workspace`
+#:   read as the case directory), and a pattern that carries the episode's own id and
+#:   matches its own directory is the episode's own reach, not `other_episode`. It can
+#:   un-void a v3 episode that retyped its own cwd with a wildcard; a pattern that can
+#:   match a sibling stays a hit.
+SCORER_VERSION = 4
 
 
 def _defect_lookup(m: list[dict]) -> rates.DefectLookup:

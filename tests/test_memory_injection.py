@@ -182,6 +182,9 @@ async def test_memory_result_carries_condition_metrics_and_proposals(device, mon
     assert m["memory_condition"] == result.condition and m["memory_internal"] is True
     system = (run_dir / marm.SYSTEM_FILENAME).read_bytes()
     assert m["memory_prompt_sha256"] == "sha256:" + hashlib.sha256(system).hexdigest()
+    # The agent is told the exact proposals path, the one the harness collects (QUA-3543).
+    own = (run_dir / "workspace" / marm.PROPOSALS_FILENAME).absolute()
+    assert f"write them to `{own}`" in system.decode()
     # The proposals file, collected where the agent wrote it.
     assert m["memory_proposals_file"] == "workspace/memory_proposals.yaml"
     assert (run_dir / m["memory_proposals_file"]).read_text() == proposals
@@ -403,3 +406,20 @@ def test_claude_code_template_and_memory_share_one_system_prompt_file(tmp_path):
     assert sysfile.read_text() == "TEMPLATE\n\nMEMORY BLOCK\n"
     assert argv[argv.index("--setting-sources") + 1] == ""
     assert "MEMORY BLOCK" not in " ".join(argv)
+
+
+def test_install_names_the_episodes_own_proposals_path(memory_root, tmp_path):
+    """QUA-3543: the system text names `<workspace>/memory_proposals.yaml` by its absolute
+    path, once, so the agent never searches the runs directory for it; the system file,
+    `text` and `sha256` agree."""
+    prepared = marm.prepare(marm.MemoryArm("static", "small", snapshot=memory_root), APP)
+    assert "write them to" not in prepared.text
+    run_dir = tmp_path / "runs" / "demo-case" / "ep"
+    (run_dir / "workspace").mkdir(parents=True)
+    prepared.install(run_dir, run_dir / "workspace")
+    want = str((run_dir / "workspace" / marm.PROPOSALS_FILENAME).absolute())
+    assert prepared.text.count(want) == 1
+    assert prepared.text.index(want) < prepared.text.index(prepared.rendered.text)
+    assert prepared.system_file.read_text() == prepared.text
+    assert prepared.sha256 == "sha256:" + hashlib.sha256(prepared.text.encode()).hexdigest()
+    assert prepared.text == marm.system_text(prepared.rendered.text, proposals_path=want)

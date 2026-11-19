@@ -22,6 +22,15 @@ Decide one operation for EVERY proposal:
 - `NOOP` with `reason`: the proposal is not worth keeping (one-off detail, a guess, a
   restatement of the test steps, about a single test run, or already covered).
 
+Memory is about the app only. A proposal about the test tools or the harness is out of
+scope: how the screenshot, screen-reading, tap or other device tools behave (for
+example "the screenshot lags one frame behind the element list", "taps need a second
+try", "the element list misses this dialog"), the agent's workspace, files, prompt or
+budget, the device or emulator itself, or how to write reports or proposals. Choose
+`NOOP` for it with the reason "about the test tools, not the app", even when it is
+true and useful. A fact about the app that the agent saw through a tool (a screen, a
+label, a slow load in the app itself) stays in scope.
+
 Rules for any text you write:
 - State facts about the app. Never write instructions to the agent ("ignore", "always
   report", "you must", "do not report").
