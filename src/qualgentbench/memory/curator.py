@@ -68,15 +68,25 @@ MAX_REASON_CHARS = 200
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "curator.md"
 MODEL_ENV = "QGB_CURATOR_MODEL"
-# The provider follows the model id (`provider_for`): a Fireworks slug
-# (`accounts/fireworks/models/...`) goes to Fireworks' Anthropic-compatible Messages
-# endpoint with the Fireworks key, any other id to the Anthropic API with the Anthropic
-# key. Both speak the same Messages API shape.
+# The provider follows the model id (`provider_for`): a Bedrock inference-profile id
+# (`us.moonshotai.kimi-k3`, the same shape the agent adapters route on) goes to the
+# Bedrock Runtime Converse API with a Bedrock API key; a Fireworks slug
+# (`accounts/fireworks/models/...`) to Fireworks' Anthropic-compatible Messages
+# endpoint with the Fireworks key; any other id to the Anthropic API with the Anthropic
+# key.
 API_KEY_ENV = "ANTHROPIC_API_KEY"
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 FIREWORKS_KEY_ENVS = ("FIREWORKS_API_KEY", "FIREWORKS_AI_API_KEY")
 FIREWORKS_URL = "https://api.fireworks.ai/inference/v1/messages"
+BEDROCK_TOKEN_ENV = "AWS_BEARER_TOKEN_BEDROCK"
+BEDROCK_REGION_ENV = "AWS_REGION"
+BEDROCK_DEFAULT_REGION = "us-east-2"
+BEDROCK_URL = "https://bedrock-runtime.{region}.amazonaws.com/model/{model}/converse"
+# Converse usage names -> the Messages names every route records (`MessagesModel.usage`).
+_CONVERSE_USAGE = {"inputTokens": "input_tokens", "outputTokens": "output_tokens",
+                   "cacheReadInputTokens": "cache_read_input_tokens",
+                   "cacheWriteInputTokens": "cache_creation_input_tokens"}
 # Room for a reasoning model's thinking plus the JSON answer.
 MAX_TOKENS = 16000
 
@@ -159,8 +169,10 @@ def parse_answer(text: str) -> dict[str, Any]:
 
 
 def provider_for(model: str) -> str:
-    """`fireworks` for a Fireworks model slug, else `anthropic`."""
-    return "fireworks" if pricing.is_fireworks_model(model) else "anthropic"
+    """`bedrock` for a Bedrock inference-profile id (`pricing.is_bedrock_model`:
+    `<scope>.<vendor>.<model>`, e.g. `us.moonshotai.kimi-k3`), `fireworks` for a
+    Fireworks model slug, else `anthropic`."""
+    return pricing.provider_of_model(model) or "anthropic"
 
 
 @dataclass
@@ -171,6 +183,14 @@ class MessagesModel:
     - Fireworks (`accounts/fireworks/models/...`): Fireworks' Anthropic-compatible
       endpoint, authenticated with `FIREWORKS_API_KEY` (or `FIREWORKS_AI_API_KEY`) as
       both `x-api-key` and a Bearer token; temperature 0.
+    - Bedrock (an inference-profile id, `us.<vendor>.<model>`): the Bedrock Runtime
+      Converse API (`POST https://bedrock-runtime.<region>.amazonaws.com/model/<id>/converse`)
+      with a Bedrock API key, `AWS_BEARER_TOKEN_BEDROCK`, as a Bearer token, in
+      `AWS_REGION` (default us-east-2). Temperature 0 where the model takes it: never
+      for an `anthropic` vendor (current Claude models reject it, as below), and a model
+      that answers 400 "doesn't support the temperature field" (Kimi K3 does) is asked
+      again once without it, and never sent it again by this instance. The Converse answer and
+      usage are mapped to the Messages shape (`text` blocks, `input_tokens`, ...).
     - Anthropic (any other id): api.anthropic.com with `ANTHROPIC_API_KEY`. No
       `temperature` is sent: current models reject it.
 
@@ -184,6 +204,7 @@ class MessagesModel:
     url: str | None = None          # override the provider's endpoint (tests)
     transport: Any = None           # an httpx transport, for tests
     usage: list[dict[str, Any]] = field(default_factory=list)
+    no_temperature: bool = False    # set when the provider refused `temperature` (Bedrock)
 
     @property
     def id(self) -> str:
@@ -195,20 +216,38 @@ class MessagesModel:
 
     def _key(self) -> str:
         names = ((self.api_key_env,) if self.api_key_env else
-                 FIREWORKS_KEY_ENVS if self.provider == "fireworks" else (API_KEY_ENV,))
+                 FIREWORKS_KEY_ENVS if self.provider == "fireworks" else
+                 (BEDROCK_TOKEN_ENV,) if self.provider == "bedrock" else (API_KEY_ENV,))
         key = next((os.environ[n] for n in names if os.environ.get(n)), None)
         if not key:
             raise CuratorError(f"{' or '.join(names)} is not set (curator model "
                                f"{self.model!r} runs on {self.provider})")
         return key
 
+    def _bedrock_temperature(self) -> bool:
+        parts = pricing.bedrock_parts(self.model)
+        return parts is not None and parts[1] != "anthropic" and not self.no_temperature
+
+    def bedrock_url(self) -> str:
+        from urllib.parse import quote
+
+        region = (os.environ.get(BEDROCK_REGION_ENV) or "").strip() or BEDROCK_DEFAULT_REGION
+        return BEDROCK_URL.format(region=region, model=quote(self.model.strip(), safe=""))
+
     def request_body(self, request: dict[str, Any]) -> dict[str, Any]:
+        user = json.dumps(request, sort_keys=True, ensure_ascii=False)
+        if self.provider == "bedrock":
+            config: dict[str, Any] = {"maxTokens": self.max_tokens}
+            if self._bedrock_temperature():
+                config["temperature"] = 0
+            return {"system": [{"text": prompt_text()}],
+                    "messages": [{"role": "user", "content": [{"text": user}]}],
+                    "inferenceConfig": config}
         body: dict[str, Any] = {
             "model": self.model,
             "max_tokens": self.max_tokens,
             "system": prompt_text(),
-            "messages": [{"role": "user",
-                          "content": json.dumps(request, sort_keys=True, ensure_ascii=False)}],
+            "messages": [{"role": "user", "content": user}],
         }
         if self.provider == "fireworks":
             body["temperature"] = 0
@@ -221,16 +260,28 @@ class MessagesModel:
         headers = {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION,
                    "content-type": "application/json"}
         url = self.url
-        if self.provider == "fireworks":
+        if self.provider == "bedrock":
+            headers = {"authorization": f"Bearer {key}", "content-type": "application/json",
+                       "accept": "application/json"}
+            url = url or self.bedrock_url()
+        elif self.provider == "fireworks":
             headers["authorization"] = f"Bearer {key}"
             url = url or FIREWORKS_URL
         url = url or ANTHROPIC_URL
         with httpx.Client(timeout=self.timeout_s, transport=self.transport) as c:
-            r = c.post(url, json=self.request_body(request), headers=headers)
+            body = self.request_body(request)
+            r = c.post(url, json=body, headers=headers)
+            if (self.provider == "bedrock" and r.status_code == 400
+                    and "temperature" in (body.get("inferenceConfig") or {})
+                    and "temperature" in _error_detail(r).lower()):
+                self.no_temperature = True
+                r = c.post(url, json=self.request_body(request), headers=headers)
         if r.status_code != 200:
             raise CuratorError(f"curator model call failed: HTTP {r.status_code} "
-                               f"from {self.provider}")
+                               f"from {self.provider}{_error_detail(r)}")
         data = r.json()
+        if self.provider == "bedrock":
+            data = _from_converse(data)
         self.usage.append(dict(data.get("usage") or {}))
         text = "".join(b.get("text", "") for b in data.get("content") or []
                        if isinstance(b, dict) and b.get("type") == "text")
@@ -241,6 +292,35 @@ class MessagesModel:
                 raise CuratorError(f"curator model hit max_tokens={self.max_tokens} "
                                    f"before a complete answer ({e})") from e
             raise
+
+
+def _error_detail(r: Any) -> str:
+    """The provider's own error message (Bedrock: `message`; Messages APIs:
+    `error.message`), cut short. Never the request, so never the key."""
+    try:
+        body = r.json()
+    except ValueError:
+        return ""
+    if not isinstance(body, dict):
+        return ""
+    err = body.get("error")
+    msg = body.get("message") or (err.get("message") if isinstance(err, dict) else None)
+    return f": {str(msg)[:200]}" if msg else ""
+
+
+def _from_converse(data: dict[str, Any]) -> dict[str, Any]:
+    """A Converse response in the Messages shape `decide` reads: `text` blocks only
+    (`reasoningContent` blocks are skipped, like thinking blocks), `stop_reason`, and
+    usage under the Messages names."""
+    content = (((data.get("output") or {}).get("message") or {}).get("content")) or []
+    usage = data.get("usage") or {}
+    return {
+        "content": [{"type": "text", "text": b["text"]} for b in content
+                    if isinstance(b, dict) and isinstance(b.get("text"), str)],
+        "stop_reason": data.get("stopReason"),
+        "usage": {name: int(usage[k]) for k, name in _CONVERSE_USAGE.items()
+                  if isinstance(usage.get(k), int | float)},
+    }
 
 
 # The QUA-3486 name. Despite it, the provider follows the model id.

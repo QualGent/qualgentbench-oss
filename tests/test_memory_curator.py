@@ -539,3 +539,97 @@ def test_real_corpus_terms_and_packaged_prompt(mk: Path, tmp_path: Path) -> None
                                                          "left drawer.")])])
     assert _ops(r)["e1#0"]["op"] == "ADD" and lint.lint_tree(r.out_root) == []
     assert cur.PROMPT_PATH.is_file() and len(r.log["prompt_sha256"]) == 64
+
+
+BR = "us.moonshotai.kimi-k3"
+
+
+def test_bedrock_ids_route_to_bedrock() -> None:
+    assert cur.provider_for(BR) == "bedrock"
+    assert cur.provider_for("us.anthropic.claude-opus-5-5") == "bedrock"
+    assert cur.provider_for("global.anthropic.claude-sonnet-5-5") == "bedrock"
+    # A bare id names no provider: it stays on the Anthropic API.
+    assert cur.provider_for("claude-opus-5-5") == "anthropic"
+    assert cur.provider_for("gpt-5.5") == "anthropic"
+
+
+def test_bedrock_converse_request_answer_and_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict = {}
+    monkeypatch.setenv(cur.BEDROCK_TOKEN_ENV, "br-token")
+    monkeypatch.setenv(cur.API_KEY_ENV, "anthropic-key")
+    monkeypatch.setenv("FIREWORKS_API_KEY", "fw-key")
+    monkeypatch.delenv(cur.BEDROCK_REGION_ENV, raising=False)
+    answer = '<think>hmm</think>```json\n{"decisions": [{"proposal": "e1#0", "op": "NOOP"}]}\n```'
+    m = cur.MessagesModel(model=BR, transport=_capture(seen, {
+        "output": {"message": {"role": "assistant", "content": [
+            {"reasoningContent": {"reasoningText": {"text": '{"decisions": []}'}}},
+            {"text": answer}]}},
+        "stopReason": "end_turn",
+        "usage": {"inputTokens": 120, "outputTokens": 30, "totalTokens": 150,
+                  "cacheReadInputTokens": 7}}))
+    out = m.decide({"proposals": []})
+    assert out == {"decisions": [{"proposal": "e1#0", "op": "NOOP"}]}
+    assert seen["url"] == ("https://bedrock-runtime.us-east-2.amazonaws.com/model/"
+                           "us.moonshotai.kimi-k3/converse")
+    assert seen["headers"]["authorization"] == "Bearer br-token"
+    # Only the Bedrock key goes to Bedrock.
+    assert "x-api-key" not in seen["headers"]
+    assert "anthropic-key" not in json.dumps(seen["headers"])
+    assert "fw-key" not in json.dumps(seen["headers"])
+    body = seen["body"]
+    assert body["system"] == [{"text": cur.prompt_text()}]
+    assert body["messages"] == [{"role": "user", "content": [
+        {"text": json.dumps({"proposals": []}, sort_keys=True)}]}]
+    assert body["inferenceConfig"] == {"maxTokens": cur.MAX_TOKENS, "temperature": 0}
+    assert "model" not in body
+    assert m.usage == [{"input_tokens": 120, "output_tokens": 30,
+                        "cache_read_input_tokens": 7}]
+
+
+def test_bedrock_region_claude_temperature_and_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(cur.BEDROCK_TOKEN_ENV, raising=False)
+    monkeypatch.setenv(cur.API_KEY_ENV, "anthropic-key")
+    with pytest.raises(cur.CuratorError, match="AWS_BEARER_TOKEN_BEDROCK is not set"):
+        cur.MessagesModel(model=BR).decide({})
+    monkeypatch.setenv(cur.BEDROCK_TOKEN_ENV, "br-token")
+    monkeypatch.setenv(cur.BEDROCK_REGION_ENV, "us-west-2")
+    seen: dict = {}
+    claude = "us.anthropic.claude-opus-5-5"
+    cur.MessagesModel(model=claude, transport=_capture(seen, {
+        "output": {"message": {"content": [{"text": '{"decisions": []}'}]}}})).decide({})
+    assert seen["url"].startswith("https://bedrock-runtime.us-west-2.amazonaws.com/model/"
+                                  "us.anthropic.claude-opus-5-5/")
+    # Claude on Bedrock rejects `temperature`, as on the Anthropic API.
+    assert seen["body"]["inferenceConfig"] == {"maxTokens": cur.MAX_TOKENS}
+    trunc = _capture({}, {"output": {"message": {"content": []}}, "stopReason": "max_tokens"})
+    with pytest.raises(cur.CuratorError, match="max_tokens"):
+        cur.MessagesModel(model=BR, transport=trunc).decide({})
+    denied = _capture({}, {"message": "Access denied to model"}, status=403)
+    with pytest.raises(cur.CuratorError, match="HTTP 403 from bedrock: Access denied"):
+        cur.MessagesModel(model=BR, transport=denied).decide({})
+
+
+def test_bedrock_model_that_refuses_temperature_is_asked_again_without_it(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(cur.BEDROCK_TOKEN_ENV, "br-token")
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        if "temperature" in body["inferenceConfig"]:
+            return httpx.Response(400, json={"message": "This model doesn't support the temperature "
+                                                        "field. Remove temperature and try again."})
+        return httpx.Response(200, json={"output": {"message": {"content": [
+            {"text": '{"decisions": []}'}]}}, "usage": {"inputTokens": 3, "outputTokens": 2}})
+
+    m = cur.MessagesModel(model=BR, transport=httpx.MockTransport(handler))
+    assert m.decide({}) == {"decisions": []}
+    assert m.decide({}) == {"decisions": []}
+    # One refused call, then never sent again; the refused call has no usage.
+    assert ["temperature" in b["inferenceConfig"] for b in bodies] == [True, False, False]
+    assert m.no_temperature and m.usage == [{"input_tokens": 3, "output_tokens": 2}] * 2
+    # Any other 400 is an error, not a retry.
+    bad = _capture({}, {"message": "Malformed input request"}, status=400)
+    with pytest.raises(cur.CuratorError, match="HTTP 400 from bedrock: Malformed"):
+        cur.MessagesModel(model=BR, transport=bad).decide({})
