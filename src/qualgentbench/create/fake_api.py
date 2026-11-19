@@ -25,6 +25,8 @@ API as QualGent-MCP consumes it, never any private text:
 * `GET /v1/apps/list` → the one app the episode is about (or empty);
   `GET /v1/apps/{id|latest}` → that app.
 * `POST /v1/credits/validate` → always sufficient.
+* a fake started with `api_key` answers 401 to any request whose `x-api-key` is not
+  that key, before routing (logged with `key_refused: true`, never the key sent).
 * anything else → 404 `{"detail": …}`, logged as a WARNING and flagged
   `unknown: true` in the request log, so a QualGent-MCP route change (drift) or an
   off-surface tool (`run_tests`, `upload_app`, …) is visible, never silent.
@@ -243,8 +245,10 @@ class FakeQualGentAPI:
     """
 
     def __init__(self, episode_dir: str | Path, *, app: FakeApp | None = None,
-                 host: str = "127.0.0.1", port: int = 0) -> None:
+                 host: str = "127.0.0.1", port: int = 0, api_key: str | None = None) -> None:
         self.episode_dir = Path(episode_dir)
+        # The one key this fake accepts (QUA-3534); None accepts any (tests, the docs).
+        self.api_key = api_key
         self.api_dir = self.episode_dir / API_DIR
         self.app = app
         self._host, self._port = host, port
@@ -469,9 +473,14 @@ class FakeQualGentAPI:
                         body = json.loads(raw)
                     except ValueError:
                         body = None
+                sent = self.headers.get("x-api-key")
+                refused = fake.api_key is not None and sent != fake.api_key
                 try:
-                    status, payload, route = fake.route(
-                        method, parts.path, parse_qs(parts.query), body)
+                    if refused:
+                        status, payload, route = 401, {"detail": "Invalid API key"}, None
+                    else:
+                        status, payload, route = fake.route(
+                            method, parts.path, parse_qs(parts.query), body)
                 except Exception as exc:  # a fake must answer, not hang
                     logger.exception("fake QualGent API crashed on %s %s", method, self.path)
                     status, payload, route = 500, {"detail": f"fake API error: {exc}"}, None
@@ -485,7 +494,8 @@ class FakeQualGentAPI:
                     "ts": time.time(), "method": method, "path": parts.path,
                     "query": parse_qs(parts.query), "status": status, "route": route,
                     "unknown": unknown,
-                    "has_api_key": bool(self.headers.get("x-api-key")),
+                    "has_api_key": bool(sent),
+                    "key_refused": refused,
                     "content_type": ctype,
                     "body": body,
                     "raw_bytes": len(raw) if raw and body is None else None,

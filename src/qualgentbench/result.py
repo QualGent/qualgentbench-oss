@@ -104,6 +104,9 @@ class VerifierResult(BaseModel):
 
 #: The `RunResult` fields an in-place rescore writes; omitted from the dump while None.
 RESCORE_TRACE_KEYS = ("rescored_from", "rescored_with", "rescored_at")
+#: Fields omitted from the dump while None, so a result.json written without them
+#: (an older run, the native agent) keeps its exact shape.
+_OPTIONAL_KEYS = (*RESCORE_TRACE_KEYS, "provider")
 
 
 class RunResult(BaseModel):
@@ -115,6 +118,10 @@ class RunResult(BaseModel):
     condition: str
     trial: int
     passed: bool
+    # The model provider the episode ran against (QUA-3502): openai | anthropic |
+    # fireworks | bedrock, beside `model` (the model of record). None (and then absent
+    # from the dump) for the native agent and for results written before it existed.
+    provider: str | None = None
     score: float
     weighted_score: float = 0.0
     started_at: str
@@ -148,7 +155,7 @@ class RunResult(BaseModel):
     @model_serializer(mode="wrap")
     def _drop_unset_rescore_trace(self, handler: Any) -> dict[str, Any]:
         data = handler(self)
-        for k in RESCORE_TRACE_KEYS:
+        for k in _OPTIONAL_KEYS:
             if data.get(k) is None:
                 data.pop(k, None)
         return data
@@ -175,9 +182,11 @@ class RunResult(BaseModel):
         runs_dir: Path | str | None = None,
         run_id: str = "",
         provenance: dict[str, Any] | None = None,
+        provider: str | None = None,
     ) -> "RunResult":
         return cls(
             run_id=run_id,
+            provider=provider,
             provenance=dict(provenance or {}),
             task_id=task_id,
             task_version=task_version,

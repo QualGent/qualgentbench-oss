@@ -80,6 +80,14 @@ runs the launcher (`uv run`) and brings its own Python; nothing else to set up.
 - **Fireworks-hosted models**: `FIREWORKS_API_KEY`. That is all claude-code needs for
   an `accounts/fireworks/models/...` model: the harness gives the CLI that key and
   keeps any Anthropic token in your environment away from it.
+- **Amazon Bedrock**: `AWS_BEARER_TOKEN_BEDROCK` (a Bedrock API key) and `AWS_REGION`.
+  Pass `--provider bedrock` (or `provider: bedrock` in the config; an inference-profile
+  id such as `us.moonshotai.kimi-k3` implies it) with an inference-profile model id.
+  codex-cli runs OpenAI and Moonshot models there (`us.openai.gpt-6-astra`,
+  `us.moonshotai.kimi-k3`); claude-code runs Claude models only
+  (`us.anthropic.claude-sonnet-5-5`). Any other harness × provider × model pair is
+  refused before anything starts. Those two variables are the only AWS ones an agent
+  ever receives; your AWS profile and keys are never passed to it.
 
 Keys live only in `.env`. They never go into the image, the config, or the results.
 

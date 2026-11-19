@@ -664,6 +664,18 @@ def test_an_old_manifest_rescores_to_its_recorded_grade_and_v3_moves_it(tmp_path
     assert grader.rescore_grade(manifest, tmp_path)[0] == json.loads(json.dumps(live_v3))
 
 
+def test_runner_fingerprint_records_the_runners_provider(monkeypatch):
+    """QUA-3507: any harness x provider can grade, so the grade names the provider too;
+    a runner on another provider is another grader."""
+    monkeypatch.delenv("QGB_PROVIDER", raising=False)
+    assert grader.runner_fingerprint("codex-cli", "gpt-6-astra")["provider"] == "openai"
+    assert grader.runner_fingerprint("codex-cli", "us.moonshotai.kimi-k3")["provider"] == "bedrock"
+    fp = grader.runner_fingerprint("claude-code", "us.anthropic.claude-sonnet-5-5")
+    assert (fp["agent"], fp["provider"]) == ("claude-code", "bedrock")
+    assert grader.runner_fingerprint("claude-code", "kimi-k3", provider="fireworks")[
+        "provider"] == "fireworks"
+
+
 def test_runner_fingerprint_names_the_verdict_rule():
     fp = grader.runner_fingerprint("codex-cli", "gpt-6-astra")
     assert fp["grader_version"] == 4 and fp["verdict_rule"] == grader.VERDICT_RULE

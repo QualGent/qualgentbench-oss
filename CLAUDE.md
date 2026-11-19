@@ -459,6 +459,31 @@ Wording stays generic: the repo is public. **One gate** (QUA-2841,
   adapter hands the CLI that key as its `ANTHROPIC_API_KEY` and strips every Anthropic
   credential from the CLI's env (`inherited_env`) — an OAuth token left there was sent
   to Fireworks as `Authorization: Bearer` on every request.
+  **Providers** (QUA-3502, `providers.py`): one place decides harness × provider ×
+  model — `run --provider` / `provider:` / `QGB_PROVIDER`, else the model id's shape (a
+  Fireworks slug; a `us.<vendor>.<model>` Bedrock inference profile), else the agent's
+  own. codex-cli: openai, or bedrock (`model_provider = "amazon-bedrock-runtime"` in the
+  episode's config.toml; openai/moonshotai inference profiles only — Claude and bare ids
+  fail there). codex sends MCP tools as a Responses `namespace` and routes a call by
+  (namespace, name); Kimi K3 on Bedrock answers with the bare name, so every MCP call
+  failed `unsupported call: <tool>` on codex 0.156-0.170 (QUA-3535). Each codex × Bedrock
+  episode therefore points the provider's `base_url` at a loopback relay
+  (`adapters/bedrock_tool_shim.py`) that forwards byte for byte and adds the namespace to
+  a `function_call` that lacks one (only for a name in exactly one namespace); a model
+  that names it (gpt-6-astra) passes untouched. Counts in `agent/bedrock_tool_shim.json`;
+  `QGB_CODEX_BEDROCK_TOOL_SHIM=0` turns it off. claude-code: anthropic, fireworks, or bedrock (`CLAUDE_CODE_USE_BEDROCK`,
+  Claude only; the Haiku-class background model is pinned to the episode's own). Bedrock
+  auth is `AWS_BEARER_TOKEN_BEDROCK` + `AWS_REGION`, the only AWS variables any agent
+  gets (`strip_cloud_env` removes the host's AWS_* and CLAUDE_CODE_USE_BEDROCK/_VERTEX
+  from every CLI episode). An unsupported pair or a missing variable is refused by
+  name in `run`'s preflight, `preflight`, and per episode (`staging_failed`). The
+  provider is on every result (`provider`, omitted while None) and in plan.json; a
+  resume takes the plan's. On Bedrock and Fireworks the REQUESTED id is the model of
+  record and claude-code's `total_cost_usd` is never `reported` (AWS bills its own rates:
+  a `us.` profile is 1.1x `global.`, `pricing.BEDROCK_PRICING`, from the AWS Price List
+  API). Cache writes are counted (`cache_write_input_tokens`) and priced at a row's
+  `cache_write` rate where it has one (Bedrock rows only, so first-party boards are
+  unmoved).
   **codex-cli auth: an API key, or an explicit opt-in to the operator's login**
   (QUA-2868). codex exchanges `CODEX_API_KEY`/`OPENAI_API_KEY` for a per-episode
   `auth.json` (`codex login --with-api-key`). With no key (or a failed exchange) it used
@@ -1742,8 +1767,13 @@ uv run qualgent-bench run --mode create --agent codex-cli --models gpt-6-astra \
 One unit = one case BRIEF (`brief:`, QUA-2853; `--case` selects by case id) × trial,
 task id `<case>~create`, kind `create_case` (`create/runner.py`). Staged exactly as the
 case's CLEAN journey episode (journey build, fixture, no flag, pinned clock, the same
-precondition anchor). codex-cli only (the template goes in as Codex
-`developer_instructions`), MCP arm only; the arm comes from `--qualgent-mcp/--devloop`,
+precondition anchor). codex-cli or claude-code on any provider their adapters support
+(QUA-3507: the template goes in as Codex `developer_instructions`, or as claude-code's
+`--append-system-prompt-file` from its own `claude_home/`; the arm's QualGent tool list is
+Codex `enabled_tools`, or for claude-code `--disallowedTools` over the server's other tools,
+`withheld_tools`, from the smoke's `server_tools`). Changing the author's or the grader's
+harness/provider/model is a new treatment; a different grader is never comparable with
+earlier grades. MCP arm only; the arm comes from `--qualgent-mcp/--devloop`,
 `create_arm:` in `--config`, or on `--resume` from plan.json's `create_arm_spec` (pins at
 their resolved SHAs). Before any device time `run` resolves the arm, installs
 QualGent-MCP at its SHA and smokes it against a fake (`<runs>/_create_smoke/`). The

@@ -33,8 +33,9 @@ board calls it unquotable):
   never started (the relay saw no `initialize`). Excluded like every env failure.
 * `no_case`      — no case was created. Its reason is an OUTCOME, never a crash:
   `truncated` (the budget ran out first), `create_refused` (every create was rejected
-  by the validator), `asked_instead` (single-turn `codex exec`: the author asked a
-  question instead of submitting, spike P3) or `never_submitted`.
+  by the validator), `asked_instead` (a single-turn run — `codex exec`, `claude
+  --print` — where the author asked a question instead of submitting, spike P3) or
+  `never_submitted`.
 * `dead`         — a case exists, but it is not grounded in what the author OBSERVED:
   no screen read ever came back with content, or the case quotes UI strings and not
   one of them was in any device result (the QUA-2609 lesson: grounding on the observed
@@ -70,7 +71,7 @@ from ..mcp_meter import STDIO_LEDGER_FILE
 from ..result import RunResult, VerifierResult
 from ..task import BenchmarkTask
 from ..transcript import TranscriptParser
-from .arm import QUALGENT_SERVER_NAME, ResolvedArm, creation_prompt
+from .arm import QUALGENT_SERVER_NAME, ResolvedArm, creation_prompt, episode_api_key
 from .brief import CREATE_BRIEF_VERSION, case_brief, render_brief, text_sha256
 from .fake_api import API_DIR, AUTHORED_CASE_FILE, REQUEST_LOG, FakeApp, FakeQualGentAPI
 
@@ -104,8 +105,8 @@ NC_REFUSED = "create_refused"
 NC_ASKED = "asked_instead"
 NC_NEVER = "never_submitted"
 
-# The author's last message reads as a question or a request for approval: single-turn
-# `codex exec` ends there, with no case (spike P3).
+# The author's last message reads as a question or a request for approval: a single-turn
+# run (`codex exec`, `claude --print`) ends there, with no case (spike P3).
 _ASKED_RE = re.compile(
     r"\?\s*$|\b(?:would you like|shall i|should i|do you want|let me know|please "
     r"(?:confirm|approve|review)|awaiting (?:your )?(?:approval|confirmation)|"
@@ -213,7 +214,10 @@ class CreationEpisode:
         # Private text goes ONLY under the episode dir (refused inside the repo).
         self.arm.write_private_surface(run_dir)
         self.arm.write_manifest(run_dir)
-        self.fake = FakeQualGentAPI(run_dir, app=FakeApp(task.app_name)).start()
+        # A key of the episode's own: the fake refuses any other (QUA-3534).
+        self.api_key = episode_api_key()
+        self.fake = FakeQualGentAPI(run_dir, app=FakeApp(task.app_name),
+                                    api_key=self.api_key).start()
         self.api_url = self.fake.url
 
     @property
@@ -225,7 +229,7 @@ class CreationEpisode:
         that meters its calls, pointed at this episode's fake API."""
         entry = self.arm.qualgent_server_entry(self.api_url, self.surface.python, args=[
             "-m", "qualgentbench.mcp_meter", "stdio", "--ledger", str(self.ledger_path),
-            "--", self.surface.qualgent_command])
+            "--", self.surface.qualgent_command], api_key=self.api_key)
         # QGB_DISALLOWED_TOOLS withholds DEVICE tools; the author's QualGent surface is
         # the arm's tool policy alone (spike P5).
         entry["apply_disallowed_tools"] = False
@@ -373,21 +377,27 @@ def grounding(case: dict[str, Any] | None, transcript: str) -> dict[str, Any]:
 
 
 def _last_agent_text(transcript: str) -> str:
-    """The author's final message (codex `agent_message`, claude `text`)."""
-    last = ""
+    """The author's final message: codex's last `agent_message`; claude-code's `result`
+    event text (its final answer), else its last assistant `text` block (a run killed
+    before `result`)."""
+    last, result = "", ""
     for line in transcript.splitlines():
         try:
             ev = json.loads(line)
         except ValueError:
             continue
-        item = ev.get("item") if isinstance(ev, dict) else None
+        if not isinstance(ev, dict):
+            continue
+        item = ev.get("item")
         if isinstance(item, dict) and item.get("type") == "agent_message":
             last = str(item.get("text") or "")
-        elif isinstance(ev, dict) and ev.get("type") == "assistant":
+        elif ev.get("type") == "assistant":
             for b in (ev.get("message") or {}).get("content") or []:
                 if isinstance(b, dict) and b.get("type") == "text" and b.get("text"):
                     last = str(b["text"])
-    return last.strip()
+        elif ev.get("type") == "result" and isinstance(ev.get("result"), str):
+            result = ev["result"]
+    return (result or last).strip()
 
 
 def create_verdict(transcript: str, model: str, task: BenchmarkTask) -> VerifierResult:
@@ -452,7 +462,7 @@ def create_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifier
                            "(422 from the product's validator) and never accepted")
         elif last_text and _ASKED_RE.search(last_text[-400:]):
             no_case_reason = NC_ASKED
-            reasons.append("the author ended by asking instead of submitting (codex exec "
+            reasons.append("the author ended by asking instead of submitting (the run "
                            "is single-turn, so nobody answers)")
         else:
             no_case_reason = NC_NEVER

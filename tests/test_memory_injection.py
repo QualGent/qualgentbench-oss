@@ -373,3 +373,33 @@ def test_cli_gate_memory_resume_reads_the_plan(memory_root):
     for flag in ("memory_mode", "memory_budget", "memory_diff", "memory_snapshot",
                  "memory_org", "memory_config"):
         assert flag in cli._SCOPE_FLAGS
+
+
+def test_claude_code_template_and_memory_share_one_system_prompt_file(tmp_path):
+    """A creator template (QUA-3507) and memory both ride claude-code's appended system
+    prompt: one --append-system-prompt-file carries both (template first, as codex's
+    `developer_instructions` does), never two flags of which the CLI keeps one."""
+    from qualgentbench.adapters.base import RunContext
+    from qualgentbench.adapters.claude_code import ClaudeCodeAdapter
+    from qualgentbench.schemas import Condition
+
+    run_dir = tmp_path / "ep"
+    run_dir.mkdir()
+    mcp = run_dir / "mcp_config.json"
+    mcp.write_text(json.dumps({"mcpServers": {}}))
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("MEMORY BLOCK\n")
+    ctx = RunContext(task=None, agent="claude-code", model="claude-sonnet-5-5",
+                     condition=Condition.no_routines, trial=1, run_dir=run_dir,
+                     mcp_server="http://127.0.0.1:40001", mcp_config_path=mcp,
+                     workspace_dir=run_dir / "workspace",
+                     developer_instructions="TEMPLATE", memory_text="MEMORY BLOCK",
+                     memory_file=memory_file)
+    adapter = ClaudeCodeAdapter()
+    adapter.prepare(ctx)
+    argv = adapter.command("brief", ctx)
+    assert argv.count("--append-system-prompt-file") == 1
+    sysfile = Path(argv[argv.index("--append-system-prompt-file") + 1])
+    assert sysfile.read_text() == "TEMPLATE\n\nMEMORY BLOCK\n"
+    assert argv[argv.index("--setting-sources") + 1] == ""
+    assert "MEMORY BLOCK" not in " ".join(argv)

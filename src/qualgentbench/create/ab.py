@@ -1996,7 +1996,8 @@ def _spec_from_args(args: argparse.Namespace) -> ExperimentSpec:
               else max(brief_trials.values()) if brief_trials else DEFAULT_TRIALS)
     return ExperimentSpec(name=args.experiment, arms=arms, briefs=briefs, trials=trials,
                           author={"agent": args.agent, "model": args.author_model},
-                          runner={"agent": args.agent, "model": args.runner_model},
+                          runner={"agent": args.runner_agent or args.agent,
+                                  "model": args.runner_model},
                           prediction=prediction,
                           kind=_board.SMOKE if args.smoke else _board.CANONICAL,
                           reference_trials=args.reference_trials,
@@ -2094,8 +2095,12 @@ def build_parser() -> argparse.ArgumentParser:
                         f"(mechanism: assert 2, walk 1), else {DEFAULT_TRIALS}")
     r.add_argument("--reference-trials", type=int, default=0,
                    help="also grade each brief's reference case on the first N trials")
-    r.add_argument("--agent", default="codex-cli")
+    r.add_argument("--agent", default="codex-cli",
+                   help="the author's CLI: codex-cli or claude-code (QUA-3507)")
     r.add_argument("--author-model", default="gpt-6-astra")
+    r.add_argument("--runner-agent", default=None,
+                   help="the frozen runner's CLI (default: --agent). A different runner "
+                        "is a different grader: never compare its grades with another's")
     r.add_argument("--runner-model", default="gpt-6-astra")
     r.add_argument("--prediction", default=DEFAULT_PREDICTION.name,
                    help="registered name or JSON file. Default: the owner's mechanism-based "

@@ -10,7 +10,9 @@ The surface a production author sees is private IP in two private repositories:
   (`fake_api.py`), so every byte of it is production's.
 * **DevLoop-MCP** — the `qualgent-test-creator` subagent template. It is delivered
   the way the desktop app installs it for Codex: the YAML frontmatter is dropped and
-  the body becomes `developer_instructions`.
+  the body becomes `developer_instructions`. A claude-code author gets the same body
+  appended to its system prompt (`--append-system-prompt-file`, a file in the
+  episode's own config dir; QUA-3507).
 
 This repository is PUBLIC. So an arm is only a pair of pins
 (`{qualgent_mcp: {path|git_url, ref}, devloop: {path|git_url, ref}}`, see
@@ -34,7 +36,12 @@ tool list, so a Codex author there sees every QualGent-MCP tool, `run_tests`,
 `template`: the server entry carries `enabled_tools` = the template's own QualGent
 list, which is the surface the template was written for and what a host that honours
 the list shows. `all` reproduces the desktop Codex surface exactly (anything off the
-list 404s at the fake and is logged). An explicit list is an A/B arm.
+list 404s at the fake and is logged). An explicit list is an A/B arm. claude-code has
+no allowlist that hides tools while permissions are bypassed, so the same policy
+reaches it as a deny list: the entry's `withheld_tools` (every tool the server
+offered at the smoke, `server_tools`, less the arm's list) becomes
+`--disallowedTools mcp__qualgent__<tool>`, which removes them from the model's tool
+list exactly as `enabled_tools` does for Codex (QUA-3507).
 
 **Harness note (spike P2/P3).** The template assumes a desktop session with device
 lock tools and a user who answers questions. A benchmark episode has neither: the
@@ -51,6 +58,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import tarfile
@@ -65,7 +73,8 @@ from ..config import REPO_ROOT, CreateArm, RepoPin
 logger = logging.getLogger(__name__)
 
 #: QualGent-MCP refuses a key that does not start with `qg_` (and then silently
-#: sends an empty one). The fake API accepts anything; this one is obviously fake.
+#: sends an empty one). This one is obviously fake: a fake API started without a key of
+#: its own accepts anything. A creation episode does not use it (`episode_api_key`).
 FAKE_API_KEY = "qg_createbench_fake_key"
 #: The MCP server name the author's QualGent tools are registered under.
 QUALGENT_SERVER_NAME = "qualgent"
@@ -284,9 +293,13 @@ class ResolvedArm:
     tools_policy: str                         # "template" | "all" | "list"
     qualgent_tools: tuple[str, ...] | None    # None = every tool the server has
     guide_sha256: str | None = None           # filled by `probe_arm`
+    # Every tool the pinned server offers, filled by `probe_arm`: what a deny-list
+    # host (claude-code) withholds to narrow the surface to `qualgent_tools`.
+    server_tools: tuple[str, ...] | None = None
 
     def qualgent_server_entry(self, api_url: str, command: str | Path,
-                              args: list[str] | None = None) -> dict[str, Any]:
+                              args: list[str] | None = None,
+                              api_key: str = FAKE_API_KEY) -> dict[str, Any]:
         """The `qualgent` stdio entry for an episode's mcp_config.json (the codex
         adapter renders `command`/`args`/`env`/`enabled_tools` per server). `run
         --mode create` passes the harness's stdio relay as `command` and the server
@@ -294,11 +307,26 @@ class ResolvedArm:
         QualGent-MCP call is metered on the creation ledger."""
         entry: dict[str, Any] = {
             "command": str(command), "args": list(args or []),
-            "env": qualgent_server_env(api_url),
+            "env": qualgent_server_env(api_url, api_key),
         }
         if self.qualgent_tools is not None:
             entry["enabled_tools"] = list(self.qualgent_tools)
+            # The same policy for a host that can only DENY tools (claude-code): every
+            # tool the server offered that the arm's list leaves out. A harness key: the
+            # codex adapter does not render it, the claude-code adapter turns it into
+            # --disallowedTools.
+            if (withheld := self.withheld_tools()) is not None:
+                entry["withheld_tools"] = withheld
         return entry
+
+    def withheld_tools(self) -> list[str] | None:
+        """The server's tools the arm's policy leaves out ([] for `all`), or None when
+        the server's tool list is not known yet (`probe_arm` fills it)."""
+        if self.qualgent_tools is None:
+            return []
+        if self.server_tools is None:
+            return None
+        return [t for t in self.server_tools if t not in self.qualgent_tools]
 
     def manifest(self) -> dict[str, Any]:
         return {
@@ -329,8 +357,18 @@ class ResolvedArm:
         return path
 
 
-def qualgent_server_env(api_url: str) -> dict[str, str]:
-    return {"QUALGENT_API_URL": api_url, "QUALGENT_API_KEY": FAKE_API_KEY}
+def qualgent_server_env(api_url: str, api_key: str = FAKE_API_KEY) -> dict[str, str]:
+    return {"QUALGENT_API_URL": api_url, "QUALGENT_API_KEY": api_key}
+
+
+def episode_api_key() -> str:
+    """A fresh fake API key for ONE episode (QUA-3534). The episode's fake API refuses
+    every request without it (401), so an author that finds the fake's port cannot use
+    it without the key, which only the QualGent-MCP server's environment holds. A host
+    that runs that server as another user (the lab image) keeps the key out of the
+    agent's reach entirely; on a laptop the agent and the server share a user, and the
+    contamination scan (`qualgent_api_bypass`) is what catches a bypass."""
+    return "qg_createbench_" + secrets.token_hex(16)
 
 
 def resolve_arm(spec: CreateArm, *, base_dir: Path | None = None,
@@ -459,15 +497,17 @@ async def probe_arm(arm: ResolvedArm, episode_dir: str | Path, *, command: str |
         return text
 
     try:
-        with FakeQualGentAPI(episode_dir, app=FakeApp(app_name)) as api, \
+        key = episode_api_key()
+        with FakeQualGentAPI(episode_dir, app=FakeApp(app_name), api_key=key) as api, \
                 (episode_dir / API_DIR / SMOKE_STDERR).open("w") as errlog:
             params = StdioServerParameters(command=str(command), args=[],
-                                           env=qualgent_server_env(api.url),
+                                           env=qualgent_server_env(api.url, key),
                                            cwd=str(episode_dir))
             async with stdio_client(params, errlog=errlog) as (read, write), \
                     ClientSession(read, write) as session:
                 init = await session.initialize()
                 names = sorted(t.name for t in (await session.list_tools()).tools)
+                arm.server_tools = tuple(names)
                 missing = [t for t in (arm.qualgent_tools or ()) if t not in names]
                 if missing:
                     raise ArmError(

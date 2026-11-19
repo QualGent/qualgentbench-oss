@@ -126,6 +126,14 @@ class _Clock:
         return self.t
 
 
+def test_backoff_holds_at_least_the_providers_retry_after():
+    clock = _Clock()
+    b = RateLimitBackoff(lanes=3, clock=clock, rng=lambda: 1.0)
+    assert b.note_rate_limit(retry_after=120)["hold_sec"] == 120  # longer than the 30 s step
+    assert b.note_rate_limit(retry_after=5)["hold_sec"] == 60  # shorter: the doubling wins
+    assert b.note_rate_limit(retry_after=99999)["hold_sec"] == 600  # capped
+
+
 def test_backoff_doubles_resets_and_caps():
     clock = _Clock()
     b = RateLimitBackoff(lanes=3, clock=clock, rng=lambda: 1.0)

@@ -215,8 +215,12 @@ def test_two_servers_render_into_codex_config(surface, tmp_path, monkeypatch):
     assert qg["args"][:4] == ["-m", "qualgentbench.mcp_meter", "stdio", "--ledger"]
     assert qg["args"][4] == str(run_dir / STDIO_LEDGER_FILE)
     assert qg["args"][5:] == ["--", surface.qualgent_command]
+    # The episode's own key (QUA-3534): fresh, QualGent-MCP-shaped, and the only one
+    # its fake accepts.
     assert qg["env"] == {"QUALGENT_API_URL": episode.api_url,
-                         "QUALGENT_API_KEY": FAKE_API_KEY}
+                         "QUALGENT_API_KEY": episode.api_key}
+    assert episode.api_key.startswith("qg_") and episode.api_key != FAKE_API_KEY
+    assert episode.fake.api_key == episode.api_key
     assert qg["enabled_tools"] == list(surface.arm.qualgent_tools)
     assert "apply_disallowed_tools" not in raw        # a harness key, never rendered
     # The private surface lands in the episode dir only, never in the repo.
@@ -226,12 +230,149 @@ def test_two_servers_render_into_codex_config(surface, tmp_path, monkeypatch):
     assert json.loads((run_dir / "arm.json").read_text())["qualgent_mcp"]["sha"]
 
 
+def _claude_context(surface, tmp_path, *, server_tools=None):
+    """A claude-code creation episode's RunContext, as `run_episode` builds it."""
+    run_dir = tmp_path / "runs" / "create-x" / "ep"
+    run_dir.mkdir(parents=True)
+    if server_tools is not None:
+        surface.arm.server_tools = tuple(server_tools)
+    episode = surface.open(run_dir, _task(), SERIAL)
+    cfg = er._generate_mcp_config("http://127.0.0.1:40001")
+    cfg["mcpServers"].update(episode.mcp_servers())
+    mcp_path = run_dir / "mcp_config.json"
+    mcp_path.write_text(json.dumps(cfg))
+    ctx = RunContext(task=None, agent="claude-code", model="claude-sonnet-5-5",
+                     condition=Condition.no_routines, trial=1, run_dir=run_dir,
+                     mcp_server="http://127.0.0.1:40001", mcp_config_path=mcp_path,
+                     workspace_dir=run_dir / "workspace", disabled_tools=["mobile_open_url"],
+                     inject_mcp=False, isolate_mcp=True,
+                     developer_instructions=episode.developer_instructions)
+    return episode, ctx, run_dir
+
+
+def _flag(cmd: list[str], name: str) -> str:
+    return cmd[cmd.index(name) + 1]
+
+
+def test_claude_code_gets_the_template_as_an_appended_system_prompt(surface, tmp_path):
+    """QUA-3507: the creator template reaches a claude-code author as its appended
+    system prompt, by FILE (never in argv, which other processes can read), inside the
+    episode's own config dir (never uploaded: claude_home is a deny dir)."""
+    from qualgentbench.adapters.claude_code import ClaudeCodeAdapter
+
+    tools = ["check_credits", "create_test_case", "delete_apps", "list_categories",
+             "list_test_cases", "run_tests"]
+    episode, ctx, run_dir = _claude_context(surface, tmp_path, server_tools=tools)
+    try:
+        adapter = ClaudeCodeAdapter()
+        adapter.prepare(ctx)
+        cmd = adapter.command("prompt", ctx)
+    finally:
+        episode.close()
+    prompt_file = Path(_flag(cmd, "--append-system-prompt-file"))
+    assert prompt_file.read_text().strip() == STAND_IN_BODY
+    assert prompt_file.parent == run_dir / "claude_home"
+    assert checkpoint.DENY_DIRS >= {"claude_home"}
+    assert not any(STAND_IN_BODY in arg for arg in cmd)
+
+
+def test_claude_code_narrows_qualgent_tools_to_the_arms_list(surface, tmp_path):
+    """The arm's tool policy as a deny list: every QualGent tool the server offered that
+    the template does not name is withheld (`mcp__qualgent__<tool>`), beside the device
+    tools QGB_DISALLOWED_TOOLS withholds; the template's own tools stay available."""
+    from qualgentbench.adapters.claude_code import ClaudeCodeAdapter
+
+    tools = ["check_credits", "create_test_case", "delete_apps", "list_categories",
+             "list_test_cases", "run_tests"]
+    episode, ctx, run_dir = _claude_context(surface, tmp_path, server_tools=tools)
+    try:
+        adapter = ClaudeCodeAdapter()
+        adapter.prepare(ctx)
+        cmd = adapter.command("prompt", ctx)
+    finally:
+        episode.close()
+    denied = _flag(cmd, "--disallowedTools").split(",")
+    allowed = set(surface.arm.qualgent_tools)
+    assert set(denied) == ({"mcp__device__mobile_open_url"}
+                           | {f"mcp__qualgent__{t}" for t in tools if t not in allowed})
+    assert "mcp__qualgent__run_tests" in denied and "mcp__qualgent__delete_apps" in denied
+    assert not any(d == f"mcp__qualgent__{t}" for d in denied for t in allowed)
+    # claude-code reads a copy of the MCP config without the harness's own keys.
+    mcp = Path(_flag(cmd, "--mcp-config"))
+    assert mcp == run_dir / "claude_home" / "mcp_config.json" and "--strict-mcp-config" in cmd
+    servers = json.loads(mcp.read_text())["mcpServers"]
+    assert set(servers) == {"device", QUALGENT_SERVER_NAME}
+    qg = servers[QUALGENT_SERVER_NAME]
+    assert set(qg) <= {"type", "command", "args", "env", "url", "headers"}
+    assert qg["args"][:4] == ["-m", "qualgentbench.mcp_meter", "stdio", "--ledger"]
+    assert servers["device"]["url"] == "http://127.0.0.1:40001/mcp"
+
+
+def test_claude_code_refuses_a_narrowed_arm_whose_server_was_never_probed(surface,
+                                                                         tmp_path):
+    """Without the server's tool list claude-code cannot withhold anything, and the
+    author would silently get the `all` surface: refused before the CLI starts."""
+    from qualgentbench.adapters.claude_code import ClaudeCodeAdapter
+
+    episode, ctx, _ = _claude_context(surface, tmp_path, server_tools=None)
+    try:
+        with pytest.raises(RuntimeError, match="withheld_tools"):
+            ClaudeCodeAdapter().prepare(ctx)
+    finally:
+        episode.close()
+
+
+def test_a_journey_claude_episode_keeps_the_harness_mcp_config(tmp_path):
+    """No harness keys in the config (a journey episode): claude-code reads the
+    harness's own file, no copy, no appended prompt — journey behaviour unchanged."""
+    from qualgentbench.adapters.claude_code import ClaudeCodeAdapter
+
+    mcp_path = tmp_path / "mcp_config.json"
+    mcp_path.write_text(json.dumps(er._generate_mcp_config("http://127.0.0.1:40001")))
+    ctx = RunContext(task=None, agent="claude-code", model="claude-sonnet-5-5",
+                     condition=Condition.no_routines, trial=1, run_dir=tmp_path,
+                     mcp_server="http://127.0.0.1:40001", mcp_config_path=mcp_path,
+                     workspace_dir=tmp_path / "workspace", inject_mcp=False,
+                     isolate_mcp=True)
+    adapter = ClaudeCodeAdapter()
+    adapter.prepare(ctx)
+    cmd = adapter.command("prompt", ctx)
+    assert _flag(cmd, "--mcp-config") == str(mcp_path)
+    assert "--append-system-prompt-file" not in cmd and "--disallowedTools" not in cmd
+
+
+def _claude_transcript(*blocks: dict, result: str | None) -> str:
+    lines = [{"type": "system", "subtype": "init", "model": "claude-sonnet-5-5"}]
+    lines += [{"type": "assistant", "message": {"content": [b]}} for b in blocks]
+    if result is not None:
+        lines.append({"type": "result", "subtype": "success", "result": result,
+                      "usage": {"input_tokens": 10, "output_tokens": 5}})
+    return "\n".join(json.dumps(x) for x in lines) + "\n"
+
+
+@pytest.mark.parametrize("transcript, reason", [
+    (_claude_transcript({"type": "text", "text": "Exploring."},
+                        result="Here is the draft. Shall I submit it?"), "asked_instead"),
+    # Killed before `result`: the last assistant text block is the final message.
+    (_claude_transcript({"type": "text", "text": "Would you like me to create it?"},
+                        result=None), "asked_instead"),
+    (_claude_transcript({"type": "text", "text": "Done exploring."},
+                        result="I explored the app."), "never_submitted"),
+])
+def test_asked_instead_reads_a_claude_code_final_message(transcript, reason):
+    v = _verdict(_spec_for(None), transcript)
+    assert v.metrics["no_case_reason"] == reason
+    assert v.metrics["final_message_tail"]
+
+
 def test_the_fake_api_stops_with_close_and_close_is_idempotent(surface, tmp_path):
     run_dir = tmp_path / "runs" / "create-x" / "ep"
     run_dir.mkdir(parents=True)
     episode = surface.open(run_dir, _task(), SERIAL)
     url = episode.api_url
-    assert httpx.get(f"{url}/v1/categories/list").status_code == 200
+    assert httpx.get(f"{url}/v1/categories/list").status_code == 401   # not the episode's key
+    assert httpx.get(f"{url}/v1/categories/list",
+                     headers={"x-api-key": episode.api_key}).status_code == 200
     first = episode.close()
     assert episode.close() is first
     with pytest.raises(httpx.HTTPError):
@@ -454,14 +595,18 @@ async def test_zero_valid_artifacts_exit_non_zero(monkeypatch, tmp_path, valid, 
 
 # ── the gate ───────────────────────────────────────────────────────────────────
 
-def test_create_mode_is_codex_only_and_needs_the_mcp_arm_and_an_arm(repos):  # noqa: F811
+def test_create_mode_takes_any_cli_author_and_needs_the_mcp_arm_and_an_arm(repos):  # noqa: F811
     import click
 
     qg, dl = repos
     kw = dict(cfg_arm=None, base=None, qualgent_mcp=f"{qg}@main", devloop=f"{dl}@main",
               qualgent_tools=None, name=None)
-    with pytest.raises(click.ClickException, match="codex-cli only"):
-        cli._gate_create("claude-code", "http://x", None, **kw)
+    # QUA-3507: claude-code authors too; only a harness that cannot take the creator
+    # template (the native adapter) is refused.
+    with pytest.raises(click.ClickException, match="runs a CLI author"):
+        cli._gate_create("native", "http://x", None, **kw)
+    spec, _ = cli._gate_create("claude-code", "http://x", None, **kw)
+    assert spec.qualgent_tools == "template"
     with pytest.raises(click.ClickException, match="needs --mcp-server"):
         cli._gate_create("codex-cli", None, None, **kw)
     with pytest.raises(click.ClickException, match="needs a creation arm"):
