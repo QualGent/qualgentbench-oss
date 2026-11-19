@@ -1151,14 +1151,20 @@ async def _read_back_flags(device: str, bundle_id: str, nonce: str, expected) ->
     return flag_file_problem(out, nonce, expected)
 
 
+FLAG_WRITE_ATTEMPTS = 8
+FLAG_WRITE_RETRY_S = 2.0
+
+
 async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) -> None:
     """Activate exactly this episode's seeded bugs via files/qgb_flags.txt (run-as,
     debug build). Clean episodes get no active id; pre-gate apps ignore it.
 
     The write is CONFIRMED (QUA-3546): a dropped transport is waited out and the write
     re-sent (`_adb_staging_step`), then the file is read back and must lead with this
-    episode's nonce line and hold exactly the defect and drift ids written. A write that
-    cannot be confirmed is recorded as `staging_failed` (→ `env_failure`; a journey
+    episode's nonce line and hold exactly the defect and drift ids written. Any other
+    failed or unconfirmed write is retried (`FLAG_WRITE_ATTEMPTS`, `FLAG_WRITE_RETRY_S`
+    apart; QUA-3539: `run-as` refuses a package it cannot see yet right after the FIRST
+    install on a device). A write that still cannot be confirmed is recorded as `staging_failed` (→ `env_failure`; a journey
     episode then never launches the agent), and `active_bugs_written`/`drift_written`
     are set only on a confirmed write. There is no "best-effort, all bugs live" fallback
     any more: with no flags file the app's shim turns EVERY seeded fault on, which on a
@@ -1219,11 +1225,29 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
     cmd = f"run-as {shlex.quote(bundle_id)} sh -c {shlex.quote(inner)}"
     bug_spec.pop("active_bugs_written", None)
     bug_spec.pop("drift_written", None)
-    rc, out = await _adb_staging_step(device, "shell", cmd)
-    if rc != 0:
-        problem = f"the write failed (rc {rc}: {_first_line(out)})"
-    else:
-        problem = await _read_back_flags(device, bundle_id, nonce, active + drift)
+    # Retried, because a missing file is not "no bugs": the shim reads a MISSING flags
+    # file as every seeded fault live (`build_app._FLAG_SHIM`). Right after the FIRST
+    # install of a package on a device, `run-as` can refuse it ("package not found")
+    # until the package manager rewrites packages.list, seconds later — the cloud lab's
+    # retry on a fresh emulator hit exactly that and ran a clean episode with two faults
+    # live (QUA-3539). A dropped transport is already waited out and re-sent inside
+    # `_adb_staging_step`; when it still fails that way the device is gone, so it is not
+    # retried here.
+    problem: str | None = None
+    for attempt in range(1, FLAG_WRITE_ATTEMPTS + 1):
+        rc, out = await _adb_staging_step(device, "shell", cmd)
+        if rc != 0:
+            problem = f"the write failed (rc {rc}: {_first_line(out)})"
+            if _transport_failed(rc, out):
+                break
+        else:
+            problem = await _read_back_flags(device, bundle_id, nonce, active + drift)
+            if problem is None:
+                break
+        logger.warning("bug flags for %s not confirmed (attempt %d/%d): %s", bundle_id,
+                       attempt, FLAG_WRITE_ATTEMPTS, problem)
+        if attempt < FLAG_WRITE_ATTEMPTS:
+            await asyncio.sleep(FLAG_WRITE_RETRY_S)
     if problem is not None:
         reason = f"bug flags for {bundle_id} not confirmed on {device}: {problem}"
         logger.error("%s", reason)

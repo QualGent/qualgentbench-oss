@@ -392,3 +392,48 @@ def test_write_bug_flags_reuses_a_preset_nonce(monkeypatch, tmp_path):
     asyncio.run(er.write_bug_flags("emulator-5554", "com.x", spec))
     assert spec["flag_nonce"] == "QGB-NONCE-preset"
     assert spec["active_bugs_written"] == []
+
+
+# ── QUA-3539: a flags write that fails must not leave every fault live ─────────
+
+PKG_NOT_FOUND = "run-as: package not found: com.x\n"
+
+
+def test_write_bug_flags_retries_until_run_as_sees_the_package(monkeypatch, tmp_path):
+    """A freshly installed package run-as cannot see yet: not a transport drop, so the
+    flags write's own retry re-sends it until it lands, then confirms it."""
+    device = FakeFlagDevice(tmp_path, offline=3, reply=PKG_NOT_FOUND)
+    monkeypatch.setattr(er, "_adb", device)
+    monkeypatch.setattr(er, "FLAG_WRITE_RETRY_S", 0.0)
+    spec = {"active_bugs": [], "type": "clean", "mode": "journey"}
+    asyncio.run(er.write_bug_flags("emulator-5554", "com.x", spec))
+    assert device.sent("sh -c") == 4
+    assert device.sent("get-state") == 0                 # never treated as a drop
+    assert spec["active_bugs_written"] == []          # the clean arm's empty set took
+    assert not spec.get("staging_failed")
+
+
+@pytest.mark.parametrize("spec", [
+    {"active_bugs": [], "type": "clean", "mode": "journey"},
+    # No mode keeps the old all-bugs-live fallback any more (QUA-3546): a missing
+    # flags file is every seeded fault on, a wrong episode in any mode.
+    {"mode": "explore", "features": [{"bug_id": "b", "state": "broken"}]},
+])
+def test_a_flags_write_that_never_lands_fails_the_episode_closed(monkeypatch, tmp_path, spec):
+    device = FakeFlagDevice(tmp_path, offline=10_000, reply=PKG_NOT_FOUND)
+    monkeypatch.setattr(er, "_adb", device)
+    monkeypatch.setattr(er, "FLAG_WRITE_RETRY_S", 0.0)
+    asyncio.run(er.write_bug_flags("emulator-5554", "com.x", spec))
+    assert device.sent("sh -c") == er.FLAG_WRITE_ATTEMPTS
+    assert "active_bugs_written" not in spec
+    assert "not confirmed" in spec["staging_failed"]
+    assert "package not found" in spec["staging_failed"]
+
+
+def test_a_journey_episode_whose_flags_never_landed_never_launches_the_agent():
+    """The run_episode gate this relies on: in journey mode ANY staging_failed (the
+    flags write's included) ends the episode before the agent (QUA-3476's rule)."""
+    import inspect
+    src = inspect.getsource(er.run_episode)
+    assert 'get("mode") or "") == "journey"' in src and "agent_launched = False" in src
+    assert src.index("await write_bug_flags(") < src.index("agent_launched = precondition")
