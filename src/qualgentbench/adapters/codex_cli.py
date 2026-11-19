@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .base import AgentAdapter, AuthRefused, RunContext
+from .bedrock_tool_shim import BedrockToolShim, bedrock_runtime_origin
 from .. import providers
 from ..interactions import BUDGET_HOOK
 from ..transcript import CLI_VERSION, codex_state_usage_line
@@ -34,6 +35,9 @@ _OPENAI_CREDENTIAL = frozenset({"OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_
 #: bench config, the grader's `run --allow-codex-login` and `run_create_ab.py
 #: --allow-codex-login` all set it; recorded as `provenance.allow_codex_login`.
 ALLOW_LOGIN_ENV = "QGB_ALLOW_CODEX_LOGIN"
+#: Set to 0 to run codex × Bedrock straight to AWS, without the tool-namespace relay
+#: (`bedrock_tool_shim`, QUA-3535). Kimi K3's MCP calls then fail as `unsupported call`.
+BEDROCK_SHIM_ENV = "QGB_CODEX_BEDROCK_TOOL_SHIM"
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 
@@ -76,6 +80,8 @@ class CodexCliAdapter(AgentAdapter):
         "skill_mcp_dependency_install",
     )
     _AUTH_HOME_ENV = "QUALGENT_BENCH_CODEX_HOME"
+    #: The running tool-namespace relay per episode (keyed by run dir), QUA-3535.
+    _SHIMS: dict[str, BedrockToolShim] = {}
     _AUTH_FILES = ("auth.json",)
 
     @staticmethod
@@ -108,6 +114,7 @@ class CodexCliAdapter(AgentAdapter):
             # OpenAI identity is written into this episode's CODEX_HOME.
             context.auth_mode = AUTH_BEDROCK
             context.auth_login_allowed = None
+            self._start_bedrock_shim(context)
         else:
             # Raises CodexAuthRefused (before anything is copied or launched) when the
             # only credential is the operator's account login and the run did not opt in.
@@ -177,7 +184,39 @@ class CodexCliAdapter(AgentAdapter):
             pass
         return transcript + addition
 
+    @staticmethod
+    def bedrock_shim_enabled() -> bool:
+        return os.environ.get(BEDROCK_SHIM_ENV, "1").strip().lower() not in {
+            "0", "false", "no", "off"}
+
+    def _start_bedrock_shim(self, context: RunContext) -> None:
+        """Start this episode's tool-namespace relay (`bedrock_tool_shim`) in front of
+        Bedrock: codex sends MCP tools in a namespace and a model that answers with the
+        bare name (Kimi K3) is put back in it. A no-op for a model that names it."""
+        self._stop_bedrock_shim(context)
+        region = os.environ.get(providers.BEDROCK_REGION_ENV, "").strip()
+        if not self.bedrock_shim_enabled() or not region:
+            return    # no region: `env()` refuses the episode by name
+        shim = BedrockToolShim(bedrock_runtime_origin(region))
+        shim.start()
+        self._SHIMS[str(context.run_dir)] = shim
+
+    def _stop_bedrock_shim(self, context: RunContext) -> None:
+        shim = self._SHIMS.pop(str(context.run_dir), None)
+        if shim is None:
+            return
+        shim.stop()
+        record = {"requests": shim.requests, "namespaces_added": shim.rewrites}
+        logger.info("codex-cli bedrock tool shim: %s", record)
+        path = context.run_dir / "agent" / "bedrock_tool_shim.json"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(record) + "\n")
+        except OSError:
+            pass
+
     def cleanup(self, context: RunContext) -> None:
+        self._stop_bedrock_shim(context)
         codex_home = self._codex_home(context)
         if not codex_home.exists():
             return
@@ -352,6 +391,13 @@ class CodexCliAdapter(AgentAdapter):
             # `developer_instructions`); written only into this episode's CODEX_HOME.
             lines.append("developer_instructions = "
                          f"{self._toml_value(context.developer_instructions)}")
+
+        if shim := self._SHIMS.get(str(context.run_dir)):
+            # The episode's tool-namespace relay (QUA-3535). The built-in provider
+            # allows a `base_url` override and keeps its own bearer-token auth. A
+            # table, so it follows every top-level key.
+            lines += ["", f"[model_providers.{self._toml_key(providers.CODEX_BEDROCK_PROVIDER)}]",
+                      f"base_url = {self._toml_value(shim.base_url)}"]
 
         for name, entry in self._mcp_servers(context).items():
             lines += ["", f"[mcp_servers.{self._toml_key(name)}]"]

@@ -215,8 +215,12 @@ def test_two_servers_render_into_codex_config(surface, tmp_path, monkeypatch):
     assert qg["args"][:4] == ["-m", "qualgentbench.mcp_meter", "stdio", "--ledger"]
     assert qg["args"][4] == str(run_dir / STDIO_LEDGER_FILE)
     assert qg["args"][5:] == ["--", surface.qualgent_command]
+    # The episode's own key (QUA-3534): fresh, QualGent-MCP-shaped, and the only one
+    # its fake accepts.
     assert qg["env"] == {"QUALGENT_API_URL": episode.api_url,
-                         "QUALGENT_API_KEY": FAKE_API_KEY}
+                         "QUALGENT_API_KEY": episode.api_key}
+    assert episode.api_key.startswith("qg_") and episode.api_key != FAKE_API_KEY
+    assert episode.fake.api_key == episode.api_key
     assert qg["enabled_tools"] == list(surface.arm.qualgent_tools)
     assert "apply_disallowed_tools" not in raw        # a harness key, never rendered
     # The private surface lands in the episode dir only, never in the repo.
@@ -366,7 +370,9 @@ def test_the_fake_api_stops_with_close_and_close_is_idempotent(surface, tmp_path
     run_dir.mkdir(parents=True)
     episode = surface.open(run_dir, _task(), SERIAL)
     url = episode.api_url
-    assert httpx.get(f"{url}/v1/categories/list").status_code == 200
+    assert httpx.get(f"{url}/v1/categories/list").status_code == 401   # not the episode's key
+    assert httpx.get(f"{url}/v1/categories/list",
+                     headers={"x-api-key": episode.api_key}).status_code == 200
     first = episode.close()
     assert episode.close() is first
     with pytest.raises(httpx.HTTPError):
