@@ -55,9 +55,10 @@ PRICING: dict[str, dict[str, float]] = {
     # codex's gpt-5.5; the 4.x rows stay so older boards still price.
     # Opus 5.5 / Sonnet 5.5 from the `claude-api` skill (models table cached
     # 2026-09-25), read 2026-10-06: Opus 5.5 is $4/$20 with cache reads at $0.20 —
-    # CHEAPER than Opus 5 — and Sonnet 5.5 keeps Sonnet 5's $2/$10, $0.20 reads.
+    # CHEAPER than Opus 5 — and Sonnet 5.5 keeps Sonnet 5's $2/$10. Sonnet 5.5 cache
+    # reads corrected to $0.10 (claude-api skill, read 2026-11-19; was $0.20).
     "claude-opus-5-5": {"input": 4.00, "cached_input": 0.20, "output": 20.00},
-    "claude-sonnet-5-5": {"input": 2.00, "cached_input": 0.20, "output": 10.00},
+    "claude-sonnet-5-5": {"input": 2.00, "cached_input": 0.10, "output": 10.00},
     "claude-opus-5": {"input": 5.00, "cached_input": 0.50, "output": 25.00},
     "claude-sonnet-5": {"input": 2.00, "cached_input": 0.20, "output": 10.00},
     # Fable rows confirmed against the `claude-api` skill 2026-09-23 (QUA-2780):

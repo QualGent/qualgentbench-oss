@@ -80,7 +80,7 @@ def test_fireworks_slugs_still_price_on_the_full_path():
 @pytest.mark.parametrize("model, rates", [
     # claude-api skill, read 2026-10-06
     ("claude-opus-5-5", (4.00, 0.20, 20.00)),
-    ("claude-sonnet-5-5", (2.00, 0.20, 10.00)),
+    ("claude-sonnet-5-5", (2.00, 0.10, 10.00)),
     # developers.openai.com/api/docs/pricing, Standard tier, read 2026-10-06
     ("gpt-6-sol", (2.00, 0.20, 10.00)),
     ("gpt-6.1-sol", (2.00, 0.10, 10.00)),

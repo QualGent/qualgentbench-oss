@@ -25,6 +25,7 @@ UNROOT_CLOSED = "adb: unable to connect for unroot: closed"
 def _fast_waits(monkeypatch):
     monkeypatch.setattr(er, "_TRANSPORT_POLL_S", 0.0)
     monkeypatch.setattr(er, "_TRANSPORT_WAIT_S", 0.05)
+    monkeypatch.setattr(er, "FLAG_WRITE_RETRY_S", 0.0)
 
 
 def _ids(device: FakeFlagDevice) -> list[str]:
@@ -113,15 +114,22 @@ def test_a_missing_file_fails_staging(monkeypatch, tmp_path):
     assert "could not read the flags file back" in spec["staging_failed"]
 
 
-def test_a_write_the_device_refused_fails_staging_without_a_resend(monkeypatch, tmp_path):
+def test_a_write_the_device_keeps_refusing_fails_staging_after_bounded_retries(monkeypatch,
+                                                                              tmp_path):
+    """Not a transport drop, so `_adb_staging_step` does not re-send it; the flags
+    write's own retry (QUA-3539) does, a bounded number of times, then fails closed."""
+    writes: list[str] = []
+
     async def adb(*args):
         if "sh -c" in args[-1]:
+            writes.append(args[-1])
             return 1, "run-as: package not debuggable: com.x\n"
         return 0, ""
     monkeypatch.setattr(er, "_adb", adb)
     spec = {"active_bugs": ["bug-1"]}
     asyncio.run(er.write_bug_flags("emulator-1", "com.x", spec))
     assert "the write failed (rc 1: run-as: package not debuggable" in spec["staging_failed"]
+    assert len(writes) == er.FLAG_WRITE_ATTEMPTS
 
 
 def test_an_earlier_staging_failure_keeps_its_reason(monkeypatch, tmp_path):
