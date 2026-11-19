@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fake_flag_device import FakeFlagDevice
 from test_journey import _bug, _obs, _spec, _task, _transcript, _write
 
 from qualgentbench import bugs, corpus, journey
@@ -152,20 +153,19 @@ def test_reporting_a_drift_change_on_a_clean_build_is_a_false_report():
 
 # ── staging: the flags file and the precondition ──────────────────────────────
 
-def test_write_bug_flags_writes_drift_beside_the_bugs(monkeypatch):
-    sent: list[str] = []
-
-    async def _adb(*args, **kw):
-        sent.append(" ".join(args))
-        return 0, b""
-    monkeypatch.setattr(er, "_adb", _adb)
+def test_write_bug_flags_writes_drift_beside_the_bugs(monkeypatch, tmp_path):
+    device = FakeFlagDevice(tmp_path)
+    monkeypatch.setattr(er, "_adb", device)
     spec = {"active_bugs": ["bug-a"], "drift": ["d-label"]}
     asyncio.run(er.write_bug_flags("serial", "com.x", spec))
-    assert "bug-a" in sent[0] and "d-label" in sent[0]
+    ids = {ln.strip() for ln in device.flags.read_text().splitlines()}
+    assert {"bug-a", "d-label"} <= ids
     assert spec["active_bugs_written"] == ["bug-a"] and spec["drift_written"] == ["d-label"]
     clean = {"active_bugs": [], "version": "clean", "drift": ["d-label"]}
     asyncio.run(er.write_bug_flags("serial", "com.x", clean))
-    assert "d-label" in sent[1] and clean["active_bugs_written"] == []
+    ids = {ln.strip() for ln in device.flags.read_text().splitlines()}
+    assert "d-label" in ids and "bug-a" not in ids and clean["active_bugs_written"] == []
+    assert "staging_failed" not in spec and "staging_failed" not in clean
 
 
 def test_flag_file_shape_is_unchanged_by_drift():

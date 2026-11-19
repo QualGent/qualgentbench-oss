@@ -17,6 +17,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from fake_flag_device import FakeFlagDevice
 
 from qualgentbench import episode_runner as er
 from qualgentbench.verify import device_oracle
@@ -342,27 +343,24 @@ def test_a_fixture_without_sql_or_package_is_rejected(monkeypatch, tmp_path):
 
 # ── QUA-2804: the per-episode nonce is written but never published ────────────
 
-def test_write_bug_flags_writes_a_nonce_into_the_flags_and_marker(monkeypatch):
+def test_write_bug_flags_writes_a_nonce_into_the_flags_and_marker(monkeypatch, tmp_path):
     """The nonce rides as a `#`-comment line in qgb_flags.txt and as files/.qgb/nonce,
     it is stored on bug_spec for the scanner, and it is NOT counted as an active bug."""
-    calls: list[str] = []
-
-    async def fake_adb(*args):
-        calls.append(args[-1])          # the shell command string
-        return 0, b""
-
-    monkeypatch.setattr(er, "_adb", fake_adb)
+    device = FakeFlagDevice(tmp_path)
+    monkeypatch.setattr(er, "_adb", device)
     spec = {"active_bugs": ["bug-1", "bug-2"], "type": "bug"}
     asyncio.run(er.write_bug_flags("emulator-5554", "com.futsch1.medtimer", spec))
 
     nonce = spec["flag_nonce"]
     assert nonce.startswith("QGB-NONCE-") and len(nonce) > len("QGB-NONCE-")
     assert spec["active_bugs_written"] == ["bug-1", "bug-2"]      # the nonce is not a bug
-    cmd = calls[0]
+    cmd = device.calls[0]
     assert f"#{nonce}" in cmd and "files/qgb_flags.txt" in cmd
     assert "files/.qgb/nonce" in cmd
+    assert (tmp_path / "files/.qgb/nonce").read_text() == nonce
     # the real bug ids are still written, one per line
-    assert "bug-1" in cmd and "bug-2" in cmd
+    lines = [ln.strip() for ln in device.flags.read_text().splitlines()]
+    assert lines[0] == f"#{nonce}" and "bug-1" in lines and "bug-2" in lines
 
 
 def test_flag_file_shape_is_identical_on_both_arms(monkeypatch):
@@ -387,12 +385,9 @@ def test_flag_file_shape_is_identical_on_both_arms(monkeypatch):
     assert all(ln.strip().startswith("#") for ln in clean)
 
 
-def test_write_bug_flags_reuses_a_preset_nonce(monkeypatch):
+def test_write_bug_flags_reuses_a_preset_nonce(monkeypatch, tmp_path):
     """A nonce staging already generated (e.g. a replay reset) is not regenerated."""
-    async def fake_adb(*args):
-        return 0, b""
-
-    monkeypatch.setattr(er, "_adb", fake_adb)
+    monkeypatch.setattr(er, "_adb", FakeFlagDevice(tmp_path))
     spec = {"active_bugs": [], "type": "clean", "flag_nonce": "QGB-NONCE-preset"}
     asyncio.run(er.write_bug_flags("emulator-5554", "com.x", spec))
     assert spec["flag_nonce"] == "QGB-NONCE-preset"

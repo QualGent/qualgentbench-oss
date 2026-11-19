@@ -693,16 +693,20 @@ def test_the_shade_collapse_is_one_statusbar_command_and_never_raises(monkeypatc
     asyncio.run(er._collapse_system_shade("serial"))     # no exception
 
 
-def test_the_flags_writer_wipes_the_markers_too(monkeypatch):
-    from qualgentbench import episode_runner as er
-    sent: list[str] = []
+def test_the_flags_writer_wipes_the_markers_too(monkeypatch, tmp_path):
+    from fake_flag_device import FakeFlagDevice
 
-    async def _adb(*args):
-        sent.append(" ".join(args))
-        return 0, b""
-    monkeypatch.setattr(er, "_adb", _adb)
-    asyncio.run(er.write_bug_flags("serial", "com.x", {"active_bugs": ["b"]}))
-    assert len(sent) == 1 and "rm -rf files/.qgb/fired; mkdir -p files" in sent[0]
+    from qualgentbench import episode_runner as er
+    device = FakeFlagDevice(tmp_path)
+    (tmp_path / "files/.qgb/fired").mkdir(parents=True)
+    (tmp_path / "files/.qgb/fired/b").write_text("")
+    monkeypatch.setattr(er, "_adb", device)
+    spec = {"active_bugs": ["b"]}
+    asyncio.run(er.write_bug_flags("serial", "com.x", spec))
+    # one write (the wipe rides in it), then its read-back (QUA-3546)
+    assert len(device.calls) == 2 and "rm -rf files/.qgb/fired; mkdir -p files" in device.calls[0]
+    assert device.calls[1].endswith("cat files/qgb_flags.txt")
+    assert list((tmp_path / "files/.qgb/fired").iterdir()) == [] and "staging_failed" not in spec
 
 
 # ── the corpus's two FREEZE exemplars (QUA-2711) ──────────────────────────────

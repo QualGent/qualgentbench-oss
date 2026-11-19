@@ -19,7 +19,11 @@ one recorder that keeps a single ordered call list, and the ordering assertions 
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 import pytest
+from fake_flag_device import FakeFlagDevice
 
 from qualgentbench import bugs
 from qualgentbench import episode_runner as er
@@ -55,12 +59,17 @@ def _record_adb(monkeypatch) -> list[str]:
     `verify.device._adb`, which `replay` imports by name, takes the serial separately
     and returns bytes. Each entry is the argv after the serial."""
     calls: list[str] = []
+    # The bug-flags write is read back since QUA-3546, so its run-as commands run for real
+    # in a scratch app-data dir; every other call answers rc 0 and no output.
+    flags = FakeFlagDevice(Path(tempfile.mkdtemp(prefix="qgb-flags-")))
 
     async def er_adb(*args: str) -> tuple[int, str]:
         argv = list(args)
         if argv[:1] == ["-s"]:
             argv = argv[2:]
         calls.append(" ".join(argv))
+        if argv[:1] == ["shell"] and argv[1].startswith("run-as ") and "qgb_flags" in argv[1]:
+            return await flags(*args)
         return 0, ""
 
     async def device_adb(serial: str, *args: str) -> tuple[int, bytes]:

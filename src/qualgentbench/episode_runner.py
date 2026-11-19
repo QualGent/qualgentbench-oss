@@ -643,8 +643,11 @@ _SHELL_FAILURE_MARKERS = ("run-as: exec failed", "not found", "No such file", "E
 # feature set first and answers `adb: error: failed to get feature set: device offline`
 # (or `... device 'x' not found`), so that prefix is accepted too. A push that reached
 # the device and failed there (`adb: error: failed to copy ...`) is not a drop.
+# `adb root`/`adb unroot` against an adbd that is restarting answers `adb: unable to
+# connect for unroot: closed` (QUA-3546), so that prefix is accepted too.
 _ADB_TRANSPORT_FAILURE_RE = re.compile(
-    r"^(?:adb: )?(?:error: )?(?:(?:failed to get feature set|connect failed): )?"
+    r"^(?:adb: )?(?:error: )?"
+    r"(?:(?:failed to get feature set|connect failed|unable to connect for [a-z-]+): )?"
     r"(?:device offline|device '[^']*' not found"
     r"|no devices/emulators found|device still (?:connecting|authorizing)|closed)$")
 # How long staging waits for a dropped transport to come back, and how many times it
@@ -658,11 +661,12 @@ def _transport_failed(rc: int, out: str) -> bool:
     return rc != 0 and bool(_ADB_TRANSPORT_FAILURE_RE.match(out.strip()))
 
 
-async def _await_device_online(device: str, timeout_s: float = _TRANSPORT_WAIT_S) -> bool:
+async def _await_device_online(device: str, timeout_s: float | None = None) -> bool:
     """Poll `adb get-state` until the device answers `device` again. Bounded, unlike
-    `adb wait-for-device`, which blocks forever on a device that never comes back."""
+    `adb wait-for-device`, which blocks forever on a device that never comes back.
+    `timeout_s` defaults to `_TRANSPORT_WAIT_S` as it is at CALL time."""
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout_s
+    deadline = loop.time() + (_TRANSPORT_WAIT_S if timeout_s is None else timeout_s)
     while True:
         _, state = await _adb("-s", device, "get-state")
         if state.strip() == "device":
@@ -702,15 +706,33 @@ async def set_adb_root(device: str, root: bool) -> bool | None:
     restart it, the adb client waits for the device to drop and come back, and
     `wait-for-device` makes sure it did. The answer is read back with `id -u` rather
     than trusted from the verb, because a production build refuses `adb root` with
-    rc 0 (and an `ro.secure=0` image stays root through `adb unroot`)."""
+    rc 0 (and an `ro.secure=0` image stays root through `adb unroot`).
+
+    A verb that loses the transport (`adb: unable to connect for unroot: closed`: adbd
+    was still restarting) is waited out with the bounded `get-state` poll, and re-sent
+    unless adbd is already where it was asked to be. QUA-3546: staging's final unroot
+    returned on that error at once, and the flags write that followed in the same
+    second found the device offline."""
     verb = "root" if root else "unroot"
     rc, out = await _adb("-s", device, verb)
+    for _ in range(_TRANSPORT_RETRIES):
+        if not _transport_failed(rc, out):
+            break
+        logger.warning("device_setup: adb %s lost the transport to %s (%s) — waiting "
+                       "for it", verb, device, out.strip()[:80])
+        if not await _await_device_online(device):
+            break
+        _, uid = await _adb_staging_step(device, "shell", "id -u")
+        if uid.strip() == ("0" if root else "2000"):
+            rc, out = 0, ""                 # adbd got there on its own restart
+            break
+        rc, out = await _adb("-s", device, verb)
     if rc != 0:
         logger.warning("device_setup: adb %s failed: %s", verb, out.strip()[:120])
         return None
     if "restarting" in out:
         await _adb("-s", device, "wait-for-device")
-    _, uid = await _adb("-s", device, "shell", "id -u")
+    _, uid = await _adb_staging_step(device, "shell", "id -u")
     uid = uid.strip()
     if uid not in ("0", "2000"):
         logger.warning("device_setup: could not read the shell uid after adb %s: %r",
@@ -1096,10 +1118,51 @@ def flag_file_lines(nonce: str, active_bugs) -> list[str]:
     return [ln.ljust(FLAG_FILE_WIDTH) for ln in lines]
 
 
+FLAGS_FILE = "files/qgb_flags.txt"
+
+
+def _first_line(out: str) -> str:
+    return (out.strip().splitlines() or [""])[0][:160]
+
+
+def flag_file_problem(text: str, nonce: str, expected) -> str | None:
+    """Why `text` (qgb_flags.txt as read back) is not this episode's file, or None when
+    it is: the first line is `#<nonce>` (not a file an earlier write left) and the
+    non-comment lines are exactly `expected` (the defect and drift ids written). The
+    reason never echoes the nonce or the comment lines."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return "the flags file is empty or missing"
+    if not nonce or lines[0] != "#" + nonce:
+        return "the flags file is not this episode's (its nonce line does not match)"
+    ids = sorted(ln for ln in lines if not ln.startswith("#"))
+    if ids != sorted(str(e) for e in expected):
+        return f"the flags file holds ids {ids}, the write sent {sorted(expected)}"
+    return None
+
+
+async def _read_back_flags(device: str, bundle_id: str, nonce: str, expected) -> str | None:
+    """Read qgb_flags.txt back over the harness's adb (a dropped transport re-sent) and
+    return what is wrong with it, or None when it is this episode's file."""
+    cmd = f"run-as {shlex.quote(bundle_id)} cat {FLAGS_FILE}"
+    rc, out = await _adb_staging_step(device, "shell", cmd)
+    if rc != 0:
+        return f"could not read the flags file back (rc {rc}: {_first_line(out)})"
+    return flag_file_problem(out, nonce, expected)
+
+
 async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) -> None:
     """Activate exactly this episode's seeded bugs via files/qgb_flags.txt (run-as,
     debug build). Clean episodes get no active id; pre-gate apps ignore it.
-    Best-effort — a failed write leaves the legacy all-bugs-live behaviour.
+
+    The write is CONFIRMED (QUA-3546): a dropped transport is waited out and the write
+    re-sent (`_adb_staging_step`), then the file is read back and must lead with this
+    episode's nonce line and hold exactly the defect and drift ids written. A write that
+    cannot be confirmed is recorded as `staging_failed` (→ `env_failure`; a journey
+    episode then never launches the agent), and `active_bugs_written`/`drift_written`
+    are set only on a confirmed write. There is no "best-effort, all bugs live" fallback
+    any more: with no flags file the app's shim turns EVERY seeded fault on, which on a
+    clean build is a wrong episode, not a degraded one.
 
     The file is padded to a fixed line count and byte size (`flag_file_lines`) so its
     METADATA never reveals the arm. What the nonce backstop covers: a whole-file read
@@ -1154,9 +1217,17 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
              f"printf '%s\\n' {ids} > files/qgb_flags.txt && "
              f"printf %s {shlex.quote(nonce)} > files/.qgb/nonce")
     cmd = f"run-as {shlex.quote(bundle_id)} sh -c {shlex.quote(inner)}"
-    rc, out = await _adb("-s", device, "shell", cmd)
+    bug_spec.pop("active_bugs_written", None)
+    bug_spec.pop("drift_written", None)
+    rc, out = await _adb_staging_step(device, "shell", cmd)
     if rc != 0:
-        logger.warning("could not write bug flags for %s: %s", bundle_id, out.strip()[:200])
+        problem = f"the write failed (rc {rc}: {_first_line(out)})"
+    else:
+        problem = await _read_back_flags(device, bundle_id, nonce, active + drift)
+    if problem is not None:
+        reason = f"bug flags for {bundle_id} not confirmed on {device}: {problem}"
+        logger.error("%s", reason)
+        bug_spec.setdefault("staging_failed", reason)   # an earlier failure keeps its own
         return
     bug_spec["active_bugs_written"] = active
     if drift:
