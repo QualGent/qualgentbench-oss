@@ -2094,10 +2094,16 @@ for dynamic arms curates the PLANNED versions only (`Track.curator_inputs`, late
 excluded) into `curate-k`. State is `<out>/sequence.json`: a re-run resumes (a half-run
 stage via `run --resume`), the curator date is fixed per sequence and model answers are
 cached in `<out>/curator-cache`, so `--redo` rebuilds identical snapshots. The curator
-model (`memory/curator.py` `MessagesModel`, Messages API shape) picks its provider from
-the id: an `accounts/fireworks/models/*` slug goes to Fireworks' Anthropic-compatible
-endpoint with `FIREWORKS_API_KEY`, any other id to the Anthropic API with
-`ANTHROPIC_API_KEY` (no `temperature` sent: current models 400 on it). `max_tokens` is
+model (`memory/curator.py` `MessagesModel`) picks its provider from the id
+(`provider_for`, the same shapes the adapters route on): a Bedrock inference profile
+(`us.<vendor>.<model>`, `pricing.bedrock_parts`, e.g. `us.moonshotai.kimi-k3`) goes to
+the Bedrock Runtime Converse API (plain HTTP, `Authorization: Bearer
+$AWS_BEARER_TOKEN_BEDROCK`, region `AWS_REGION`, default us-east-2; temperature 0 unless
+the vendor is anthropic or the model 400s on it, then it is dropped for that instance;
+Converse text and usage are mapped to the Messages shape); an `accounts/fireworks/models/*`
+slug goes to Fireworks' Anthropic-compatible endpoint with `FIREWORKS_API_KEY`; any other
+id to the Anthropic API with `ANTHROPIC_API_KEY` (no `temperature` sent: current models
+400 on it). `usage` holds every call's tokens under the Messages names on every route. `max_tokens` is
 16000 for reasoning models; `parse_answer` reads text blocks only and pulls the
 `{"decisions": [...]}` object out of think tags, prose or fences. Health rows:
 `<out>/health.json`. `leaderboard.dedupe_latest` keys on `metrics.memory_stage` too, so a
