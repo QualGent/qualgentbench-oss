@@ -633,3 +633,60 @@ def test_bedrock_model_that_refuses_temperature_is_asked_again_without_it(
     bad = _capture({}, {"message": "Malformed input request"}, status=400)
     with pytest.raises(cur.CuratorError, match="HTTP 400 from bedrock: Malformed"):
         cur.MessagesModel(model=BR, transport=bad).decide({})
+
+
+# ── test-tool facts stay out of app memory (QUA-3545) ─────────────────────────
+
+TOOL_RULE_REASON = "about the test tools, not the app"
+TOOL_LAG = ("The screenshot from observe_screen lags one frame behind the element list "
+            "after typing, so re-read the screen before trusting it.")
+APP_FACT = "Archive is under the overflow menu on the note list."
+
+
+def test_curator_prompt_scopes_memory_to_the_app() -> None:
+    text = cur.prompt_text()
+    assert "Memory is about the app only." in text
+    assert "test tools or the harness" in text and "screenshot" in text
+    assert f'Choose\n`NOOP` for it with the reason "{TOOL_RULE_REASON}"' in text
+    # App facts seen through a tool stay in scope.
+    assert "A fact about the app that the agent saw through a tool" in text
+
+
+def test_format_help_asks_for_app_facts_not_tool_facts() -> None:
+    assert "Propose facts\nabout the app, not about the test tools or harness" in props.FORMAT_HELP
+
+
+def _prompt_following_model() -> cur.FunctionModel:
+    """A deterministic stand-in that applies the prompt's scope rule as written: when the
+    prompt carries it, a proposal about a device tool is a NOOP with the rule's reason;
+    every other proposal is an ADD. Without the rule in the prompt it ADDs everything,
+    which is what the round-1 curator did in about half the streams."""
+    rule = TOOL_RULE_REASON in cur.prompt_text()
+    tool_words = ("screenshot", "observe_screen", "element list", "tap tool")
+
+    def fn(request: dict) -> dict:
+        out = []
+        for p in request["proposals"]:
+            if rule and any(w in p["text"].lower() for w in tool_words):
+                out.append({"proposal": p["key"], "op": "NOOP", "reason": TOOL_RULE_REASON})
+            else:
+                out.append({"proposal": p["key"], "op": "ADD", "reason": "durable"})
+        return {"decisions": out}
+    return cur.FunctionModel(fn, id="prompt-following")
+
+
+def test_a_tool_lag_proposal_is_a_noop_and_the_app_fact_is_added(mk: Path,
+                                                                 tmp_path: Path) -> None:
+    before = {e.id for e in fmt.load(fmt.app_path(mk, ORG, APP)).entries()}
+    r = _run(mk, tmp_path, [_ep("e1", [_p("flaky", TOOL_LAG), _p("nav", APP_FACT)])],
+             _prompt_following_model())
+    ops = _ops(r)
+    assert ops["e1#0"]["op"] == "NOOP" and ops["e1#0"]["by"] == "model"
+    assert ops["e1#0"]["reason"] == TOOL_RULE_REASON
+    assert ops["e1#1"]["op"] == "ADD"
+    doc = _app(r)
+    added = [e for e in doc.entries() if e.id not in before]
+    assert [e.text for e in added] == [APP_FACT]
+    assert not any("screenshot" in e.text.lower() for e in doc.entries())
+    assert r.counts["NOOP"] == 1 and r.counts["ADD"] == 1
+    _assert_clean(r)

@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -240,9 +241,19 @@ def format_help() -> str:
     return FORMAT_HELP
 
 
-def system_text(rendered_block: str) -> str:
-    """The whole system block one memory episode receives."""
-    return f"{GUIDE}\n{format_help()}\n{rendered_block}"
+def proposals_path_line(path: Path | str) -> str:
+    """The one line naming this episode's proposals file by its absolute path
+    (QUA-3543). Without it agents went looking for the file under the runs directory,
+    and that search read as another episode's directory to the contamination scan."""
+    return f"In this run, write them to `{path}`.\n"
+
+
+def system_text(rendered_block: str, proposals_path: Path | str | None = None) -> str:
+    """The whole system block one memory episode receives. `proposals_path` (the
+    episode's own `<workspace>/memory_proposals.yaml`, set by `PreparedMemory.install`)
+    adds the line that names it; None leaves the text without one."""
+    where = proposals_path_line(proposals_path) if proposals_path is not None else ""
+    return f"{GUIDE}\n{format_help()}{where}\n{rendered_block}"
 
 
 @dataclass
@@ -263,7 +274,12 @@ class PreparedMemory:
     def install(self, run_dir: Path, workspace_dir: Path) -> None:
         """Write the system file beside the workspace and, for `index`, the full files
         into `<workspace>/memory/`. Names never collide with an agent instruction file
-        (`config.INSTRUCTION_FILES`), so the inherited-instructions guard stays strict."""
+        (`config.INSTRUCTION_FILES`), so the inherited-instructions guard stays strict.
+
+        The text gains the line naming this episode's proposals file by its absolute
+        path, so `text`, the system file and `sha256` all describe what the agent got."""
+        self.text = system_text(self.rendered.text, proposals_path=os.path.join(
+            os.path.abspath(str(workspace_dir)), PROPOSALS_FILENAME))
         self.system_file = Path(run_dir) / SYSTEM_FILENAME
         self.system_file.write_text(self.text, encoding="utf-8")
         if self.arm.budget == _render.INDEX:

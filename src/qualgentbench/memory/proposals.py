@@ -57,8 +57,9 @@ _ID_RE = re.compile(r"^" + fmt.ID_RE + r"$")
 # Short help for prompts that ask an agent to write proposals. Facts only; the prompt
 # around it explains what memory is for (spec §3.4: no rigid rules).
 FORMAT_HELP = f"""\
-Memory proposals go in `{FILENAME}` in the workspace, as a YAML list. Append one item
-per fact:
+Memory proposals go in `{FILENAME}` in the workspace, as a YAML list. Propose facts
+about the app, not about the test tools or harness (how the screenshot, screen-reading
+or tap tools behave). Append one item per fact:
 
 - type: nav            # one of: {", ".join(WRITABLE_TYPES)}
   text: <one sentence, at most {MAX_TEXT_CHARS} characters>
