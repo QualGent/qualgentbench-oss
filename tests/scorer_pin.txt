@@ -7,4 +7,6 @@
 1 d9bc8718608ecad3b23d0b7fef385d250b51318f9e4859c7409eeea3e51c6adb
 2 06339c3671ae8e4fd475f7e72b8d2cfadf3a5edb3f6ac02dbd7791c015fb439d
 3 e48f001ebc652c1383f7ef0b384e98706c8043753efeee371f3a1f40ac299734
-4 a3246f4861b73ac3e62a51745d1b8674111f606db1c990ee25a81a3f6bf631c3
+# 4 is the agent-memory epic branch's version (QUA-3543); main skips it so that lab
+# results already stamped v4 keep one meaning.
+5 5c7142a48f2b25299d072220938c839b510a55361e6cce42552997abc19e714c

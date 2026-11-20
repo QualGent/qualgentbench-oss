@@ -277,8 +277,73 @@ def match_known(bug: "BugReport", known: list[dict] | None) -> str | None:
     return None
 
 
+# What a downstream-effect report has to say (QUA-3541, `is_consequence`). EFFECT words
+# name a result the tester saw go wrong AFTER the caught defect: something not saved, lost
+# or missing, a value that stayed old or came out wrong, a later crash. Phrases, matched on
+# token boundaries in the report's description (`_word`); each tense is listed, as the
+# symptom lists do, rather than stemmed.
+EFFECT_WORDS = (
+    "not saved", "wasn't saved", "never saved", "not persisted", "never persisted",
+    "not stored", "not kept", "not applied", "never applied", "not created", "never created",
+    "not added", "never added", "not updated", "never updated", "not deleted",
+    "never took effect", "did not take effect", "didn't take effect",
+    "lost", "missing", "disappeared", "gone", "no longer", "threw away", "thrown away",
+    "not shown", "not showing", "not listed", "not displayed", "never appeared",
+    "does not appear", "doesn't appear", "did not appear", "didn't appear",
+    "still shows", "still showed", "still listed", "still there", "still has",
+    "still had", "still reads", "still read", "unchanged", "old value",
+    "wrong total", "wrong value", "wrong amount", "wrong count", "wrong number",
+    "crashed", "crash", "after the crash", "after relaunch", "after relaunching",
+    "never happened", "never finished", "still lists", "still holds", "kept the original",
+)
+# Words that name no screen or element: too common in any report to tie two of them
+# together. A TERM is any other alphabetic word of at least `_MIN_TERM_CHARS` letters.
+_MIN_TERM_CHARS = 4
+_TERM_RE = re.compile(r"[a-z][a-z'-]*[a-z]")
+_TERM_STOP = frozenset("""
+    about above after again also another anything around back because been before being
+    below both build came cannot could does doing done down each either even every
+    expected first from have having here into item items just last later like list made
+    many more most much must never next none nothing once only other over same screen
+    seen shown shows should showed since some still than that their them then there
+    these they this those through tried under until very want were what when where
+    which while will with without would your yours tapped tapping opened opening
+    reported report observed value values app's after crash crashed saved lost missing
+    disappeared wrong total unchanged relaunch relaunching relaunched correct correctly
+    instead appear appeared appears displayed display page view step steps button
+""".split())
+
+
+def _terms(text: str) -> set[str]:
+    """Screen and element terms of a text: lower-cased alphabetic words of at least
+    `_MIN_TERM_CHARS` letters, minus `_TERM_STOP`."""
+    return {w for w in _TERM_RE.findall(_norm(text))
+            if len(w) >= _MIN_TERM_CHARS and w not in _TERM_STOP}
+
+
+def is_consequence(bug: "BugReport", caught: list["BugReport"], symptoms: list[str]) -> bool:
+    """Does `bug` describe a downstream effect of the defect `caught` reported? Two tests,
+    both required, both pure text:
+
+    * EFFECT: its description names a result that went wrong (`EFFECT_WORDS`).
+    * SAME THING: its terms (`_terms` over its screen, observed and description) share at
+      least one with what the catch named: the catching reports' screen, observed and
+      description, and the defect's planted symptoms. A report about a different screen
+      or element is an unrelated observation, not an effect of this defect."""
+    if not any(_word(w, bug.prose) for w in EFFECT_WORDS):
+        return False
+    own = _terms(f"{bug.screen} {bug.observed} {bug.description}")
+    anchor: set[str] = set()
+    for c in caught:
+        anchor |= _terms(f"{c.screen} {c.observed} {c.description}")
+    for s in symptoms:
+        anchor |= _terms(s)
+    return bool(own & anchor)
+
+
 def mark_neutral(reports: list["BugReport"], known: list[dict] | None,
-                 version: str | None, found: list[str]) -> None:
+                 version: str | None, found: list[str],
+                 defects: dict[str, dict] | None = None) -> None:
     """Mark the reports that are neither a find nor a false report (QUA-3541). Runs
     after `match_report`, on the reports it left unmatched, in report order:
 
@@ -286,9 +351,10 @@ def mark_neutral(reports: list["BugReport"], known: list[dict] | None,
       either build.
     * `consequence_of`: on a SEEDED build only, a report that describes a downstream
       effect of a defect another report already found ("the crash threw away the entry",
-      "the transfer was never saved"). An accurate report of the effect is not a false
-      report, but it is not a second find either. The allowance is ONE such report per
-      defect found, assigned in `found` order, so it can never be bought: nothing is
+      "the transfer was never saved"), by `is_consequence`: effect wording, and a screen
+      or element term shared with the catch. An accurate report of the effect is not a
+      false report, but it is not a second find either. The allowance is ONE such report
+      per defect found, assigned in `found` order, so it can never be bought: nothing is
       neutral until a report has actually matched a defect, a clean build has nothing
       found and so nothing to be a consequence of, and a blanket list of guesses next to
       one real find still leaves every guess but one counted false. A consequence never
@@ -302,8 +368,15 @@ def mark_neutral(reports: list["BugReport"], known: list[dict] | None,
     for b in reports:
         if not allowance:
             break
-        if b.matched is None and b.known is None:
-            b.consequence_of = allowance.pop(0)
+        if b.matched is not None or b.known is not None:
+            continue
+        for d in allowance:
+            caught = [r for r in reports if r.matched == d]
+            symptoms = list(((defects or {}).get(d) or {}).get("symptoms") or [])
+            if is_consequence(b, caught, symptoms):
+                b.consequence_of = d
+                allowance.remove(d)
+                break
 
 
 def defect_stamp(ids, meta: dict[str, dict] | None,
@@ -1462,7 +1535,8 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         if b.matched and b.matched not in found:
             found.append(b.matched)
     missed = [b for b in active if b not in found]
-    mark_neutral(report.bugs, spec.get("known_behaviours"), version, found)
+    mark_neutral(report.bugs, spec.get("known_behaviours"), version, found,
+                 spec.get("defects"))
     false_reports = sum(1 for b in report.bugs if b.matched is None and not b.neutral)
     known_reports = sum(1 for b in report.bugs if b.known is not None)
     consequence_reports = sum(1 for b in report.bugs if b.consequence_of is not None)
@@ -1857,14 +1931,17 @@ BLOCKER_TIERS = ("L4", "L3")
 #:   token boundary. Under v2 the `n` of `\n` glued onto the line's first word, and
 #:   markor-move-two-recipes scored correct runs as not witnessed on both builds. It can
 #:   move a v2 verdict: a witness or grounded quote at a line start now matches.
-#: 4 (QUA-3541): two kinds of NEUTRAL report, neither a find nor a false report
+#: 4 is defined on the agent-memory epic branch (QUA-3543, own-episode contamination),
+#:   not here: lab results already record v4 with that meaning, so main skips it.
+#: 5 (QUA-3541): two kinds of NEUTRAL report, neither a find nor a false report
 #:   (`mark_neutral`). A report that matches one of the app's `known_behaviours:` (a real
 #:   quirk of the clean build, listed in the case file) on either build; and, on a seeded
-#:   build, at most one further unmatched report per defect another report found (a
-#:   downstream effect of a caught defect). Both can lower `false_reports` and raise
-#:   precision on a rescore of a v3 verdict; neither moves `bugs_found`, recall or
+#:   build, at most one further unmatched report per defect another report found that
+#:   describes an effect of it (`is_consequence`: effect wording plus a screen or element
+#:   term shared with the catch). Both can lower `false_reports` and raise
+#:   precision on a rescore of an earlier verdict; neither moves `bugs_found`, recall or
 #:   completion. Reports carry `known` / `consequence_of`, metrics the two counts.
-SCORER_VERSION = 4
+SCORER_VERSION = 5
 
 
 def _defect_lookup(m: list[dict]) -> rates.DefectLookup:

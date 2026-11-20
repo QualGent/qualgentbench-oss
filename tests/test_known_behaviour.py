@@ -139,44 +139,77 @@ def test_without_the_list_the_same_report_is_false():
 
 
 # ── a downstream effect of a found defect ─────────────────────────────────────
+# The synthetic delete defect (`test_journey.DEFECTS["delete-bug"]`): a row "85 kg" stays
+# listed after a delete. Its catching report names the "Weight list".
 
-FOUND = _bug(2, "85 kg", "the entry is still listed after delete")
+FOUND = _bug(2, "85 kg", "the 85 kg entry on the Weight list is still listed after delete")
+EFFECT = _bug(3, "Weight list: 3 entries", "the Weight list total is unchanged after relaunch")
+
+
+def _neutral(version, reports_yaml, active=("delete-bug",), verdict="fail"):
+    return _verdict(version, reports_yaml, active=list(active) if active else None,
+                    verdict=verdict).metrics
 
 
 def test_one_effect_of_a_found_defect_is_a_consequence():
-    v = _verdict("seeded", FOUND + _bug(3, "Total: 4 items", "the total never went down either"),
-                 active=["delete-bug"], verdict="fail")
-    m = v.metrics
+    m = _neutral("seeded", FOUND + EFFECT)
     assert m["bugs_found"] == ["delete-bug"] and m["false_reports"] == 0 and m["completed"]
     assert m["consequence_reports"] == 1 and m["reports"][1]["consequence_of"] == "delete-bug"
     assert m["recall"] == 1.0 and m["precision"] == 1.0
 
 
+def test_an_effect_needs_effect_wording():
+    """Same screen, but the report says nothing went wrong as a result: not an effect."""
+    m = _neutral("seeded", FOUND + _bug(3, "Weight list: 3 entries", "the Weight list header font is small"))
+    assert m["consequence_reports"] == 0 and m["false_reports"] == 1
+
+
+def test_an_effect_needs_a_term_shared_with_the_catch():
+    """Effect wording about a screen the catch never named is an unrelated observation."""
+    m = _neutral("seeded", FOUND + _bug(3, "Settings: Units", "the units preference was not saved"))
+    assert m["consequence_reports"] == 0 and m["false_reports"] == 1
+
+
+def test_a_planted_symptom_is_a_shared_term_too():
+    """The catch quoted only a value; the effect shares a term with the defect's own
+    symptom list instead ("not deleted" → `deleted`)."""
+    found = _bug(2, "85 kg", "the entry is still there")
+    m = _neutral("seeded", found + _bug(3, "Trash: empty", "nothing was deleted, the trash is missing the entry"))
+    assert m["consequence_reports"] == 1 and m["false_reports"] == 0
+
+
 def test_the_allowance_is_one_per_found_defect():
-    """A blanket list of guesses beside one real find still pays for every guess but one."""
-    guesses = "".join(_bug(i, "Total: 4 items", f"guess number {i}") for i in range(3, 7))
-    v = _verdict("seeded", FOUND + guesses, active=["delete-bug"], verdict="fail")
-    assert v.metrics["consequence_reports"] == 1 and v.metrics["false_reports"] == 3
+    """Several effect-shaped reports beside one real find: every one but the first pays."""
+    more = "".join(_bug(i, "Weight list", f"the Weight list entry {i} is missing") for i in range(3, 7))
+    m = _neutral("seeded", FOUND + more)
+    assert m["consequence_reports"] == 1 and m["false_reports"] == 3
 
 
 def test_nothing_is_a_consequence_until_a_defect_is_found():
-    v = _verdict("seeded", _bug(3, "Total: 4 items", "the total never went down"),
-                 active=["delete-bug"], verdict="fail")
-    assert v.metrics["bugs_found"] == [] and v.metrics["false_reports"] == 1
-    assert v.metrics["consequence_reports"] == 0
+    m = _neutral("seeded", EFFECT)
+    assert m["bugs_found"] == [] and m["false_reports"] == 1 and m["consequence_reports"] == 0
 
 
 def test_a_clean_build_has_no_consequences():
-    v = _verdict("clean", _bug(3, "Total: 4 items", "one") + _bug(4, "Total: 4 items", "two"))
-    assert v.metrics["false_reports"] == 2 and v.metrics["consequence_reports"] == 0
+    m = _neutral("clean", FOUND + EFFECT, active=None, verdict="pass")
+    assert m["false_reports"] == 2 and m["consequence_reports"] == 0
 
 
 def test_a_known_behaviour_does_not_use_up_the_allowance():
-    v = _verdict("seeded", FOUND + _bug(3, "Inbx", "the title is truncated")
-                 + _bug(4, "Total: 4 items", "the total never went down"),
-                 active=["delete-bug"], verdict="fail")
-    m = v.metrics
+    m = _neutral("seeded", FOUND + _bug(3, "Inbx", "the title is truncated") + EFFECT)
     assert (m["known_behaviour_reports"], m["consequence_reports"], m["false_reports"]) == (1, 1, 0)
+
+
+def test_is_consequence_reads_terms_not_stop_words():
+    caught = [journey.BugReport(step=1, screen="Weight list", observed="85 kg", expected="",
+                                description="the entry is still listed")]
+    # "screen", "after", "list" are stop words: sharing only those ties nothing together.
+    stray = journey.BugReport(step=2, screen="Home screen", observed="", expected="",
+                              description="after that the list was lost")
+    assert not journey.is_consequence(stray, caught, [])
+    tied = journey.BugReport(step=2, screen="Weight chart", observed="", expected="",
+                             description="the new weight was lost")
+    assert journey.is_consequence(tied, caught, [])
 
 
 # ── the evidence report names them ────────────────────────────────────────────
