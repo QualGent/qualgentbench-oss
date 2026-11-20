@@ -23,7 +23,10 @@ should be filed under the new set key.
   separate runs directory. In that copy every episode is rescored in place
   (`rescore.rescore`, so `rescored_from` / `rescored_with` hold the trace) and then
   re-stamped: `metrics.corpus_version` / `heldout_version` become the current corpus,
-  and `restamped_from` on the result keeps the run id, versions and scorer it had.
+  and `restamped_from` on the result keeps the run id, versions and scorer it had. An
+  episode whose agent never launched (staging failed: excluded, no transcript, no report)
+  is copied and re-stamped without a rescore; any other episode without a transcript is
+  refused.
 
 Not compared: the benchmark spec (`device_setup`, seeded patches). Its patches are
 covered by the APK sha256. `device_setup` is not part of `corpus_version` at all, so a
@@ -48,6 +51,18 @@ from .rescore import journey_tasks_by_id, rescore
 MEASUREMENT_CASE_KEYS = ("name", "steps", "expected_outcome", "step_budget", "check")
 #: The files `relabel_run` rewrites the run id in (relative to the run's `_runs/<id>/`).
 _RUN_STATE_JSON = ("plan.json", "board.json", "stop.json", "imported.json")
+
+
+#: The status of an episode whose agent was never launched (`never_launched`): copied and
+#: re-stamped, not rescored.
+NOT_LAUNCHED = "not-launched"
+
+
+def never_launched(result: dict) -> bool:
+    """Did staging fail before the agent started? Then the episode has no transcript and no
+    report, it is excluded (`env_failure`), and no scoring change can move it."""
+    m = result.get("metrics") or {}
+    return bool(m.get("staging_failed")) and bool(m.get("env_failure") or m.get("infra_failure"))
 
 
 class RelabelRefused(Exception):
@@ -240,6 +255,15 @@ def relabel_run(runs_dir: Path, run_id: str, *, new_run_id: str, out_dir: Path,
     found = _run_results(runs_dir, run_id)
     stamps, problems = check_relabel([r for _, r in found], Path(old_public),
                                      Path(old_heldout) if old_heldout else None)
+    # An episode with no transcript cannot be rescored. One whose agent was never
+    # launched (staging failed, so the episode is excluded and has no report) is carried
+    # over as recorded: no answer key can move it. Any other one is refused here, before
+    # anything is written.
+    missing = [d for d, r in found if not (d / "agent" / "transcript.txt").is_file()]
+    stray = [d for d in missing if not never_launched(dict(found)[d])]
+    if stray:
+        problems.append(f"{len(stray)} episode(s) have no transcript although their agent "
+                        f"ran: {', '.join(d.name for d in stray[:5])}")
     if problems:
         raise RelabelRefused(problems)
 
@@ -267,7 +291,10 @@ def relabel_run(runs_dir: Path, run_id: str, *, new_run_id: str, out_dir: Path,
         res = json.loads((dest / "result.json").read_text())
         res["run_id"] = new_run_id
         (dest / "result.json").write_text(json.dumps(res, indent=2))
-        status, _, _, _ = rescore(dest, tasks, dry_run=False)
+        if dest.name in {d.name for d in missing}:
+            status = NOT_LAUNCHED            # carried over as recorded (see above)
+        else:
+            status, _, _, _ = rescore(dest, tasks, dry_run=False)
         statuses[status.split(":")[0]] = statuses.get(status.split(":")[0], 0) + 1
         res = json.loads((dest / "result.json").read_text())
         m = res.setdefault("metrics", {})
@@ -277,7 +304,7 @@ def relabel_run(runs_dir: Path, run_id: str, *, new_run_id: str, out_dir: Path,
         m["corpus_version"] = now["corpus_version"]
         m["heldout_version"] = now["heldout_version"]
         (dest / "result.json").write_text(json.dumps(res, indent=2))
-    if bad := {k: v for k, v in statuses.items() if k not in ("rescored", "unrecoverable")}:
+    if bad := {k: v for k, v in statuses.items() if k not in ("rescored", "unrecoverable", NOT_LAUNCHED)}:
         # Copies are already written; say so plainly rather than leave a half-labelled run.
         raise RelabelRefused([f"{n} episode(s) could not be rescored ({k}); the copy under "
                               f"{out_dir} is incomplete: delete it" for k, n in bad.items()])

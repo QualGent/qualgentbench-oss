@@ -223,3 +223,31 @@ def test_the_script_checks_without_writing(world, monkeypatch, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out["episodes"] == 1 and out["now"]["corpus_version"] == corpus.version_of(world["new"])
     assert not (world["tmp"] / "out").exists()
+
+
+def _never_launched_episode(world, staging_failed: str = "precondition not met"):
+    """A second episode in r1: a failed first attempt whose agent never started."""
+    ep = world["runs"] / "case-1~clean" / "2026-01-01_case-1_ep-ffffffffffff"
+    ep.mkdir(parents=True)
+    res = json.loads((world["ep"] / "result.json").read_text())
+    res["metrics"].update({"staging_failed": staging_failed, "env_failure": bool(staging_failed),
+                           "infra_failure": bool(staging_failed), "completed": False})
+    (ep / "result.json").write_text(json.dumps(res))
+    return ep
+
+
+def test_an_episode_whose_agent_never_launched_is_carried_over(world):
+    ep = _never_launched_episode(world)
+    rep = _relabel(world)
+    assert rep.episodes == 2 and rep.statuses == {"rescored": 1, relabel.NOT_LAUNCHED: 1}
+    copy = json.loads((world["tmp"] / "out" / ep.parent.name / ep.name / "result.json").read_text())
+    assert copy["metrics"]["corpus_version"] == corpus.version_of(world["new"])
+    assert copy["metrics"]["staging_failed"] and "rescored_with" not in copy
+    assert copy["restamped_from"]["run_id"] == "r1"
+
+
+def test_a_missing_transcript_on_an_episode_that_ran_is_refused_before_writing(world):
+    _never_launched_episode(world, staging_failed="")
+    with pytest.raises(relabel.RelabelRefused, match="no transcript although their agent ran"):
+        _relabel(world)
+    assert not (world["tmp"] / "out").exists()
