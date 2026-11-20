@@ -38,7 +38,9 @@ episodes, and none of them needs a device to catch:
               agent's misses (QUA-2783) (error). Two deferrals are warnings, each naming
               who owns it: a case carrying `witness_before_action:` (re-authored under that
               ticket; this lint does not ask a second ticket to edit it) and a held-out app
-              (its files live outside the repo; the corpus owner audits them).
+              (its files live outside the repo; the corpus owner audits them). A
+              `stated` note must name the step or expected outcome that states the value,
+              since `brief: intended_behavior` never reaches a journey agent (QUA-3549).
   quotable    a DISPLAY side bug whose effective marker is below the matcher's evidence
               floor (`journey._evidence`, `_MIN_EVIDENCE_CHARS`): no report can quote it,
               so an exact sighting is either credited nothing or credited to another bug
@@ -72,6 +74,14 @@ _MIN_WITNESS_CHARS = 3
 #   entered      the route itself entered the value the screen then misstates
 #   cross-check  the true value is drawn elsewhere on the route the brief walks
 REFERENCE_KINDS = ("stated", "entered", "cross-check")
+
+# A `stated` reference must say WHERE the journey brief states the value: a step or the
+# expected outcome. Those (with the case name) are all `journey.brief` shows the agent;
+# the case's `brief: {title, intended_behavior}` block feeds create mode only. QUA-3549:
+# birday-delete-anniversary's note said "the brief says ..." and pointed at
+# `intended_behavior`, which no journey agent ever read — 14 of 14 seeded episodes saw
+# the seeded row and called it correct.
+_STATED_WHERE = re.compile(r"\b(?:steps?|outcome)\b", re.IGNORECASE)
 
 
 class Finding:
@@ -374,6 +384,12 @@ def rule_reference(case: dict, defects: dict[str, dict], heldout: bool = False) 
             found.append(Finding("error", "reference", cid,
                                  f"side bug {bug_id}: reference has no `note:` saying where "
                                  f"the brief gives the value away"))
+        elif kind == "stated" and not _STATED_WHERE.search(note):
+            found.append(Finding("error", "reference", cid,
+                                 f"side bug {bug_id}: a `stated` note must name the step or "
+                                 f"the expected outcome that states the value — the journey "
+                                 f"agent reads only name, steps and expected outcome, never "
+                                 f"`brief: intended_behavior`"))
     return found
 
 

@@ -653,4 +653,15 @@ Side-bug references: `birday-favorite-from-list` / `zodiac-sign-shifted`, marker
 sagittarius). `birday-favorite-note` / `favorite-born-year-off-by-one`, marker
 `born in 1993`, cross-check (the same row's age and next date, and the list's May 30, 1992).
 `birday-delete-anniversary` / `astrology-on-anniversary`, marker `Zodiac sign:`, stated
-(the brief keeps astrology lines to a birthday's details).
+(step 2 says zodiac and Chinese signs are shown for birthdays only).
+
+**Brief amended, QUA-3549 (2026-11-19).** At authoring the `stated` reference pointed at
+the case's `brief: intended_behavior`, which only create mode shows; a journey agent reads
+the name, steps and expected outcome (`journey.brief`) and nothing else. The seeded row
+fired in every episode and every agent read it, but 14 of 14 seeded episodes (round 1 of
+the agent-memory experiment, 12, plus its validation smoke, 2, all arms) quoted
+`Zodiac sign: gemini` as correct and filed no bug: nothing they read said an anniversary
+has no zodiac row. Step 2 now states the rule in its own words (`lint_create_briefs.py`'s `copy` rule keeps
+it from repeating `intended_behavior`); the route, oracle and marker are unchanged, and the
+step text does not contain the marker (`journey.echo_haystack`). The lint's
+`reference` rule now fails a `stated` note that names no step or expected outcome.
