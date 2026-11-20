@@ -16,6 +16,9 @@ Decide one operation for EVERY proposal:
 - `UPDATE` with `target`: the proposal confirms or refines an existing entry (the
   `updates` id or one of the `candidates`). Give `text` only if the entry's wording
   should change; omit it if the entry is right as written.
+  When several proposals UPDATE the same entry, write ONE combined `text` that keeps
+  every new fact, put it on one of those decisions, and omit `text` on the others:
+  only the first text change of an entry is applied, a second one is rejected.
 - `INVALIDATE` with `target` and `reason`: the proposal shows that an existing entry
   (its `contradicts` id) is wrong. Use it only when the evidence is clear; otherwise
   choose NOOP and the entry's contradiction count goes up instead.

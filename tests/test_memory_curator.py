@@ -262,6 +262,89 @@ def test_same_episode_confirms_an_entry_once(mk: Path, tmp_path: Path) -> None:
     assert _app(r).get("note-001").seen == 1
 
 
+# ── several UPDATEs of one entry in one pass (the log must equal what landed) ─
+
+_SETUP_A = "No sign-in; the first launch shows a one-page welcome and \"Skip\" closes it."
+_SETUP_B = "No sign-in; after \"Skip\" on the welcome page the empty note list opens."
+_SETUP_AB = ("No sign-in; the first launch shows a one-page welcome, and \"Skip\" "
+             "opens the empty note list.")
+
+
+def _two_setup_updates(mk: Path, tmp_path: Path, decisions: dict[str, dict]):
+    eps = [_ep("e1", [_p("setup", "Skip on the welcome page closes it.",
+                         updates="setup-001")]),
+           _ep("e2", [_p("setup", "After Skip the empty note list opens.",
+                         updates="setup-001")])]
+    return _run(mk, tmp_path, eps, _model(decisions))
+
+
+def _accepted(r: cur.CurateResult) -> int:
+    return r.counts["ADD"] + r.counts["UPDATE"] + r.counts["INVALIDATE"]
+
+
+@pytest.mark.parametrize("text_on", ["e1#0", "e2#0"])
+def test_combined_update_and_a_confirmation_both_land(mk: Path, tmp_path: Path,
+                                                      text_on: str) -> None:
+    # The prompt's merge rule: one combined text, the other decision only confirms.
+    # Either order: the text lands, both episodes confirm, both count as accepted.
+    d = {k: {"op": "UPDATE", "target": "setup-001", "reason": "confirms"}
+         for k in ("e1#0", "e2#0")}
+    d[text_on]["text"] = _SETUP_AB
+    r = _two_setup_updates(mk, tmp_path, d)
+    e = _app(r).get("setup-001")
+    assert e.text == _SETUP_AB and e.seen == 4
+    ops = _ops(r)
+    other = "e2#0" if text_on == "e1#0" else "e1#0"
+    assert ops[text_on]["op"] == ops[other]["op"] == "UPDATE"
+    assert ops[text_on]["text_changed"] and not ops[other]["text_changed"]
+    # `text` is what memory holds after the op, never the proposal's own wording.
+    assert ops[other]["text"] == (_SETUP_AB if other == "e2#0"
+                                  else "No sign-in. The first launch shows a one-page "
+                                       "welcome; tap \"Skip\".")
+    assert ops[other]["proposal_text"].startswith(("Skip on", "After Skip"))
+    assert r.counts["UPDATE"] == _accepted(r) == 2
+    _assert_clean(r)
+
+
+@pytest.mark.parametrize("first,second", [(_SETUP_A, _SETUP_B), (_SETUP_B, _SETUP_A)])
+def test_second_text_update_of_one_entry_is_rejected(mk: Path, tmp_path: Path,
+                                                     first: str, second: str) -> None:
+    # Both texts were decided against M_k; applying both would silently overwrite the
+    # first. The later one is a NOOP with a reason and is not counted as accepted.
+    r = _two_setup_updates(mk, tmp_path, {
+        "e1#0": {"op": "UPDATE", "target": "setup-001", "text": first},
+        "e2#0": {"op": "UPDATE", "target": "setup-001", "text": second}})
+    e = _app(r).get("setup-001")
+    assert e.text == first and e.seen == 3
+    ops = _ops(r)
+    assert ops["e1#0"]["op"] == "UPDATE" and ops["e1#0"]["text"] == first
+    rej = ops["e2#0"]
+    assert rej["op"] == "NOOP" and rej["by"] == "model"
+    assert "already rewritten in this pass by proposal e1#0" in rej["reason"]
+    assert rej["rejected_text"] == second and rej["text"] == first
+    assert (r.counts["UPDATE"], r.counts["NOOP"], _accepted(r)) == (1, 1, 1)
+    # The metrics join counts only what landed.
+    from qualgentbench.memory.metrics import curation_counts
+    assert curation_counts(r.log) == {"e1": 1, "e2": 0}
+    _assert_clean(r)
+
+
+def test_update_that_changes_nothing_is_a_noop(mk: Path, tmp_path: Path) -> None:
+    # One episode confirming one entry twice: the second confirmation lands nothing.
+    r = _run(mk, tmp_path, [_ep("e1", [
+        _p("setup", "Skip on the welcome page closes it.", updates="setup-001"),
+        _p("setup", "The welcome page has a Skip button.", updates="setup-001")])],
+        _model({k: {"op": "UPDATE", "target": "setup-001"} for k in ("e1#0", "e1#1")}))
+    ops = _ops(r)
+    assert ops["e1#0"]["op"] == "UPDATE" and ops["e1#1"]["op"] == "NOOP"
+    assert _app(r).get("setup-001").seen == 3 and _accepted(r) == 1
+
+
+def test_curator_prompt_asks_for_one_combined_update_per_entry() -> None:
+    text = cur.prompt_text()
+    assert "ONE combined `text`" in text and "a second one is rejected" in text
+
+
 def test_similarity() -> None:
     assert cur.similarity("Tap  Save.", "tap save") == 1.0
     assert cur.similarity("Search is slow", "The archive holds old notes") < cur.SIM_LOW
