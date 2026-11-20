@@ -44,6 +44,12 @@ _SESSION_ROOTS = ("/.claude", "/.codex", "/.config/claude", "/.cache/claude")
 # A path-shaped token that is not a URL tail or a flag value. Deliberately
 # permissive — over-matches are filtered by the root checks; a missed path is a leak.
 _PATH_TOKEN = re.compile(r"(?<![\w:=])(?:\$HOME|~|/)[A-Za-z0-9._+\-/$~]{3,}")
+# The same, for the agent's own command text, with `*` and `?` kept in the token
+# (QUA-3543). Cut at the first wildcard, `cd <runs>/<case>/*_<own ep id>/workspace`
+# read as `<runs>/<case>/` — the case directory, every sibling's parent — and voided
+# an agent that only retyped its own cwd. The whole pattern is judged instead
+# (`_glob_under` for a hit, `_own_glob` for the own-episode exemption).
+_COMMAND_PATH_TOKEN = re.compile(r"(?<![\w:=])(?:\$HOME|~|/)[A-Za-z0-9._+\-/$~*?]{3,}")
 
 _PATH_KEYS = ("file_path", "path", "notebook_path", "pattern", "glob", "cwd")
 
@@ -221,7 +227,7 @@ def _candidate_paths(event) -> list[str]:
     for key in ("command", "cmd", "script", "content"):
         val = inp.get(key)
         if isinstance(val, str) and val:
-            out.extend(_PATH_TOKEN.findall(val))
+            out.extend(_COMMAND_PATH_TOKEN.findall(val))
     return out
 
 
@@ -748,6 +754,45 @@ def _misfiled_self_path(path: str, own_forms: list[str], runs_forms: list[str]) 
     return False
 
 
+# The opaque episode id that ends a blinded episode directory name (QUA-2806).
+_EPISODE_ID = re.compile(r"_(ep-[0-9a-f]{8,})$")
+
+
+def _own_glob(path: str, own_forms: list[str], runs_forms: list[str]) -> bool:
+    """A glob path that can only name THIS episode's own directory (QUA-3543).
+
+    Agents retype their cwd with a wildcard for the long part they do not want to copy:
+    `cd /work/runs/<case>/*trial-1_ep-7fa312579f42/workspace`. Three memory-arm units of
+    round 1 were voided as `other_episode` for that, though no other episode was read:
+    a glob under the runs root is a hit, and the own-directory exemption never applies
+    to a pattern. The pattern is excused only when every component down to the episode
+    directory matches the own path AND the episode-directory component carries the own
+    episode id literally. The id is random and unique, so such a pattern cannot match a
+    sibling episode, whatever is on disk. A pattern without the id (`<case>/*/result.json`)
+    still reaches every sibling and stays a hit."""
+    if not _GLOB_CHARS.search(path):
+        return False
+    p = path.split("/")
+    if ".." in p:
+        return False
+    for root in runs_forms:
+        if not _glob_under(path, root):
+            continue
+        r = os.path.normpath(root).split("/")
+        tail = p[len(r):]
+        for own in own_forms:
+            if not _under(own, root):
+                continue
+            own_parts = os.path.relpath(own, root).split(os.sep)
+            m = _EPISODE_ID.search(own_parts[-1])
+            if not m or len(tail) < len(own_parts):
+                continue
+            if (all(fnmatch.fnmatchcase(o, t) for o, t in zip(own_parts, tail))
+                    and m.group(1) in tail[len(own_parts) - 1]):
+                return True
+    return False
+
+
 def _ancestor_of(path: str, root: str) -> bool:
     """`path` is a directory strictly above `root` (a recursive read of it reads root)."""
     path = path.rstrip("/") or "/"
@@ -941,6 +986,8 @@ def scan(
                 continue
             if any(_under(path, r) for r in own_forms):
                 continue
+            if _own_glob(path, own_forms, runs_forms):
+                continue
             if any(_under(path, r) for r in dl_roots):
                 if any(_under(path, h) for h in handed):
                     continue
@@ -1009,7 +1056,8 @@ def _classify_reach(report: Contamination, seen_hard: set, seen_soft: set, name:
         # `plain` (from a rollout call) or `real` (a symlink resolved on disk): a hit
         # when it lands in the runs root outside this episode.
         hit = (any(_glob_under(path, r) for r in runs_forms)
-               and not any(_under(path, r) for r in own_forms))
+               and not any(_under(path, r) for r in own_forms)
+               and not _own_glob(path, own_forms, runs_forms))
         if hit and how == "plain" and _misfiled_self_path(path, own_forms, runs_forms):
             key = ("misfiled_write", path)
             if key not in seen_soft:
