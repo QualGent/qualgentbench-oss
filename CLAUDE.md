@@ -227,8 +227,8 @@ token used to stop at the first `*`, so `cd <runs>/<case>/*_<own ep id>/workspac
 `<runs>/<case>/` and voided three memory-arm units of round 1), and a pattern whose
 components match the own episode directory AND whose episode component carries the own
 random episode id literally is the episode's own reach (`contamination._own_glob`); a
-pattern that can match a sibling (`<case>/*/result.json`, `*/../*`) stays a hit. On main
-this is a refreshed scorer v3 pin (the agent-memory epic numbers the same closure v4). **A mistyped copy of the agent's OWN episode path is not another episode**
+pattern that can match a sibling (`<case>/*/result.json`, `*/../*`) stays a hit. Scorer v4,
+the same closure and pin as the agent-memory epic's v4. **A mistyped copy of the agent's OWN episode path is not another episode**
 (2026-10-07, `contamination._misfiled_self_path`): claude-code's Write takes an absolute
 path, so writing `findings.yaml` "in your working directory" means retyping
 `<ts>_<case>_<agent>_<model>_<arm>_trial-N_<ep-id>`, and DeepSeek V4.1 Flash got it wrong in
