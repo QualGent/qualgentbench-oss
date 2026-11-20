@@ -323,7 +323,11 @@ test_cases:
 
   # DISPLAY side bug (widget-inventory). The case's own outcome is the delete, which
   # holds on both arms; the seeded anniversary details keep a "Zodiac sign:" row that
-  # no non-birthday event shows.
+  # no non-birthday event shows. Step 2 STATES that rule (QUA-3549): a journey agent
+  # reads only name, steps and expected outcome (`journey.brief`), never `brief:` —
+  # that block feeds create mode — so before the amendment nothing the agent read said
+  # the row was out of place, and 14 of 14 seeded episodes (round 1 + smoke) quoted
+  # "Zodiac sign: gemini" as correct.
   - id: birday-delete-anniversary
     name: Find an anniversary and delete it from its details
     brief:
@@ -336,7 +340,7 @@ test_cases:
         from the list.
     steps:
       - "Search for Iris and open Iris Bauer's anniversary."
-      - "Read its details."
+      - "Read its details. Birday shows zodiac and Chinese signs for birthdays only, never for an anniversary."
       - "Use Delete event."
       - "Read the list."
     expected_outcome: "Iris Bauer's anniversary is deleted and no longer listed."
@@ -350,7 +354,7 @@ test_cases:
         query: "select count(*) from Event where name='Iris' and surname='Bauer';"
     bugs:
       - id: astrology-on-anniversary
-        reference: {kind: stated, note: "the brief says astrology lines belong to a birthday's details only, so a zodiac row on an anniversary's details is out of place"}
+        reference: {kind: stated, note: "step 2 states zodiac and Chinese signs are shown for birthdays only, so a zodiac row on an anniversary's details is out of place"}
 
   # PERSISTENCE — change a birthday's date from its edit sheet. The seeded sheet closes
   # as if saved and the row keeps January 21. No screen witness: the date picker's own

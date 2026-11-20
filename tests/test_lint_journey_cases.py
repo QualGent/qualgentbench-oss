@@ -411,7 +411,7 @@ def test_class_is_invisible_to_scoring():
 
 # ── reference: how the brief lets the agent know a side bug is wrong (QUA-2783) ──
 
-_REF = {"kind": "stated", "note": "The brief states the average is 80 kg."}
+_REF = {"kind": "stated", "note": "Step 3 states the average is 80 kg."}
 
 
 def test_a_side_bug_without_a_reference_is_an_error():
@@ -421,8 +421,41 @@ def test_a_side_bug_without_a_reference_is_an_error():
 
 @pytest.mark.parametrize("kind", lint.REFERENCE_KINDS)
 def test_every_reference_kind_lints_clean(kind):
-    doc = _doc(bugs=[{"id": "avg-bug", "reference": {"kind": kind, "note": "why"}}])
+    doc = _doc(bugs=[{"id": "avg-bug", "reference": {"kind": kind, "note": "step 2 says why"}}])
     assert _levels(lint.lint_doc(doc), "reference") == []
+
+
+@pytest.mark.parametrize("note", [
+    "the brief says astrology lines belong to a birthday's details only",
+    "the intended behavior names the value",
+])
+def test_a_stated_note_that_names_no_step_or_outcome_is_an_error(note):
+    """QUA-3549: a journey agent reads name, steps and expected outcome only; a note
+    resting on `brief: intended_behavior` (create mode's field) names nothing it saw."""
+    doc = _doc(bugs=[{"id": "avg-bug", "reference": {"kind": "stated", "note": note}}])
+    found = _levels(lint.lint_doc(doc), "reference")
+    assert [f.level for f in found] == ["error"] and "step" in found[0].detail
+
+
+@pytest.mark.parametrize("note", ["Steps 1 and 5 name the Overview",
+                                  "The expected outcome states the task is due today"])
+def test_a_stated_note_naming_a_step_or_the_outcome_is_clean(note):
+    doc = _doc(bugs=[{"id": "avg-bug", "reference": {"kind": "stated", "note": note}}])
+    assert _levels(lint.lint_doc(doc), "reference") == []
+
+
+def test_birday_delete_anniversary_states_its_rule_in_the_journey_brief():
+    """QUA-3549: the side bug `astrology-on-anniversary` is `stated`; the statement must
+    be in what `journey.brief` shows the agent, and must not hand over the marker."""
+    from qualgentbench import bugs, journey
+    suite = next(s for s in bugs.load_apps() if s["app"]["id"] == "birday")
+    task = next(t for t in journey.journey_tasks(suite)
+                if t.id == journey.task_id("birday-delete-anniversary", "seeded"))
+    text = journey.brief(task, "emulator-5554", "mcp")
+    assert "zodiac and Chinese signs for birthdays only, never for an anniversary" in text
+    case = next(c for c in journey.load_cases("birday")["test_cases"]
+                if c["id"] == "birday-delete-anniversary")
+    assert not journey._echoable("Zodiac sign:", journey.echo_haystack(case))
 
 
 @pytest.mark.parametrize("ref", [
