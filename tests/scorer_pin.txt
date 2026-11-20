@@ -6,6 +6,5 @@
 # three journey functions to the whole closure (QUA-2934); no rule changed.
 1 d9bc8718608ecad3b23d0b7fef385d250b51318f9e4859c7409eeea3e51c6adb
 2 06339c3671ae8e4fd475f7e72b8d2cfadf3a5edb3f6ac02dbd7791c015fb439d
-# 3 was refreshed by QUA-3543 (own-episode globs, copied from the agent-memory epic, where
-# the same closure is pinned as 4). Before: e48f001ebc652c1383f7ef0b384e98706c8043753efeee371f3a1f40ac299734
-3 b855894e198f6f94d79513ae2671c45bac8bff46169e9152cc3d78d10be89967
+3 e48f001ebc652c1383f7ef0b384e98706c8043753efeee371f3a1f40ac299734
+4 b855894e198f6f94d79513ae2671c45bac8bff46169e9152cc3d78d10be89967

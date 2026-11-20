@@ -1711,15 +1711,14 @@ BLOCKER_TIERS = ("L4", "L3")
 #:   token boundary. Under v2 the `n` of `\n` glued onto the line's first word, and
 #:   markor-move-two-recipes scored correct runs as not witnessed on both builds. It can
 #:   move a v2 verdict: a witness or grounded quote at a line start now matches.
-#: 3, refreshed on main (QUA-3543, copied from the agent-memory epic's #216): the
-#:   contamination scan reads a wildcard path in the agent's command text whole (it used to
-#:   cut at the first `*`, so `<runs>/<case>/*_<own ep id>/workspace` read as the case
-#:   directory), and a pattern that carries the episode's own id and matches its own
-#:   directory is the episode's own reach, not `other_episode`. It can un-void an episode
-#:   that retyped its own cwd with a wildcard. The epic numbers this exact closure v4 (same
-#:   pin hash); main keeps 3 by the owner's decision (2026-11-20) until the next bump, so a
-#:   main-built "v3" verdict after this commit includes the rule and an older one does not.
-SCORER_VERSION = 3
+#: 4 (QUA-3543, copied to main from the agent-memory epic's #216, where it is also v4):
+#:   the contamination scan reads a wildcard path in the agent's command text whole (it
+#:   used to cut at the first `*`, so `<runs>/<case>/*_<own ep id>/workspace` read as the
+#:   case directory), and a pattern that carries the episode's own id and matches its own
+#:   directory is the episode's own reach, not `other_episode`. It can un-void a v3
+#:   episode that retyped its own cwd with a wildcard; a pattern that can match a sibling
+#:   stays a hit. Same closure, same pin, as the epic's v4.
+SCORER_VERSION = 4
 
 
 def _defect_lookup(m: list[dict]) -> rates.DefectLookup:
