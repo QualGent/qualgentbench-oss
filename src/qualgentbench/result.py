@@ -106,7 +106,7 @@ class VerifierResult(BaseModel):
 RESCORE_TRACE_KEYS = ("rescored_from", "rescored_with", "rescored_at")
 #: Fields omitted from the dump while None, so a result.json written without them
 #: (an older run, the native agent) keeps its exact shape.
-_OPTIONAL_KEYS = (*RESCORE_TRACE_KEYS, "provider")
+_OPTIONAL_KEYS = (*RESCORE_TRACE_KEYS, "provider", "restamped_from")
 
 
 class RunResult(BaseModel):
@@ -151,6 +151,12 @@ class RunResult(BaseModel):
     rescored_from: dict[str, Any] | None = None
     rescored_with: dict[str, Any] | None = None
     rescored_at: str | None = None
+    # A re-label (QUA-3553, `relabel.relabel_run`): this episode is a COPY of one that ran
+    # in another run and was recorded under another corpus; a scoring-only change let it
+    # be rescored and re-stamped with the current corpus and held-out versions. Holds the
+    # original run id, its recorded versions and scorer. None (and absent from the dump)
+    # on every episode that was not re-labelled.
+    restamped_from: dict[str, Any] | None = None
 
     @model_serializer(mode="wrap")
     def _drop_unset_rescore_trace(self, handler: Any) -> dict[str, Any]:
