@@ -336,6 +336,27 @@ caveat on `recorded_is_rescore`: episode summaries written before QUA-2927 did n
 `rescored_from`, so an `--index-from` rebuild over them reads `false` for an episode
 rescored in place, while a fresh build (which reads result.json) reads `true`.
 
+### Re-labelling a rescored run after a scoring-only change (QUA-3553)
+
+A run's set key comes from the corpus and held-out versions its episodes RECORDED, and a
+rescore keeps them (`rescored_with` names the corpus it read). So a board rescored after
+a change to the answer key alone (a symptom wording, a known clean-build behaviour, a
+measured text) is still filed under the old set. `scripts/relabel_run.py`
+(`qualgentbench.relabel`) files it under the new one, as a COPY under a new run id in a
+separate runs directory: every episode is rescored against the current corpus, then
+`metrics.corpus_version` / `heldout_version` take the current values and
+`restamped_from` keeps the original run id, versions and scorer. The original run is
+never modified.
+
+It refuses, with every reason, unless only scoring inputs changed. The recorded corpus
+must be supplied as data roots (`--old-corpus`, `--old-heldout`) that hash to the
+versions the run recorded. Then, per app, the journey APK's sha256 and the case ids must
+be identical, and per case `name`, `steps`, `expected_outcome`, `step_budget`, `check`
+and the seeded bug ids. It also refuses a run that recorded no held-out split while one
+is configured now (that would claim held-out episodes it never ran). Held-out changes are
+counted, never named, in its output. A view of the copy lists the re-label in the
+manifest (`versions.restamped_from`).
+
 ### Neutral reports: known clean-build behaviour and downstream effects (scorer v5)
 
 A journey report that `match_report` leaves unmatched is a false report, with two

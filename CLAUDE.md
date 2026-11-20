@@ -759,7 +759,7 @@ non-scoring modules are NOT pinned: bump by hand if a change there can move a ve
 writing rescore records `rescored_from` (the old verdict, void, scorer and `defects` stamp),
 `rescored_with` (`{scorer_version, corpus_version, heldout_version}`) and `rescored_at`
 (UTC) in result.json — optional `RunResult` fields, omitted from the dump while None, so
-run-time results are unchanged; a dry run writes none of them. The device
+run-time results are unchanged; a dry run writes none of them. A run rescored after a SCORING-ONLY change can be re-labelled under the new set key with `scripts/relabel_run.py` (QUA-3553, `relabel.py`): a copy under a new run id, re-stamped with the current versions, `restamped_from` on each result; refused unless briefs, budgets, checks, bug ids and APKs are identical to the recorded corpus (docs/scoring.md). The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago), and so is the device CLOCK (below). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`

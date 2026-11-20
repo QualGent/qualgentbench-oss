@@ -226,7 +226,10 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #:                  "device_class": str|null,      # the one class every episode ran on
 #:                  "device_classes": [str],       # the distinct classes, sorted
 #:                  "device_class_unstamped": int, # episodes with no recorded class
-#:                  "mixed": bool, "set_key": str|null},
+#:                  "mixed": bool, "set_key": str|null,
+#:                  # only on a re-labelled run (QUA-3553, `relabel`):
+#:                  "restamped_from": {"episodes": int, "run_ids", "corpus_versions",
+#:                                     "heldout_versions": [str]}},
 #:     "set_key": "j-<corpus>-<heldout|none>-b<brief|none>[-d<device class>]"
 #:                | "c-<corpus>-g<grader>-cb<brief>"
 #:                | null,                    # null: mixed, unstamped corpus, or not journey
@@ -2549,6 +2552,18 @@ def _versions(eps: list[_Summary]) -> dict:
            "device_classes": classes, "device_class_unstamped": class_un,
            "mixed": mixed}
     out["set_key"] = _set_key(out)
+    # A re-labelled run (QUA-3553): additive, and only on a run that has one, so every
+    # other manifest keeps its bytes.
+    restamped = [e.result.restamped_from for e in scope if e.result.restamped_from]
+    if restamped:
+        out["restamped_from"] = {
+            "episodes": len(restamped),
+            "run_ids": sorted({str(r.get("run_id")) for r in restamped if r.get("run_id")}),
+            "corpus_versions": sorted({str(r.get("corpus_version")) for r in restamped
+                                       if r.get("corpus_version")}),
+            "heldout_versions": sorted({str(r.get("heldout_version")) for r in restamped
+                                        if r.get("heldout_version")}),
+        }
     return out
 
 
