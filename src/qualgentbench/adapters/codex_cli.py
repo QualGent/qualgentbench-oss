@@ -386,11 +386,15 @@ class CodexCliAdapter(AgentAdapter):
             # it reads AWS_BEARER_TOKEN_BEDROCK and AWS_REGION. `amazon-bedrock` (the
             # Mantle route) 404s for these models (live check, 2026-11-17).
             lines.append(f"model_provider = {self._toml_value(providers.CODEX_BEDROCK_PROVIDER)}")
-        if context.developer_instructions:
+        # Memory (QUA-3488) rides the same channel, after any creation template. Never
+        # `model_instructions_file`, which replaces Codex's base prompt; the brief on
+        # stdin is untouched, and `features.memories` stays disabled in argv.
+        developer = "\n\n".join(t for t in (context.developer_instructions,
+                                            context.memory_text) if t)
+        if developer:
             # How the desktop app installs a subagent template for Codex (the body as
             # `developer_instructions`); written only into this episode's CODEX_HOME.
-            lines.append("developer_instructions = "
-                         f"{self._toml_value(context.developer_instructions)}")
+            lines.append(f"developer_instructions = {self._toml_value(developer)}")
 
         if shim := self._SHIMS.get(str(context.run_dir)):
             # The episode's tool-namespace relay (QUA-3535). The built-in provider

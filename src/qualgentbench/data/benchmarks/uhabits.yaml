@@ -841,3 +841,49 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: journey, screen_keywords: ["habit"]}
+
+# ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
+# BENIGN UI changes behind the same QgbFlags shim as the bugs (see markor.yaml for the
+# contract). Declared for the harness in data/test-cases/uhabits.yaml `drift:`.
+drift:
+  # relabel: the toolbar's "Add habit" action reads "New habit".
+  - id: uhabits-drift-add-label
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/list/ListHabitsMenu.kt
+      find: "inflater.inflate(R.menu.list_habits, menu)"
+      replace: |-
+        inflater.inflate(R.menu.list_habits, menu)
+        if (org.isoron.uhabits.QgbFlags.on("uhabits-drift-add-label")) {
+            menu.findItem(R.id.actionCreateHabit).title = "New habit"
+        }
+  # move: with a habit selected, "Change color" leaves the toolbar for More options.
+  - id: uhabits-drift-color-overflow
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/list/ListHabitsSelectionMenu.kt
+      find: "itemColor.isVisible = true"
+      replace: |-
+        itemColor.isVisible = true
+        if (org.isoron.uhabits.QgbFlags.on("uhabits-drift-color-overflow")) {
+            itemColor.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        }
+  # relabel: the selection menu's "Archive" entry reads "Move to archive".
+  - id: uhabits-drift-archive-label
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/list/ListHabitsSelectionMenu.kt
+      find: "itemArchive.isVisible = behavior.canArchive()"
+      replace: |-
+        itemArchive.isVisible = behavior.canArchive()
+        if (org.isoron.uhabits.QgbFlags.on("uhabits-drift-archive-label")) {
+            itemArchive.title = "Move to archive"
+        }
+  # reorder: the new-habit type picker lists Measurable above Yes or No.
+  - id: uhabits-drift-type-order
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/edit/HabitTypeDialog.kt
+      find: "return binding.root"
+      replace: |-
+        if (org.isoron.uhabits.QgbFlags.on("uhabits-drift-type-order")) {
+            binding.background.removeView(binding.buttonMeasurable)
+            binding.background.addView(binding.buttonMeasurable, 0)
+        }
+        return binding.root

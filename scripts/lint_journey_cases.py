@@ -38,7 +38,9 @@ episodes, and none of them needs a device to catch:
               agent's misses (QUA-2783) (error). Two deferrals are warnings, each naming
               who owns it: a case carrying `witness_before_action:` (re-authored under that
               ticket; this lint does not ask a second ticket to edit it) and a held-out app
-              (its files live outside the repo; the corpus owner audits them).
+              (its files live outside the repo; the corpus owner audits them). A
+              `stated` note must name the step or expected outcome that states the value,
+              since `brief: intended_behavior` never reaches a journey agent (QUA-3549).
   known       an app-level `known_behaviours:` list (QUA-3541) that `journey.
               load_known_behaviours` refuses: an entry with no id or a duplicate one,
               no screen quote (`texts`/`patterns`), a text under the evidence floor or a
@@ -48,6 +50,12 @@ episodes, and none of them needs a device to catch:
               floor (`journey._evidence`, `_MIN_EVIDENCE_CHARS`): no report can quote it,
               so an exact sighting is either credited nothing or credited to another bug
               (the 2026-09-19 board, `subtask-chip-low`) (error).
+  drift       the case file's `drift:` block (QUA-3490, benign UI changes behind QgbFlags):
+              an id that is also a defect id or appears in a case's `bugs:`, a kind
+              outside `journey.DRIFT_KINDS`, no `change:`, a rewrite whose steps are not
+              replayable or that matches no case's route, an `affects:` naming an unknown
+              case, a flag no case would derive, or a drift id list that differs from the
+              benchmark spec's `drift:` patches (error).
 
 Exit 1 on any error. `--app a,b` narrows the files. The rules are pure functions over a
 loaded document so `tests/test_lint_journey_cases.py` can drive each one in isolation.
@@ -72,6 +80,14 @@ _MIN_WITNESS_CHARS = 3
 #   cross-check  the true value is drawn elsewhere on the route the brief walks
 REFERENCE_KINDS = ("stated", "entered", "cross-check")
 
+# A `stated` reference must say WHERE the journey brief states the value: a step or the
+# expected outcome. Those (with the case name) are all `journey.brief` shows the agent;
+# the case's `brief: {title, intended_behavior}` block feeds create mode only. QUA-3549:
+# birday-delete-anniversary's note said "the brief says ..." and pointed at
+# `intended_behavior`, which no journey agent ever read — 14 of 14 seeded episodes saw
+# the seeded row and called it correct.
+_STATED_WHERE = re.compile(r"\b(?:steps?|outcome)\b", re.IGNORECASE)
+
 
 class Finding:
     """One lint result. A plain class, not a dataclass: the tests load this script
@@ -81,7 +97,7 @@ class Finding:
     def __init__(self, level: str, rule: str, case: str, detail: str) -> None:
         self.level = level          # "error" | "warning"
         self.rule = rule            # leak | brief | no-oracle | route | class | columns | short
-                                    # | reference | quotable
+                                    # | reference | quotable | drift
         self.case = case            # the case id (the defect id for `class`)
         self.detail = detail
 
@@ -373,6 +389,12 @@ def rule_reference(case: dict, defects: dict[str, dict], heldout: bool = False) 
             found.append(Finding("error", "reference", cid,
                                  f"side bug {bug_id}: reference has no `note:` saying where "
                                  f"the brief gives the value away"))
+        elif kind == "stated" and not _STATED_WHERE.search(note):
+            found.append(Finding("error", "reference", cid,
+                                 f"side bug {bug_id}: a `stated` note must name the step or "
+                                 f"the expected outcome that states the value — the journey "
+                                 f"agent reads only name, steps and expected outcome, never "
+                                 f"`brief: intended_behavior`"))
     return found
 
 
@@ -389,6 +411,72 @@ def rule_quotable(case: dict, defects: dict[str, dict]) -> list[Finding]:
             if bug_id in display and not journey._evidence(marker)]
 
 
+def rule_drift(doc: dict, spec_drift_ids: set[str] | None = None) -> list[Finding]:
+    """QUA-3490: the case file's `drift:` block. A drift flag is a BENIGN UI change, so
+    it must never be confusable with a defect: its id is no defect id and no case
+    lists it under `bugs:`; its kind is one of `journey.DRIFT_KINDS`; it says what
+    changed (`change:`); every rewrite maps a well-formed route step onto well-formed
+    steps and actually applies to some case (or the flag names its cases in
+    `affects:`); and — when the benchmark spec is given — the case file declares
+    exactly the spec's drift ids (a flag patched in but undeclared would be switched
+    on by no stage; one declared but never patched would change nothing)."""
+    found: list[Finding] = []
+    defects = set(journey.load_defects(doc))
+    cases = {str(c.get("id")): c for c in doc.get("test_cases") or []}
+    seeded = {b["id"] for c in cases.values() for b in journey.case_bugs(c)}
+    raw = doc.get(journey.DRIFT_KEY) or []
+    if not isinstance(raw, list):
+        return [Finding("error", "drift", "drift", "`drift:` must be a list")]
+    seen: set[str] = set()
+    for d in raw:
+        did = str((d or {}).get("id") or "") if isinstance(d, dict) else ""
+        if not did:
+            found.append(Finding("error", "drift", "drift", f"entry without an id: {d!r}"))
+            continue
+        if did in seen:
+            found.append(Finding("error", "drift", did, "duplicate drift id"))
+        seen.add(did)
+        if did in defects:
+            found.append(Finding("error", "drift", did, "drift id is also a defect id"))
+        if did in seeded:
+            found.append(Finding("error", "drift", did,
+                                 "a case lists this drift flag under `bugs:` — drift is not a defect"))
+        if d.get("kind") not in journey.DRIFT_KINDS:
+            found.append(Finding("error", "drift", did,
+                                 f"kind {d.get('kind')!r} — one of {', '.join(journey.DRIFT_KINDS)}"))
+        if not str(d.get("change") or "").strip():
+            found.append(Finding("error", "drift", did, "no `change:` saying what the UI change is"))
+        for i, rule in enumerate(d.get("rewrite") or [], 1):
+            if not isinstance(rule, dict) or "from" not in rule or "to" not in rule:
+                found.append(Finding("error", "drift", did, f"rewrite {i}: needs `from:` and `to:`"))
+                continue
+            to = rule["to"] if isinstance(rule["to"], list) else [rule["to"]]
+            for item in [rule["from"], *to]:
+                shape = route_item(item)
+                problem = ("not a route step" if shape is None
+                           else step_problem(shape[0], shape[1], row=shape[2]))
+                if problem:
+                    found.append(Finding("error", "drift", did, f"rewrite {i}: {item!r}: {problem}"))
+        for cid in d.get("affects") or []:
+            if str(cid) not in cases:
+                found.append(Finding("error", "drift", did, f"`affects:` names unknown case {cid!r}"))
+    defs = journey.load_drift(doc)
+    for did, ddef in defs.items():
+        if ddef["rewrite"] and not any(journey.drift_affects(c, did, defs) for c in cases.values()):
+            found.append(Finding("error", "drift", did, "no rewrite rule matches any case's route"))
+        if not ddef["rewrite"] and not ddef["affects"]:
+            found.append(Finding("error", "drift", did,
+                                 "neither a rewrite nor `affects:` — no case would derive it"))
+    if spec_drift_ids is not None:
+        for did in sorted(spec_drift_ids - seen):
+            found.append(Finding("error", "drift", did,
+                                 "patched in the benchmark spec but not declared in the case file"))
+        for did in sorted(seen - spec_drift_ids):
+            found.append(Finding("error", "drift", did,
+                                 "declared in the case file but not patched in the benchmark spec"))
+    return found
+
+
 def rule_known(doc: dict) -> list[Finding]:
     """The app's `known_behaviours:` list loads (QUA-3541). One finding, the loader's
     own message: a malformed answer-key entry must stop the task build, never score."""
@@ -399,12 +487,13 @@ def rule_known(doc: dict) -> list[Finding]:
     return []
 
 
-def lint_doc(doc: dict, truth: dict | None = None, heldout: bool = False) -> list[Finding]:
+def lint_doc(doc: dict, truth: dict | None = None, heldout: bool = False,
+             spec_drift_ids: set[str] | None = None) -> list[Finding]:
     """Every rule over one loaded test-case document. `truth` is the app's measured
     journey truth (optional — the diff-based leak check is skipped without it);
     `heldout` downgrades a missing side-bug `reference:` to a warning (rule_reference)."""
     defects = journey.load_defects(doc)
-    findings: list[Finding] = rule_class(doc) + rule_known(doc)
+    findings: list[Finding] = rule_class(doc) + rule_drift(doc, spec_drift_ids) + rule_known(doc)
     for case in doc.get("test_cases") or []:
         findings += rule_no_oracle(case)
         findings += rule_route(case)
@@ -431,8 +520,15 @@ def lint_corpus(app_ids: list[str] | None = None) -> dict[str, list[Finding]]:
         if not doc:
             out[app_id] = [Finding("error", "no-oracle", app_id, "file did not load")]
             continue
+        spec_drift: set[str] | None = None
+        spec_path = corpus.spec_path(app_id)
+        if spec_path.exists():
+            import yaml
+            spec = yaml.safe_load(spec_path.read_text()) or {}
+            spec_drift = {str(d.get("id")) for d in spec.get("drift") or [] if isinstance(d, dict)}
         out[app_id] = lint_doc(doc, journey.load_truth(app_id),
-                               heldout=app_id in set(corpus.heldout_apps()))
+                               heldout=app_id in set(corpus.heldout_apps()),
+                               spec_drift_ids=spec_drift)
     return out
 
 

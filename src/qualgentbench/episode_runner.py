@@ -203,6 +203,12 @@ class EpisodeOptions:
     # creator template as developer instructions and the creation prompt as the
     # instruction. None for every other mode.
     creation: object | None = None
+    # Cross-run memory (QUA-3488): a `memory.arm.MemoryArm`. None or mode `none` = no
+    # memory, and the episode is byte-identical to one run before memory existed. Else
+    # the rendered block goes in through the agent's system channel (never the brief),
+    # the condition becomes `<tooling>+mem-<mode>-<budget>-<diff>` (internal-only, D13)
+    # unless `condition_label` is set, and result.json carries the memory metrics.
+    memory: object | None = None
 
 
 # Tools withheld from the agent, from QGB_DISALLOWED_TOOLS (comma-separated).
@@ -226,6 +232,21 @@ Every device tool takes the device as its first argument — always pass device=
 ## Your QA Task
 
 {task.instruction}"""
+
+
+def _prepare_memory(task: BenchmarkTask, opts: EpisodeOptions):
+    """The episode's rendered memory (`memory.arm.PreparedMemory`), or None for no
+    memory. Raises before anything is staged when the arm cannot run here."""
+    arm = opts.memory
+    if arm is None or not getattr(arm, "enabled", False):
+        return None
+    from .memory import arm as _arm
+    arm.check_agent(opts.agent)
+    app_id = opts.app_id or str((task.bug_spec or {}).get("app_id") or "")
+    try:
+        return _arm.prepare(arm, app_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise RuntimeError(f"memory arm cannot run for {app_id or task.id}: {exc}") from exc
 
 
 def _ablation_instruction(task: BenchmarkTask, device_serial: str, tooling: str) -> str:
@@ -622,8 +643,11 @@ _SHELL_FAILURE_MARKERS = ("run-as: exec failed", "not found", "No such file", "E
 # feature set first and answers `adb: error: failed to get feature set: device offline`
 # (or `... device 'x' not found`), so that prefix is accepted too. A push that reached
 # the device and failed there (`adb: error: failed to copy ...`) is not a drop.
+# `adb root`/`adb unroot` against an adbd that is restarting answers `adb: unable to
+# connect for unroot: closed` (QUA-3546), so that prefix is accepted too.
 _ADB_TRANSPORT_FAILURE_RE = re.compile(
-    r"^(?:adb: )?(?:error: )?(?:(?:failed to get feature set|connect failed): )?"
+    r"^(?:adb: )?(?:error: )?"
+    r"(?:(?:failed to get feature set|connect failed|unable to connect for [a-z-]+): )?"
     r"(?:device offline|device '[^']*' not found"
     r"|no devices/emulators found|device still (?:connecting|authorizing)|closed)$")
 # How long staging waits for a dropped transport to come back, and how many times it
@@ -637,11 +661,12 @@ def _transport_failed(rc: int, out: str) -> bool:
     return rc != 0 and bool(_ADB_TRANSPORT_FAILURE_RE.match(out.strip()))
 
 
-async def _await_device_online(device: str, timeout_s: float = _TRANSPORT_WAIT_S) -> bool:
+async def _await_device_online(device: str, timeout_s: float | None = None) -> bool:
     """Poll `adb get-state` until the device answers `device` again. Bounded, unlike
-    `adb wait-for-device`, which blocks forever on a device that never comes back."""
+    `adb wait-for-device`, which blocks forever on a device that never comes back.
+    `timeout_s` defaults to `_TRANSPORT_WAIT_S` as it is at CALL time."""
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout_s
+    deadline = loop.time() + (_TRANSPORT_WAIT_S if timeout_s is None else timeout_s)
     while True:
         _, state = await _adb("-s", device, "get-state")
         if state.strip() == "device":
@@ -681,15 +706,33 @@ async def set_adb_root(device: str, root: bool) -> bool | None:
     restart it, the adb client waits for the device to drop and come back, and
     `wait-for-device` makes sure it did. The answer is read back with `id -u` rather
     than trusted from the verb, because a production build refuses `adb root` with
-    rc 0 (and an `ro.secure=0` image stays root through `adb unroot`)."""
+    rc 0 (and an `ro.secure=0` image stays root through `adb unroot`).
+
+    A verb that loses the transport (`adb: unable to connect for unroot: closed`: adbd
+    was still restarting) is waited out with the bounded `get-state` poll, and re-sent
+    unless adbd is already where it was asked to be. QUA-3546: staging's final unroot
+    returned on that error at once, and the flags write that followed in the same
+    second found the device offline."""
     verb = "root" if root else "unroot"
     rc, out = await _adb("-s", device, verb)
+    for _ in range(_TRANSPORT_RETRIES):
+        if not _transport_failed(rc, out):
+            break
+        logger.warning("device_setup: adb %s lost the transport to %s (%s) — waiting "
+                       "for it", verb, device, out.strip()[:80])
+        if not await _await_device_online(device):
+            break
+        _, uid = await _adb_staging_step(device, "shell", "id -u")
+        if uid.strip() == ("0" if root else "2000"):
+            rc, out = 0, ""                 # adbd got there on its own restart
+            break
+        rc, out = await _adb("-s", device, verb)
     if rc != 0:
         logger.warning("device_setup: adb %s failed: %s", verb, out.strip()[:120])
         return None
     if "restarting" in out:
         await _adb("-s", device, "wait-for-device")
-    _, uid = await _adb("-s", device, "shell", "id -u")
+    _, uid = await _adb_staging_step(device, "shell", "id -u")
     uid = uid.strip()
     if uid not in ("0", "2000"):
         logger.warning("device_setup: could not read the shell uid after adb %s: %r",
@@ -1075,25 +1118,57 @@ def flag_file_lines(nonce: str, active_bugs) -> list[str]:
     return [ln.ljust(FLAG_FILE_WIDTH) for ln in lines]
 
 
+FLAGS_FILE = "files/qgb_flags.txt"
+
+
+def _first_line(out: str) -> str:
+    return (out.strip().splitlines() or [""])[0][:160]
+
+
+def flag_file_problem(text: str, nonce: str, expected) -> str | None:
+    """Why `text` (qgb_flags.txt as read back) is not this episode's file, or None when
+    it is: the first line is `#<nonce>` (not a file an earlier write left) and the
+    non-comment lines are exactly `expected` (the defect and drift ids written). The
+    reason never echoes the nonce or the comment lines."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return "the flags file is empty or missing"
+    if not nonce or lines[0] != "#" + nonce:
+        return "the flags file is not this episode's (its nonce line does not match)"
+    ids = sorted(ln for ln in lines if not ln.startswith("#"))
+    if ids != sorted(str(e) for e in expected):
+        return f"the flags file holds ids {ids}, the write sent {sorted(expected)}"
+    return None
+
+
+async def _read_back_flags(device: str, bundle_id: str, nonce: str, expected) -> str | None:
+    """Read qgb_flags.txt back over the harness's adb (a dropped transport re-sent) and
+    return what is wrong with it, or None when it is this episode's file."""
+    cmd = f"run-as {shlex.quote(bundle_id)} cat {FLAGS_FILE}"
+    rc, out = await _adb_staging_step(device, "shell", cmd)
+    if rc != 0:
+        return f"could not read the flags file back (rc {rc}: {_first_line(out)})"
+    return flag_file_problem(out, nonce, expected)
+
+
 FLAG_WRITE_ATTEMPTS = 8
 FLAG_WRITE_RETRY_S = 2.0
-# Modes whose verdict depends on exactly the episode's own faults being live: there a flags
-# write that never succeeded fails the episode closed (`staging_failed`) instead of running
-# it with every seeded fault on.
-FLAG_GATE_REQUIRED_MODES = ("journey", "create")
-
-
-def _text(out) -> str:
-    return out.decode("utf-8", "replace") if isinstance(out, (bytes, bytearray)) else str(out or "")
 
 
 async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) -> None:
     """Activate exactly this episode's seeded bugs via files/qgb_flags.txt (run-as,
     debug build). Clean episodes get no active id; pre-gate apps ignore it.
-    A failed write is retried (`FLAG_WRITE_ATTEMPTS`, `FLAG_WRITE_RETRY_S` apart): the
-    shim treats a missing file as ALL bugs live. If it never succeeds, a journey or
-    create episode records `staging_failed` (env_failure, agent not launched); other
-    modes keep the legacy all-bugs-live behaviour, logged as an error.
+
+    The write is CONFIRMED (QUA-3546): a dropped transport is waited out and the write
+    re-sent (`_adb_staging_step`), then the file is read back and must lead with this
+    episode's nonce line and hold exactly the defect and drift ids written. Any other
+    failed or unconfirmed write is retried (`FLAG_WRITE_ATTEMPTS`, `FLAG_WRITE_RETRY_S`
+    apart; QUA-3539: `run-as` refuses a package it cannot see yet right after the FIRST
+    install on a device). A write that still cannot be confirmed is recorded as `staging_failed` (→ `env_failure`; a journey
+    episode then never launches the agent), and `active_bugs_written`/`drift_written`
+    are set only on a confirmed write. There is no "best-effort, all bugs live" fallback
+    any more: with no flags file the app's shim turns EVERY seeded fault on, which on a
+    clean build is a wrong episode, not a degraded one.
 
     The file is padded to a fixed line count and byte size (`flag_file_lines`) so its
     METADATA never reveals the arm. What the nonce backstop covers: a whole-file read
@@ -1119,6 +1194,10 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
     else:
         active = [str(bug_spec.get("id") or "")]
     active = [a for a in active if a]
+    # Drift flags (QUA-3490): benign UI changes switched on beside the defects. They
+    # share the file and the shim but never `active_bugs`, so nothing that scores
+    # sees them; `active_bugs_written` stays the defect list alone.
+    drift = [str(d) for d in (bug_spec.get("drift") or []) if str(d)]
 
     # Per-episode NONCE backstop (QUA-2804): a random value written into qgb_flags.txt
     # and a `.qgb` marker. The only way it reaches the agent is by reading the app's
@@ -1133,7 +1212,7 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
     # One line PER argument — the shim reads with readLines(), and printf never expands
     # escapes inside a %s argument. Passing each line as its own argument to
     # `printf '%s\n'` puts the newline in the format, where it does expand.
-    ids = " ".join(shlex.quote(ln) for ln in flag_file_lines(nonce, active))
+    ids = " ".join(shlex.quote(ln) for ln in flag_file_lines(nonce, active + drift))
     # The attribution markers (`verify.canary`) are wiped in the same command, so a
     # marker read after the agent exits was written during this episode; the nonce
     # marker (`files/.qgb/nonce`) is (re)written here too. `files/.qgb/fired` is
@@ -1144,32 +1223,41 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
              f"printf '%s\\n' {ids} > files/qgb_flags.txt && "
              f"printf %s {shlex.quote(nonce)} > files/.qgb/nonce")
     cmd = f"run-as {shlex.quote(bundle_id)} sh -c {shlex.quote(inner)}"
+    bug_spec.pop("active_bugs_written", None)
+    bug_spec.pop("drift_written", None)
     # Retried, because a missing file is not "no bugs": the shim reads a MISSING flags
     # file as every seeded fault live (`build_app._FLAG_SHIM`). Right after the FIRST
     # install of a package on a device, `run-as` can refuse it ("package not found")
     # until the package manager rewrites packages.list, seconds later — the cloud lab's
     # retry on a fresh emulator hit exactly that and ran a clean episode with two faults
-    # live (QUA-3539).
-    out = b""
+    # live (QUA-3539). A dropped transport is already waited out and re-sent inside
+    # `_adb_staging_step`; when it still fails that way the device is gone, so it is not
+    # retried here.
+    problem: str | None = None
     for attempt in range(1, FLAG_WRITE_ATTEMPTS + 1):
-        rc, out = await _adb("-s", device, "shell", cmd)
-        if rc == 0:
-            break
-        logger.warning("could not write bug flags for %s (attempt %d/%d): %s", bundle_id,
-                       attempt, FLAG_WRITE_ATTEMPTS, _text(out).strip()[:200])
+        rc, out = await _adb_staging_step(device, "shell", cmd)
+        if rc != 0:
+            problem = f"the write failed (rc {rc}: {_first_line(out)})"
+            if _transport_failed(rc, out):
+                break
+        else:
+            problem = await _read_back_flags(device, bundle_id, nonce, active + drift)
+            if problem is None:
+                break
+        logger.warning("bug flags for %s not confirmed (attempt %d/%d): %s", bundle_id,
+                       attempt, FLAG_WRITE_ATTEMPTS, problem)
         if attempt < FLAG_WRITE_ATTEMPTS:
             await asyncio.sleep(FLAG_WRITE_RETRY_S)
-    else:
-        reason = (f"could not write the bug-flag file for {bundle_id} after "
-                  f"{FLAG_WRITE_ATTEMPTS} attempts ({_text(out).strip()[:200]}); the app "
-                  f"would run with every seeded fault live")
-        logger.error(reason)
-        if str(bug_spec.get("mode") or "") in FLAG_GATE_REQUIRED_MODES:
-            # Fail closed: `staging_failed` -> env_failure, and the agent is not launched.
-            bug_spec.setdefault("staging_failed", reason)
+    if problem is not None:
+        reason = f"bug flags for {bundle_id} not confirmed on {device}: {problem}"
+        logger.error("%s", reason)
+        bug_spec.setdefault("staging_failed", reason)   # an earlier failure keeps its own
         return
     bug_spec["active_bugs_written"] = active
-    logger.info("bug flags for %s → %s", bundle_id, active or "(none: clean episode)")
+    if drift:
+        bug_spec["drift_written"] = drift
+    logger.info("bug flags for %s → %s%s", bundle_id, active or "(none: clean episode)",
+                f" + drift {drift}" if drift else "")
 
 
 # How many times the landing screen is read before its anchor is called missing. A
@@ -1179,7 +1267,7 @@ _PRECONDITION_ATTEMPTS = 3
 _PRECONDITION_SETTLE_S = 1.0
 
 
-def precondition_anchor(app_id: str, case_id: str) -> tuple[str, str]:
+def precondition_anchor(app_id: str, case_id: str, drift=()) -> tuple[str, str]:
     """(label, row) of the tap the case's `check:` route makes FIRST, or ("", "") if
     there is none. `row` is "" unless that tap is scoped with `row:`.
 
@@ -1190,14 +1278,21 @@ def precondition_anchor(app_id: str, case_id: str) -> tuple[str, str]:
     step at a time through `submission.route_item`, as `truth._steps` reads the route
     the replayer runs. A `row:` is part of the anchor (QUA-2738): the route's
     `{tap: Reminded, row: "Ibuprofen (4)"}` can only run in Ibuprofen's row, so another
-    row's "Reminded" on screen is not the world the case assumes."""
+    row's "Reminded" on screen is not the world the case assumes.
+
+    `drift` (QUA-3490): the episode's drift flag ids. The route is read through
+    `journey.drift_route`, so a relabelled first control is looked for under its NEW
+    label — the old one is legitimately absent on a drifted build."""
     from . import journey
 
     doc = journey.load_cases(app_id) or {}
     for case in doc.get("test_cases", []):
         if str(case.get("id")) != case_id:
             continue
-        for step in (case.get("check") or {}).get("steps") or []:
+        route = (case.get("check") or {}).get("steps") or []
+        if drift:
+            route = journey.drift_route(route, list(drift), journey.load_drift(doc))
+        for step in route:
             shape = submission.route_item(step) if isinstance(step, dict) else None
             if shape is not None and shape[0] == "tap":
                 return shape[1], shape[2] or ""
@@ -1236,7 +1331,8 @@ async def assert_precondition(device: str, spec: dict) -> str:
         from .verify.match import visible_texts
 
         anchor, row = precondition_anchor(str(spec.get("app_id") or ""),
-                                          str(spec.get("case_id") or ""))
+                                          str(spec.get("case_id") or ""),
+                                          drift=spec.get("drift") or ())
         if not anchor:
             return "skipped"
         seen: list = []
@@ -1619,6 +1715,9 @@ async def run_episode(
     # Before the device is touched: a runs dir whose workspaces would inherit
     # instructions can never produce a clean episode (QUA-2778).
     _inherited_instructions(opts.runs_dir)
+    # Memory is rendered before the device is touched too: a run unit that cannot read
+    # its snapshot fails here, and never falls back to no memory (spec §4).
+    memory = _prepare_memory(task, opts)
     # Also before the device is touched: a malformed QGB_DEVICE_CLASS refuses the
     # episode now rather than after the agent ran, when provenance records it.
     device_class()
@@ -1696,6 +1795,8 @@ async def run_episode(
     # The arm ("raw" | "mcp") is recorded as the run's condition so the leaderboard
     # can pair them.
     cond_label = opts.condition_label or ("mcp" if opts.mcp_server else "raw")
+    if memory is not None and not opts.condition_label:
+        cond_label = memory.arm.condition("mcp" if opts.mcp_server else "raw")
     # Blind (QUA-2806): the directory — the agent's cwd and every path beside it —
     # names the case and an opaque episode id, never the version. See
     # `agent_visible_task_id`.
@@ -1736,6 +1837,10 @@ async def run_episode(
     # Both conditions get the same buggy source checkout as cwd (per-trial copy).
     if opts.source_dir:
         shutil.copytree(opts.source_dir, workspace_dir, dirs_exist_ok=True)
+    if memory is not None:
+        # The system file beside the workspace; for `index`, the full files in it at
+        # `memory/` (no name an agent loads as instructions, so the guard stays strict).
+        memory.install(run_dir, workspace_dir)
 
     # The step unit is one interaction, counted at two harness proxies BELOW the
     # agent (ADB meter + MCP meter) — a new coding agent needs no counting code.
@@ -1827,6 +1932,8 @@ async def run_episode(
         # The creator template (private, read at run time) for a creation episode.
         developer_instructions=(creation.developer_instructions
                                 if creation is not None else None),
+        memory_text=(memory.text if memory is not None else None),
+        memory_file=(memory.system_file if memory is not None else None),
     )
 
     try:
@@ -2101,6 +2208,20 @@ async def run_episode(
         # beside the current one. Journey only: the hash covers the journey corpus.
         from .corpus import episode_stamp
         verifier.metrics.update(episode_stamp(str(task.bug_spec.get("app_id") or "")))
+    if memory is not None:
+        # Rendered.metrics() + the arm + where the proposals file is (QUA-3488). Only on
+        # memory episodes, so every other result.json keeps its shape.
+        from .memory.arm import episode_metrics
+        verifier.metrics.update(episode_metrics(memory, cond_label, workspace_dir))
+    if opts.task_type == "journey_case":
+        # Memory-experiment metrics (QUA-3489): `steps_over_ref` on every journey
+        # episode; the stage label, proposal counts, trap outcome and Qualock attribution
+        # where they apply. `rescore.rescore` recomputes the same fields.
+        from .memory.metrics import episode_fields
+        verifier.metrics.update(episode_fields(
+            verifier.metrics, memory.provenance() if memory is not None else None,
+            workspace_dir, ref_steps=(task.bug_spec or {}).get("ref_steps"),
+            stage=getattr(opts.memory, "stage", None)))
     result = RunResult.build(
         task_id=task.id,
         task_version="qgb-v1",
@@ -2126,7 +2247,9 @@ async def run_episode(
                                                if creation is not None else None),
                                      agent_auth=context.auth_mode,
                                      allow_codex_login=context.auth_login_allowed,
-                                     agent_cli_version=context.agent_cli_version),
+                                     agent_cli_version=context.agent_cli_version,
+                                     memory=(memory.provenance()
+                                             if memory is not None else None)),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -2180,6 +2303,8 @@ def _write_evidence(
                                  if k == "interactions" or k.startswith("interactions_")},
                 "apk_sha256": spec.get("apk_sha256"),
                 "active_bugs": spec.get("active_bugs_written"),
+                # Drift flags (QUA-3490) — present only on a drift episode.
+                **({"drift": spec["drift_written"]} if spec.get("drift_written") else {}),
                 "truncated": spec.get("truncated"),
                 "timed_out": spec.get("timed_out"),
                 "off_app": spec.get("off_app"),
@@ -2226,7 +2351,8 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
                       creation: dict | None = None,
                       agent_auth: str | None = None,
                       allow_codex_login: bool | None = None,
-                      agent_cli_version: str | None = None) -> dict:
+                      agent_cli_version: str | None = None,
+                      memory: dict | None = None) -> dict:
     """Where the episode ran, and how the harness read its screens. Recorded beside
     every score so a board built from parallel lanes (or a container) can be audited;
     never read by a scorer."""
@@ -2241,6 +2367,10 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # the creation brief version, and the second server's isolation record. Only on
         # creation episodes, so every other mode's result.json keeps its shape.
         extra["create"] = creation
+    if memory is not None:
+        # The memory arm, its snapshot hash and the prompt's hash (QUA-3488); only on
+        # memory episodes.
+        extra["memory"] = memory
     if agent_auth is not None:
         # How the agent authenticated (`RunContext.auth_mode`; codex-cli: api_key |
         # account_login | none). Written only when the adapter reports it, so other

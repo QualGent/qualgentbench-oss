@@ -236,8 +236,11 @@ class ClaudeCodeAdapter(AgentAdapter):
         an MCP config without the harness's own keys."""
         self._seed_config(self._config_dir(context))
         if context.developer_instructions:
-            self._system_prompt_path(context).write_text(
-                context.developer_instructions.rstrip() + "\n")
+            # With memory on too, one file carries both (template first, as in the
+            # codex adapter): claude-code keeps one --append-system-prompt-file.
+            text = "\n\n".join(t.rstrip() for t in (context.developer_instructions,
+                                                     context.memory_text) if t)
+            self._system_prompt_path(context).write_text(text + "\n")
         self._write_mcp_config(context)
         self._withheld_tools(context)          # refuse an un-narrowable policy now
         if not context.tool_call_cap:
@@ -299,6 +302,15 @@ class ClaudeCodeAdapter(AgentAdapter):
             cmd += ["--mcp-config", str(mcp_config), "--strict-mcp-config"]
         elif context.inject_mcp:
             cmd += ["--mcp-config", str(mcp_config)]
+        if context.memory_file is not None:
+            # Memory (QUA-3488): appended to the system prompt from a file beside the
+            # workspace (never the brief, never a CLAUDE.md the guard refuses). An empty
+            # --setting-sources loads no user/project/local settings, so no stray memory
+            # file can add a second channel; --settings (the budget hook) is a flag
+            # source and still loads. Auto-memory is turned off in `env`.
+            if not context.developer_instructions:     # else it rides that file
+                cmd += ["--append-system-prompt-file", str(context.memory_file)]
+            cmd += ["--setting-sources", ""]
         return cmd
 
     # A model id of this shape routes to Fireworks — the model itself declares
@@ -369,6 +381,10 @@ class ClaudeCodeAdapter(AgentAdapter):
         # Long device routines can run minutes; pin the per-tool MCP timeout to 5 min
         # so the agent→bridge hop agrees with the bridge→upstream ceiling.
         env["MCP_TOOL_TIMEOUT"] = "300000"
+        if context.memory_file is not None:
+            # One memory channel only: ours. Claude's own auto-memory would compete with
+            # it and confuse attribution (spec §4).
+            env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
 
         model = context.force_model or context.model
         route = self._provider(context)

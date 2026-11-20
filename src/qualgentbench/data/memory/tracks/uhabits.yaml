@@ -1,0 +1,49 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+#
+# App update track (QUA-3491, spec 5.1-5.2). Schema and rules: memory/tracks.py. Every case
+# runs exactly once per ordering (both versions in its block; only the `seeded:` list runs
+# seeded as the planned version, everything else contributes its clean run). run-1 is v1:
+# clean, no drift. `fixed:` holds pair and trap cases (same stage in every ordering);
+# `orderings:` shuffle the rest.
+
+schema: 1
+app: uhabits
+stages:
+  - {id: run-1, drift: []}
+  - {id: run-2, drift: []}
+  - {id: run-3, drift: [uhabits-drift-type-order, uhabits-drift-archive-label]}
+  - id: run-4
+    drift: [uhabits-drift-type-order, uhabits-drift-archive-label, uhabits-drift-add-label,
+            uhabits-drift-color-overflow]
+fixed:
+  run-1: [uhabits-archive-habit, uhabits-frequency-survives-rotation, uhabits-create-measurable]
+  run-2: [uhabits-unarchive-habit, uhabits-measurable-target, uhabits-add-reminder]
+  run-3: [uhabits-weekly-frequency, uhabits-delete-habit]
+  run-4: [uhabits-change-color]
+orderings:
+  a:
+    run-3: [uhabits-rename-from-list]
+    run-4: [uhabits-open-second-habit, uhabits-edit-from-detail]
+  b:
+    run-3: [uhabits-edit-from-detail]
+    run-4: [uhabits-rename-from-list, uhabits-open-second-habit]
+seeded: [uhabits-unarchive-habit, uhabits-measurable-target, uhabits-add-reminder,
+         uhabits-weekly-frequency]
+pairs:
+  - id: uhabits-pair-archive
+    source: uhabits-archive-habit
+    target: uhabits-unarchive-habit
+    bug: unarchive-crash
+    route: [More options, Archive, Filter, Hide archived]
+  - id: uhabits-pair-frequency
+    source: uhabits-frequency-survives-rotation
+    target: uhabits-weekly-frequency
+    bug: frequency-label-off-by-one
+    route: [boolean_frequency_picker, button1]
+  - id: uhabits-pair-measurable
+    source: uhabits-create-measurable
+    target: uhabits-measurable-target
+    bug: target-decimal-dropped
+    route: [Measurable, unitInput, targetInput]
+traps: [uhabits-trap-reminder-fixed, uhabits-trap-delete-no-confirm, uhabits-trap-color-toolbar]

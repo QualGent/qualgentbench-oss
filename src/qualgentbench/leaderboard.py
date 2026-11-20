@@ -84,16 +84,43 @@ def results_only_dirs(runs_dir: Path, results: Iterable[RunResult]) -> set[Path]
 
 
 def dedupe_latest(results: Iterable[RunResult]) -> list[RunResult]:
-    """Keep only the most recent result per (model, task, condition, trial), so a
-    fresh run replaces history rather than blending with it. Condition is in the
-    key so paired ablation runs never collapse into one."""
-    latest: dict[tuple[str, str, str, int], RunResult] = {}
+    """Keep only the most recent result per (model, task, condition, trial, stage), so
+    a fresh run replaces history rather than blending with it. Condition is in the
+    key so paired ablation runs never collapse into one. Stage is the memory
+    experiment's `memory_stage` (QUA-3489): a task that repeats across stages of a
+    staged run is a different measurement in each. It is None on every other result,
+    so a board without stages dedupes exactly as before."""
+    latest: dict[tuple[str, str, str, int, Any], RunResult] = {}
     for r in results:
-        key = (r.model, r.task_id, r.condition, r.trial)
+        key = (r.model, r.task_id, r.condition, r.trial,
+               (r.metrics or {}).get("memory_stage"))
         prev = latest.get(key)
         if prev is None or r.started_at > prev.started_at:
             latest[key] = r
     return list(latest.values())
+
+
+def is_internal_condition(condition: str | None) -> bool:
+    """A condition whose results never go on a public board: the memory arms (D13,
+    QUA-3488, `memory.arm.is_memory_condition`)."""
+    from .memory.arm import is_memory_condition
+    return is_memory_condition(condition)
+
+
+def mark_internal(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Set `internal: True` on every board row of an internal condition. Other rows are
+    left exactly as they were (no `internal: False`), so a board with no memory arm is
+    byte-identical. A publisher drops `internal` rows (`public_rows`)."""
+    for row in rows:
+        if is_internal_condition(row.get("condition")):
+            row["internal"] = True
+    return rows
+
+
+def public_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The rows a public board may show."""
+    return [r for r in rows if not r.get("internal")
+            and not is_internal_condition(r.get("condition"))]
 
 
 def clean_model_name(model: str) -> str:
@@ -155,6 +182,7 @@ def hunt_summary(results: Iterable[RunResult]) -> list[dict[str, Any]]:
                          "trials": 0, "episodes": 0, "excluded": n, "f1": None,
                          "fp_rate": None, "avg_steps": None, "avg_tokens": None,
                          "overall": None})
+    mark_internal(rows)
     return [row for _, row in sorted(enumerate(rows), key=lambda iv: -order[iv[0]])]
 
 

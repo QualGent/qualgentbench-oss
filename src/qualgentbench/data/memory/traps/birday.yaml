@@ -1,0 +1,32 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+#
+# Trap memories (QUA-3491, spec 5.1): hand-written WRONG entries placed in M_k at `stage`.
+# Shape: memory.tracks.TrapDef (= memory.metrics.Trap + text, drift, lint_allow, note).
+# `memory.tracks.apply_traps` adds `text` as a NEW entry `entry_id` to a COPY of the stage
+# memory; the packaged base memory is never edited. Exposure = entry_id rendered.
+
+traps:
+  - id: birday-trap-no-year-fixed
+    app: birday
+    effect: missed_bug
+    stage: run-3
+    entry_id: bug-901
+    bug: no-year-save-crash
+    cases: [birday-add-without-year]
+    text: >-
+      Saving a new event with "Consider the year" turned off used to fail; this was
+      fixed in the previous release, and such events now save normally.
+    note: the no-year save defect is still on in this stage's build
+
+  - id: birday-trap-anniversary-zodiac
+    app: birday
+    effect: false_report
+    stage: run-4
+    entry_id: note-901
+    cases: [birday-favorite-anniversary]
+    markers: ["zodiac", "Zodiac sign", "astrology", "sign"]
+    text: >-
+      Every event's details screen, anniversaries included, shows a "Zodiac sign:"
+      row under the date.
+    note: anniversaries show no zodiac row; only the seeded build adds one

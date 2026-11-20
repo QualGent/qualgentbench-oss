@@ -1,0 +1,49 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+#
+# App update track (QUA-3491, spec 5.1-5.2). Schema and rules: memory/tracks.py. Every case
+# runs exactly once per ordering (both versions in its block; only the `seeded:` list runs
+# seeded as the planned version, everything else contributes its clean run). run-1 is v1:
+# clean, no drift. `fixed:` holds pair and trap cases (same stage in every ordering);
+# `orderings:` shuffle the rest.
+
+schema: 1
+app: simpletimetracker
+stages:
+  - {id: run-1, drift: []}
+  - {id: run-2, drift: []}
+  - {id: run-3, drift: [stt-drift-categories-label]}
+  - id: run-4
+    drift: [stt-drift-categories-label, stt-drift-records-tab-label, stt-drift-more-label,
+            stt-drift-add-label]
+fixed:
+  run-1: [stt-delete-second-category, stt-default-duration-rotation, stt-comment-on-record]
+  run-2: [stt-category-for-activity, stt-session-goal, stt-tag-for-activity]
+  run-3: [stt-delete-tracked-record, stt-statistics-single-activity]
+  run-4: [stt-duplicate-activity-name]
+orderings:
+  a:
+    run-3: [stt-activity-with-note]
+    run-4: [stt-rename-activity, stt-timer-survives-restart]
+  b:
+    run-3: [stt-timer-survives-restart]
+    run-4: [stt-activity-with-note, stt-rename-activity]
+seeded: [stt-category-for-activity, stt-session-goal, stt-tag-for-activity,
+         stt-delete-tracked-record]
+pairs:
+  - id: stt-pair-category
+    source: stt-delete-second-category
+    target: stt-category-for-activity
+    bug: category-save-crash
+    route: [Settings, Edit categories and tags, Add category, etChangeCategoryName]
+  - id: stt-pair-goal
+    source: stt-default-duration-rotation
+    target: stt-session-goal
+    bug: goal-duration-label-doubled
+    route: [More, Disabled]
+  - id: stt-pair-record
+    source: stt-comment-on-record
+    target: stt-delete-tracked-record
+    bug: record-delete-blocks-main-thread
+    route: [Add, Color, SAVE, Records]
+traps: [stt-trap-tag-wontfix, stt-trap-statistics-share, stt-trap-add-card]

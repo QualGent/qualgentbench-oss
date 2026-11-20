@@ -19,7 +19,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Iterable
 
 from . import bugs as bugmod, checkpoint as _checkpoint, credit, journey
 from .episode_runner import EpisodeOptions, _step_budget, prepare_app, run_episode
@@ -195,6 +195,13 @@ class LaneRun:
     # `run --mode create` (QUA-2856): the run's `create.runner.CreationSurface`, handed
     # to every creation unit's episode. None for every other mode.
     creation: Any = None
+    # Cross-run memory (QUA-3488): the run's `memory.arm.MemoryArm`, handed to every
+    # episode. None = no memory (today's episodes, byte for byte).
+    memory: Any = None
+    # Drift flag ids (QUA-3490) switched on in every journey episode of an app that
+    # declares them (`run --drift`, the memory sequence runner's stage drift, QUA-3492).
+    # Empty = no drift: journey specs byte-identical to before.
+    drift: tuple[str, ...] = ()
 
 
 async def run_lanes(plan: RunPlan, cfg: LaneRun) -> list[RunResult]:
@@ -248,11 +255,22 @@ class _Shared:
     retired: set[int]
 
 
-def _build_task(suite: dict[str, Any], unit: Unit, bundle_id: str, apk_sha256: str | None):
+def suite_drift(suite: dict[str, Any], drift: Iterable[str] = ()) -> list[str]:
+    """The ids of `drift` this app's case document declares, in the given order: a
+    multi-app run passes one drift list and each app takes its own flags."""
+    if not drift:
+        return []
+    declared = journey.load_drift(journey.load_cases(str(suite["app"]["id"])))
+    return [d for d in drift if d in declared]
+
+
+def _build_task(suite: dict[str, Any], unit: Unit, bundle_id: str, apk_sha256: str | None,
+                drift: Iterable[str] = ()):
     if unit.kind == "bug_hunt":
         task = bugmod.exploration_task(suite)
     elif unit.kind == journey.TASK_TYPE:
-        task = next(jt for jt in journey.journey_tasks(suite) if jt.id == unit.task_id)
+        task = next(jt for jt in journey.journey_tasks(suite, drift=suite_drift(suite, drift))
+                    if jt.id == unit.task_id)
     elif unit.kind == _create_kind():
         from .create import runner as create_runner
         task = next(ct for ct in create_runner.create_tasks(suite) if ct.id == unit.task_id)
@@ -417,7 +435,8 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
             s.backoff.note_adb_ok()
 
         # ── one episode ──────────────────────────────────────────────────
-        task = _build_task(s.plan.suites[unit.app_id], unit, bundle_id, apk_sha256)
+        task = _build_task(s.plan.suites[unit.app_id], unit, bundle_id, apk_sha256,
+                           drift=cfg.drift)
         budget = _step_budget(task)
         opts = EpisodeOptions(
             agent=cfg.agent, model=cfg.model, condition=Condition.no_routines,
@@ -432,6 +451,7 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
             mcp_server_identity=cfg.mcp_identity,
             # A creation unit gets the run's creation surface (QUA-2856).
             creation=(cfg.creation if unit.kind == _create_kind() else None),
+            memory=cfg.memory,
         )
         s.board.start(i, unit, budget)
         s.inflight[i] = (unit, time.monotonic())

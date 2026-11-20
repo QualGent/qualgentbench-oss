@@ -262,7 +262,10 @@ def test_a_rescore_of_an_unstamped_episode_adds_only_the_stamp(tmp_path):
     status, b, a, v = rescore_journey.rescore(run_dir, {fresh.id: fresh}, dry_run=True)
     assert status == "rescored" and b == a
     added = {k for k in v.metrics if k not in recorded}
-    assert added == {"defects"}
+    # Besides the stamp, a rescore fills the memory-experiment readings of the verdict
+    # (QUA-3489: `steps_over_ref` and friends), never a verdict field.
+    from qualgentbench.memory.metrics import EPISODE_METRICS
+    assert added - set(EPISODE_METRICS) == {"defects"}
     assert {k: v.metrics[k] for k in recorded} == recorded           # no verdict field moved
     assert v.metrics["defects"]["s-blocker"]["class"] == "persistence"
     assert (run_dir / "result.json").read_bytes() == before

@@ -1,0 +1,14 @@
+# A run agent's proposals for the sample app (QUA-3486 fixture). Top-level list form.
+- type: nav
+  text: The archive is under the overflow menu on the note list.
+  evidence:
+    step: 14
+    screen: Note list
+- type: flaky
+  text: Search results take about two seconds to appear.
+  evidence: {step: 22, screen: Search}
+  contradicts: flaky-001
+- type: note
+  text: Notes can be pinned from the long-press menu.
+  evidence: {screen: Note list}
+  updates: note-001

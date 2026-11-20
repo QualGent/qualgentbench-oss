@@ -763,7 +763,7 @@ run-time results are unchanged; a dry run writes none of them. A run rescored af
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago), and so is the device CLOCK (below). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
-raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`; adb's own `device offline` / `device '…' not found` / `closed` (the command never reached the device; a push words it `adb: error: failed to get feature set: device offline`) is waited out with a bounded `get-state` poll and the push/shell step re-sent, twice at most, and a push that still fails raises too (QUA-3476); a journey episode whose staging failed this way no longer launches the agent, like a missing precondition. It runs as root
+raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`; adb's own `device offline` / `device '…' not found` / `closed` (the command never reached the device; a push words it `adb: error: failed to get feature set: device offline`) is waited out with a bounded `get-state` poll and the push/shell step re-sent, twice at most, and a push that still fails raises too (QUA-3476); a journey episode whose staging failed this way no longer launches the agent, like a missing precondition. The bug-flags write is confirmed the same way (QUA-3546): `write_bug_flags` re-sends its `run-as` write over a dropped transport, reads `files/qgb_flags.txt` back (this episode's nonce line, then exactly the defect and drift ids), retries any other failed or unconfirmed write (`FLAG_WRITE_ATTEMPTS` × `FLAG_WRITE_RETRY_S`, QUA-3539: `run-as` refuses a package it cannot see yet right after its first install), and records a write it still cannot confirm as `staging_failed` in every mode — there is no best-effort fallback, because with no flags file the shim turns every seeded fault on; `set_adb_root` waits out a verb that lost the transport (`adb: unable to connect for unroot: closed`) and re-sends it unless adbd already got there. It runs as root
 only when it declares `root: true` (as the shell user otherwise, whatever an agent left
 behind) and ALWAYS hands the device back unrooted, error path included
 (`set_adb_root`, QUA-2743): `adb root` is device-wide and outlives the fixture, so one
@@ -1471,6 +1471,36 @@ change). Both step loops pass it — `replay.run_steps` and `derive_journey.run_
 (QUA-2736); `tests/test_liveness_oracles.py` refuses any medtimer route, hunt or
 journey, that taps a bare `Reminded`.
 
+**Drift flags: same journey, new UI** (QUA-3490; `journey.load_drift`/`drift_route`/
+`resolve_drift`, `build_app.py` `drift:`, `derive_journey.py --drift`). A drift flag is a
+BENIGN UI change — a relabel, a control moved into an overflow menu, a reorder — patched
+into the same journey APK as the defects and gated by the same `QgbFlags.on(id)` shim, for
+the agent-memory evals (memory written on the old UI must adapt, not mislead). Two halves,
+kept equal by `lint_journey_cases.py`'s `drift` rule: the benchmark spec's top-level
+`drift:` carries the source patches (applied after the bug patches; no task, no canary);
+the case file's top-level `drift:` declares each flag for the harness (`kind` relabel |
+move | reorder, a one-line `change:`, `rewrite:` rules `{from: <route step>, to: [steps]}`
+for the harness-only replay route, `affects:` for a reorder that rewrites nothing). A drift
+flag is NEVER a defect: its id is no defect id, no case lists it in `bugs:` (`case_design`
+refuses it as unknown), it never enters `active_bugs`, so `bugs_present`, recall, false
+reports and the `defects` stamp cannot see it, and the brief is byte-identical (the steps
+still name the drift-off UI). `journey.journey_tasks(suite, drift=[ids]|"all")` sets
+`bug_spec["drift"]` on BOTH versions (no `drift` → specs unchanged; task ids unchanged, so
+a caller mixing drift and non-drift episodes of one case keeps them apart itself);
+`write_bug_flags` writes the ids beside the bugs (`drift_written`, and the evidence meta's
+`drift`), and the precondition anchor reads the rewritten route. `run --mode journey
+--drift ID[,ID]` (QUA-3492) switches them on (`LaneRun.drift` → `lanes._build_task`, each
+app taking only the ids its case document declares; a scope flag recorded as plan.json
+`drift` and read back by `--resume`); the memory sequence runner owns which ids each stage
+turns on. Hunt episodes
+list only `broken` features and clean episodes nothing, so drift is off there; a run with
+NO flags file (Qualock without `app_files`) switches drift on with every bug. Evidence:
+`derive_journey.py <app> --drift all --repeat 3` replays every case a flag touches with the
+flags on in both arms and writes `data/truth/drift-<app>.json` (not a `corpus_version`
+input, read by no scorer); each row's `vs_base` must show the SAME verdict as the
+committed drift-off row and `visible` screens. Built on markor, uhabits, aegis and
+simpletimetracker (4 flags each).
+
 ## Tool surface
 
 **The brief is versioned, because it is part of the treatment** (`brief.py`,
@@ -2031,6 +2061,67 @@ or non-taking arm B INCONCLUSIVE. `derive_create_controls.py --new-candidates-on
 case's stored derivation after a rebuild that only adds defects: it walks rank rule 2's
 replay order under the same `--stop-after`, takes stored candidates' trials instead of
 replaying them, and replays only the new ones.
+
+## Cross-run memory arms (QUA-3488)
+
+`run --memory-mode none|static|dynamic --memory-budget small|large|index --memory-diff
+none|diff|hunt [--memory-snapshot ROOT] [--memory-org KEY]`, or `--memory-config FILE`
+(JSON/YAML, same keys; the lab writes it root-only so the snapshot path is not in argv).
+`memory/arm.py` (`MemoryArm`, `prepare`, `PreparedMemory`) renders with
+`memory.render.render` (budget = render mode; diff ≠ none adds `<app>.changes.md`) BEFORE
+the device is touched (a missing file fails the episode, never falls back to no memory),
+then writes `<episode>/memory.md` beside the workspace and, for `index`,
+`place_workspace` into `<workspace>/memory/`. Injection is the system channel only:
+codex-cli appends it to `developer_instructions` in its config.toml (never
+`model_instructions_file`; `--disable memories` stays), claude-code gets
+`--append-system-prompt-file <episode>/memory.md --setting-sources ""` and
+`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` (`--settings`, the budget hook, is a flag source and
+still loads). `native` is refused. The brief is untouched (`tests/test_memory_injection.py`
+asserts identical `instruction_sent.md` across arms) and `--memory-mode none` is
+byte-identical to no flag (same test, both adapters, both tool arms). Memory episodes get
+condition `<tooling>+mem-<mode>-<budget>-<diff>` (path-safe; it names the episode dir),
+`Rendered.metrics()` plus `memory_arm_mode`/`memory_budget`/`memory_diff`/
+`memory_condition`/`memory_prompt_sha256`/`memory_internal` and the proposals file's
+`memory_proposals_file|bytes|sha256` in result.json metrics, and `provenance.memory`. The
+agent's `workspace/memory_proposals.yaml` is collected, not parsed (its schema is
+`memory.proposals`). `PreparedMemory.install` adds one line naming that file by its
+absolute path (QUA-3543: agents searched the runs dir for it, which the contamination scan
+read as another episode), so `memory_prompt_sha256` now differs per episode. Memory holds
+facts about the APP only (QUA-3545): `FORMAT_HELP` asks for no test-tool or harness facts,
+and the curator prompt NOOPs them with the reason "about the test tools, not the app" (in
+round 1, "the screenshot lags the element list" reached app memory in about half the
+streams; a live Kimi K3 curate of three round-1 markor proposal files NOOPed all three such
+proposals and kept the app facts). Board rows of a memory condition carry `internal: True`
+(`leaderboard.mark_internal`; `public_rows` drops them, D13); other rows are unchanged.
+plan.json carries `memory_arm` only on a memory run, and `--resume` takes it from there.
+
+**Sequence runner** (QUA-3492, `memory/sequence.py`, `qualgent-bench memory sequence
+--track <app> --ordering a --rep 1 --memory-mode static|dynamic|none [--memory-budget]
+[--memory-diff] --out DIR [--through run-K] [--redo STEP] [--curator-model ID]`): one memory
+stream (`tracks.stream_key`) of an app update track, stage by stage. Per `run-k` it freezes
+M_k into `<out>/store` (static: seed + traps through k, rebuilt each stage; dynamic: curated
+M_k + stage-k traps; diff arms add the stage's `<app>.changes.md`), runs every slot's BOTH
+versions as one bench `run --mode journey --case … --drift <stage drift> --memory-config
+<stage memory.json>` (`CliStageRunner`), refuses an episode that read another snapshot, and
+for dynamic arms curates the PLANNED versions only (`Track.curator_inputs`, later cases
+excluded) into `curate-k`. State is `<out>/sequence.json`: a re-run resumes (a half-run
+stage via `run --resume`), the curator date is fixed per sequence and model answers are
+cached in `<out>/curator-cache`, so `--redo` rebuilds identical snapshots. The curator
+model (`memory/curator.py` `MessagesModel`) picks its provider from the id
+(`provider_for`, the same shapes the adapters route on): a Bedrock inference profile
+(`us.<vendor>.<model>`, `pricing.bedrock_parts`, e.g. `us.moonshotai.kimi-k3`) goes to
+the Bedrock Runtime Converse API (plain HTTP, `Authorization: Bearer
+$AWS_BEARER_TOKEN_BEDROCK`, region `AWS_REGION`, default us-east-2; temperature 0 unless
+the vendor is anthropic or the model 400s on it, then it is dropped for that instance;
+Converse text and usage are mapped to the Messages shape); an `accounts/fireworks/models/*`
+slug goes to Fireworks' Anthropic-compatible endpoint with `FIREWORKS_API_KEY`; any other
+id to the Anthropic API with `ANTHROPIC_API_KEY` (no `temperature` sent: current models
+400 on it). `usage` holds every call's tokens under the Messages names on every route. `max_tokens` is
+16000 for reasoning models; `parse_answer` reads text blocks only and pulls the
+`{"decisions": [...]}` object out of think tags, prose or fences. Health rows:
+`<out>/health.json`. `leaderboard.dedupe_latest` keys on `metrics.memory_stage` too, so a
+task repeated across stages never collapses (None on every non-memory result: boards
+unchanged). `tests/test_memory_sequence.py` runs the loop with a fake runner and curator.
 
 ## Repo layout
 

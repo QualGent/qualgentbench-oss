@@ -1,0 +1,49 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+#
+# App update track (QUA-3491, spec 5.1-5.2). Schema and rules: memory/tracks.py. Every case
+# runs exactly once per ordering (both versions in its block; only the `seeded:` list runs
+# seeded as the planned version, everything else contributes its clean run). run-1 is v1:
+# clean, no drift. `fixed:` holds pair and trap cases (same stage in every ordering);
+# `orderings:` shuffle the rest.
+
+schema: 1
+app: catima
+stages:
+  - {id: run-1, drift: []}
+  - {id: run-2, drift: []}
+  - {id: run-3, drift: []}
+  - {id: run-4, drift: []}
+fixed:
+  run-1: [catima-receive-points, catima-group-from-card-editor, catima-archive-from-card]
+  run-2: [catima-spend-points, catima-group-add-card]
+  run-3: [catima-delete-from-card, catima-rename-card]
+  run-4: [catima-duplicate-card]
+orderings:
+  a:
+    run-2: [catima-search-open-card]
+    run-3: [catima-note-after-rotation]
+    run-4: [catima-card-barcode-type, catima-delete-group]
+  b:
+    run-2: [catima-delete-group]
+    run-3: [catima-card-barcode-type]
+    run-4: [catima-search-open-card, catima-note-after-rotation]
+seeded: [catima-spend-points, catima-group-add-card, catima-delete-from-card,
+         catima-rename-card]
+pairs:
+  - id: catima-pair-balance
+    source: catima-receive-points
+    target: catima-spend-points
+    bug: spend-balance-crash
+    route: [balanceField, bottom_app_bar_update_balance_button]
+  - id: catima-pair-group
+    source: catima-group-from-card-editor
+    target: catima-group-add-card
+    bug: group-cards-save-crash
+    route: [More options, Groups, Add, OK]
+  - id: catima-pair-card-menu
+    source: catima-archive-from-card
+    target: catima-delete-from-card
+    bug: unarchive-offered-for-active-card
+    route: [Overflow menu]
+traps: [catima-trap-rename-fixed, catima-trap-duplicate-id]

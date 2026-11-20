@@ -163,6 +163,13 @@ class RunContext:
     # `codex --version` in `prepare`. None = not reported (the runner records
     # `unknown`). A board that spans a CLI release is two treatments, not one.
     agent_cli_version: str | None = None
+    # Cross-run memory (QUA-3488, `memory.arm`): the rendered system block, and the same
+    # text on disk beside the workspace. Both None = no memory, and then every adapter's
+    # argv, env and config are exactly what they were before memory existed. codex-cli
+    # appends `memory_text` to its `developer_instructions`; claude-code passes
+    # `memory_file` with `--append-system-prompt-file` and turns its own auto-memory off.
+    memory_text: str | None = None
+    memory_file: Path | None = None
 
     # Filled in by the runner after the agent exits
     tool_calls: int = 0

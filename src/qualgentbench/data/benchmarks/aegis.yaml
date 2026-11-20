@@ -713,3 +713,64 @@ tasks:
       kind: file
       path: /data/data/com.beemdevelopment.aegis.debug/files/aegis.json
       contains: Alpha
+
+# ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
+# BENIGN UI changes behind the same QgbFlags shim as the bugs (see markor.yaml for the
+# contract). Declared for the harness in data/test-cases/aegis.yaml `drift:`.
+drift:
+  # relabel: the + button is announced as "Add account".
+  - id: aegis-drift-fab-label
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/MainActivity.java
+      find: "FloatingActionButton fab = fabMenuLayout.findViewById(R.id.fab);"
+      replace: |-
+        FloatingActionButton fab = fabMenuLayout.findViewById(R.id.fab);
+        if (com.beemdevelopment.aegis.QgbFlags.on("aegis-drift-fab-label")) {
+            fab.setContentDescription("Add account");
+        }
+  # relabel: the + menu's "Enter manually" item reads "Type in details".
+  - id: aegis-drift-enter-label
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/MainActivity.java
+      find: "actions.put(fabMenuLayout.findViewById(R.id.fab_menu_item_enter), this::startEditEntryActivity);"
+      replace: |-
+        actions.put(fabMenuLayout.findViewById(R.id.fab_menu_item_enter), this::startEditEntryActivity);
+        if (com.beemdevelopment.aegis.QgbFlags.on("aegis-drift-enter-label")) {
+            java.util.ArrayDeque<View> qgbQueue = new java.util.ArrayDeque<>();
+            qgbQueue.add(fabMenuLayout.findViewById(R.id.fab_menu_item_enter));
+            while (!qgbQueue.isEmpty()) {
+                View qgbView = qgbQueue.poll();
+                if (qgbView instanceof android.widget.TextView) {
+                    ((android.widget.TextView) qgbView).setText("Type in details");
+                }
+                if (qgbView instanceof ViewGroup) {
+                    for (int qgbI = 0; qgbI < ((ViewGroup) qgbView).getChildCount(); qgbI++) {
+                        qgbQueue.add(((ViewGroup) qgbView).getChildAt(qgbI));
+                    }
+                }
+            }
+        }
+  # move: with entries selected, Transfer leaves the toolbar for More options. Delete is
+  # `ifRoom`, so the slot Transfer frees would pull Delete OUT of More options onto the
+  # toolbar (a second, unintended move that broke every More options > Delete route on
+  # the first derive); it is pinned to the menu so this flag moves exactly one control.
+  - id: aegis-drift-transfer-overflow
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/MainActivity.java
+      find: "inflater.inflate(R.menu.menu_action_mode, menu);"
+      replace: |-
+        inflater.inflate(R.menu.menu_action_mode, menu);
+        if (com.beemdevelopment.aegis.QgbFlags.on("aegis-drift-transfer-overflow")) {
+            menu.findItem(R.id.action_share_qr).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+            menu.findItem(R.id.action_delete).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+        }
+  # relabel: the main menu's "Settings" entry reads "Preferences".
+  - id: aegis-drift-settings-label
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/MainActivity.java
+      find: "getMenuInflater().inflate(R.menu.menu_main, menu);"
+      replace: |-
+        getMenuInflater().inflate(R.menu.menu_main, menu);
+        if (com.beemdevelopment.aegis.QgbFlags.on("aegis-drift-settings-label")) {
+            menu.findItem(R.id.action_settings).setTitle("Preferences");
+        }
