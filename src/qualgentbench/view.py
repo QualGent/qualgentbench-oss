@@ -941,6 +941,24 @@ def _timeline_html(entries: list[TimelineEntry], img_dir: Path, raw_href: str,
     return "\n".join(parts), k, calls
 
 
+def _matched_label(rep: dict) -> str:
+    """What a report was scored as: the defect it matched, or one of the two NEUTRAL
+    kinds (QUA-3541, `journey.mark_neutral`) named so a reviewer sees why it is not a
+    false report, or "—" (a false report)."""
+    if rep.get("matched"):
+        return str(rep["matched"])
+    if rep.get("known"):
+        return f"known behaviour: {rep['known']}"
+    if rep.get("consequence_of"):
+        return f"consequence of {rep['consequence_of']}"
+    return "—"
+
+
+def _unscored(rep: dict) -> bool:
+    """A report that matched nothing and is not neutral: a false report."""
+    return not rep.get("matched") and not rep.get("known") and not rep.get("consequence_of")
+
+
 def _reports_html(recorded: dict, rescored: dict | None) -> str:
     rec = recorded.get("reports") or []
     now = (rescored or {}).get("reports")
@@ -958,8 +976,8 @@ def _reports_html(recorded: dict, rescored: dict | None) -> str:
         cells += [str(rep.get(k) or "") for k in ("screen", "observed", "expected", "description")]
         if same_shape:
             old = rec[i] if isinstance(rec[i], dict) else {}
-            cells.append(str(old.get("matched") or "—"))
-        cells.append(str(rep.get("matched") or "—"))
+            cells.append(_matched_label(old))
+        cells.append(_matched_label(rep))
         cells.append({True: "yes", False: "no"}.get(rep.get("grounded"), "—"))
         rows.append("<tr>" + "".join(f"<td>{E(c)}</td>" for c in cells) + "</tr>")
     return f'<div class="tablewrap"><table class="reps">{head}{"".join(rows)}</table></div>'
@@ -1794,7 +1812,7 @@ def _strip_status(e: _Summary) -> tuple[str, str]:
     fired = m0.get("fault_fired")
     if isinstance(fired, list) and not present & {str(x) for x in fired}:
         return "unreached", "never reached: the seeded site's canary did not fire"
-    grounded = sum(1 for x in reports if not x.get("matched") and x.get("grounded"))
+    grounded = sum(1 for x in reports if _unscored(x) and x.get("grounded"))
     if grounded:
         return "artifact", (f"missed · {_plural(grounded, 'unmatched grounded report')}: "
                             f"artifact?")
@@ -2703,7 +2721,7 @@ def _cases(eps: list[_Summary]) -> list[dict]:
             "reports_now": len(reports or []) if m1 is not None else None,
             "unmatched_grounded_now": (
                 sum(1 for x in reports or [] if isinstance(x, dict)
-                    and not x.get("matched") and x.get("grounded"))
+                    and _unscored(x) and x.get("grounded"))
                 if m1 is not None else None),
             "fr_rec": m0.get("false_reports") or 0,
             "fr_now": (m1.get("false_reports") or 0) if m1 is not None else None,

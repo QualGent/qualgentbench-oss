@@ -178,6 +178,207 @@ def load_defect_meta(doc: dict) -> dict[str, dict]:
     return out
 
 
+# ── known clean-build behaviour (QUA-3541) ────────────────────────────────────
+# Some apps really do something on the CLEAN build that a careful tester would call a
+# bug: a cosmetic quirk that ships upstream, not something a seeding patch put there.
+# Before this list existed every accurate report of such a quirk was a false report, so
+# a careful agent paid for being careful and the app's clean false-alarm rate measured
+# the app, not the agent. An app's case file may carry an app-level `known_behaviours:`
+# list; a report that matches one of its entries (and no active defect) is NEUTRAL:
+# neither a find nor a false report, on either build, and the verdict names it so a
+# reviewer can see it.
+#
+#   known_behaviours:
+#     - id: totals-label-truncated            # stable id, unique in the file
+#       description: The totals label is cut off at the screen edge (upstream).
+#       texts: ["Tota"]                       # screen strings quoted in `observed`
+#       patterns: ['^tota$']                  # regexes over the normalised `observed`
+#       symptoms: [cut off, truncated]        # optional: ANY of these in the prose
+#       symptoms_all: [landscape]             # optional: EVERY one of these in the prose
+#
+# A known behaviour is anchored on the report's own screen QUOTE (`texts` or
+# `patterns`, at least one required) and never on prose alone, so it cannot neutralise
+# a report that quotes something else. `patterns` are matched (re.I) against `observed`
+# as `_norm` folds it: lower-cased, every whitespace run one plain space. An entry
+# belongs in the case file because it changes scores, and the case file is what
+# `corpus.version_of` hashes: adding one is a new corpus (or held-out) version.
+KNOWN_KEY = "known_behaviours"
+
+
+def load_known_behaviours(doc: dict | None) -> list[dict]:
+    """The case document's `known_behaviours:` list, normalised for `match_known`.
+    Strict on purpose, like `case_design`: a malformed entry in an answer key must stop
+    the build of the tasks, not silently score differently."""
+    raw = (doc or {}).get(KNOWN_KEY) or []
+    if not isinstance(raw, list):
+        raise ValueError(f"`{KNOWN_KEY}` must be a list")
+    out: list[dict] = []
+    seen: set[str] = set()
+    for i, k in enumerate(raw):
+        if not isinstance(k, dict) or not str(k.get("id") or "").strip():
+            raise ValueError(f"{KNOWN_KEY}[{i}]: needs an `id`")
+        kid = str(k["id"]).strip()
+        if kid in seen:
+            raise ValueError(f"{KNOWN_KEY}: duplicate id {kid!r}")
+        seen.add(kid)
+
+        def _list(key: str) -> list[str]:
+            v = k.get(key) or []
+            if isinstance(v, str):
+                v = [v]
+            if not isinstance(v, list):
+                raise ValueError(f"{KNOWN_KEY} {kid}: `{key}` must be a list")
+            return [str(x) for x in v if str(x).strip()]
+
+        texts = _list("texts")
+        short = [t for t in texts if not _evidence(t)]
+        if short:
+            raise ValueError(f"{KNOWN_KEY} {kid}: texts below the evidence floor {short}")
+        patterns = _list("patterns")
+        for p in patterns:
+            try:
+                re.compile(p)
+            except re.error as exc:
+                raise ValueError(f"{KNOWN_KEY} {kid}: bad pattern {p!r}: {exc}") from None
+        if not texts and not patterns:
+            raise ValueError(f"{KNOWN_KEY} {kid}: needs `texts` or `patterns` — a known "
+                             "behaviour is anchored on the report's screen quote")
+        out.append({
+            "id": kid,
+            "description": str(k.get("description") or "").strip(),
+            "texts": texts,
+            "patterns": patterns,
+            "symptoms": [s.lower() for s in _list("symptoms")],
+            "symptoms_all": [s.lower() for s in _list("symptoms_all")],
+        })
+    return out
+
+
+def match_known(bug: "BugReport", known: list[dict] | None) -> str | None:
+    """The id of the known clean-build behaviour this report describes, or None. The
+    report's `observed` quote must carry one of the entry's `texts` (token boundaries,
+    evidence floor) or match one of its `patterns`; then the prose must name any of
+    `symptoms` and every one of `symptoms_all` when the entry lists them. Called only for
+    a report `match_report` left unmatched: a known behaviour never takes a report away
+    from an active defect."""
+    observed = _norm(bug.observed)
+    if not observed or not known:
+        return None
+    prose = bug.prose
+    for k in known:
+        if not (_quoted_any(observed, k.get("texts"))
+                or any(re.search(p, observed, re.I) for p in k.get("patterns") or [])):
+            continue
+        if k.get("symptoms") and not any(_word(s, prose) for s in k["symptoms"]):
+            continue
+        if any(not _word(s, prose) for s in k.get("symptoms_all") or []):
+            continue
+        return k["id"]
+    return None
+
+
+# What a downstream-effect report has to say (QUA-3541, `is_consequence`). EFFECT words
+# name a result the tester saw go wrong AFTER the caught defect: something not saved, lost
+# or missing, a value that stayed old or came out wrong, a later crash. Phrases, matched on
+# token boundaries in the report's description (`_word`); each tense is listed, as the
+# symptom lists do, rather than stemmed.
+EFFECT_WORDS = (
+    "not saved", "wasn't saved", "never saved", "not persisted", "never persisted",
+    "not stored", "not kept", "not applied", "never applied", "not created", "never created",
+    "not added", "never added", "not updated", "never updated", "not deleted",
+    "never took effect", "did not take effect", "didn't take effect",
+    "lost", "missing", "disappeared", "gone", "no longer", "threw away", "thrown away",
+    "not shown", "not showing", "not listed", "not displayed", "never appeared",
+    "does not appear", "doesn't appear", "did not appear", "didn't appear",
+    "still shows", "still showed", "still listed", "still there", "still has",
+    "still had", "still reads", "still read", "unchanged", "old value",
+    "wrong total", "wrong value", "wrong amount", "wrong count", "wrong number",
+    "crashed", "crash", "after the crash", "after relaunch", "after relaunching",
+    "never happened", "never finished", "still lists", "still holds", "kept the original",
+)
+# Words that name no screen or element: too common in any report to tie two of them
+# together. A TERM is any other alphabetic word of at least `_MIN_TERM_CHARS` letters.
+_MIN_TERM_CHARS = 4
+_TERM_RE = re.compile(r"[a-z][a-z'-]*[a-z]")
+_TERM_STOP = frozenset("""
+    about above after again also another anything around back because been before being
+    below both build came cannot could does doing done down each either even every
+    expected first from have having here into item items just last later like list made
+    many more most much must never next none nothing once only other over same screen
+    seen shown shows should showed since some still than that their them then there
+    these they this those through tried under until very want were what when where
+    which while will with without would your yours tapped tapping opened opening
+    reported report observed value values app's after crash crashed saved lost missing
+    disappeared wrong total unchanged relaunch relaunching relaunched correct correctly
+    instead appear appeared appears displayed display page view step steps button
+""".split())
+
+
+def _terms(text: str) -> set[str]:
+    """Screen and element terms of a text: lower-cased alphabetic words of at least
+    `_MIN_TERM_CHARS` letters, minus `_TERM_STOP`."""
+    return {w for w in _TERM_RE.findall(_norm(text))
+            if len(w) >= _MIN_TERM_CHARS and w not in _TERM_STOP}
+
+
+def is_consequence(bug: "BugReport", caught: list["BugReport"], symptoms: list[str]) -> bool:
+    """Does `bug` describe a downstream effect of the defect `caught` reported? Two tests,
+    both required, both pure text:
+
+    * EFFECT: its description names a result that went wrong (`EFFECT_WORDS`).
+    * SAME THING: its terms (`_terms` over its screen, observed and description) share at
+      least one with what the catch named: the catching reports' screen, observed and
+      description, and the defect's planted symptoms. A report about a different screen
+      or element is an unrelated observation, not an effect of this defect."""
+    if not any(_word(w, bug.prose) for w in EFFECT_WORDS):
+        return False
+    own = _terms(f"{bug.screen} {bug.observed} {bug.description}")
+    anchor: set[str] = set()
+    for c in caught:
+        anchor |= _terms(f"{c.screen} {c.observed} {c.description}")
+    for s in symptoms:
+        anchor |= _terms(s)
+    return bool(own & anchor)
+
+
+def mark_neutral(reports: list["BugReport"], known: list[dict] | None,
+                 version: str | None, found: list[str],
+                 defects: dict[str, dict] | None = None) -> None:
+    """Mark the reports that are neither a find nor a false report (QUA-3541). Runs
+    after `match_report`, on the reports it left unmatched, in report order:
+
+    * `known`: the report describes a known clean-build behaviour (`match_known`), on
+      either build.
+    * `consequence_of`: on a SEEDED build only, a report that describes a downstream
+      effect of a defect another report already found ("the crash threw away the entry",
+      "the transfer was never saved"), by `is_consequence`: effect wording, and a screen
+      or element term shared with the catch. An accurate report of the effect is not a
+      false report, but it is not a second find either. The allowance is ONE such report
+      per defect found, assigned in `found` order, so it can never be bought: nothing is
+      neutral until a report has actually matched a defect, a clean build has nothing
+      found and so nothing to be a consequence of, and a blanket list of guesses next to
+      one real find still leaves every guess but one counted false. A consequence never
+      adds to `found`, recall or completion."""
+    for b in reports:
+        if b.matched is None:
+            b.known = match_known(b, known)
+    if version != "seeded":
+        return
+    allowance = list(found)
+    for b in reports:
+        if not allowance:
+            break
+        if b.matched is not None or b.known is not None:
+            continue
+        for d in allowance:
+            caught = [r for r in reports if r.matched == d]
+            symptoms = list(((defects or {}).get(d) or {}).get("symptoms") or [])
+            if is_consequence(b, caught, symptoms):
+                b.consequence_of = d
+                allowance.remove(d)
+                break
+
+
 def defect_stamp(ids, meta: dict[str, dict] | None,
                  defects: dict[str, dict] | None = None) -> dict[str, dict | None]:
     """The `metrics["defects"]` stamp: `{id: {kind, tier, class} | None}` for each id in
@@ -527,6 +728,7 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
     truth = load_truth(app_id)
     defects = load_defects(doc)
     defect_meta = load_defect_meta(doc)
+    known = load_known_behaviours(doc)
     tasks: list[BenchmarkTask] = []
     for case in doc.get("test_cases", []):
         cid = str(case["id"])
@@ -569,6 +771,9 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
                 # kind/tier/class per defect, for the verdict's `defects` stamp only
                 # (QUA-2929) — kept apart from `defects` so no matcher reads `class`.
                 "defect_meta": defect_meta,
+                # The app's known clean-build behaviours: a report matching one is
+                # neutral on either build (QUA-3541, `mark_neutral`).
+                "known_behaviours": known,
                 "oracle": oracle,
                 "truth_agrees": measured.get("agrees") if measured else None,
                 "device_setup": suite.get("device_setup"),
@@ -652,6 +857,13 @@ class BugReport:
     description: str
     matched: str | None = None      # active defect id this report describes
     grounded: bool = False          # the DEVICE answered with `observed` (results, not calls)
+    known: str | None = None        # known clean-build behaviour id: neutral (QUA-3541)
+    consequence_of: str | None = None   # found defect this is a downstream effect of: neutral
+
+    @property
+    def neutral(self) -> bool:
+        """Neither a find nor a false report (`mark_neutral`)."""
+        return self.matched is None and (self.known is not None or self.consequence_of is not None)
 
     @property
     def prose(self) -> str:
@@ -672,7 +884,8 @@ class BugReport:
     def as_dict(self) -> dict:
         return {"step": self.step, "screen": self.screen, "observed": self.observed,
                 "expected": self.expected, "description": self.description,
-                "matched": self.matched, "grounded": self.grounded}
+                "matched": self.matched, "grounded": self.grounded,
+                "known": self.known, "consequence_of": self.consequence_of}
 
 
 @dataclass
@@ -1322,7 +1535,11 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         if b.matched and b.matched not in found:
             found.append(b.matched)
     missed = [b for b in active if b not in found]
-    false_reports = sum(1 for b in report.bugs if b.matched is None)
+    mark_neutral(report.bugs, spec.get("known_behaviours"), version, found,
+                 spec.get("defects"))
+    false_reports = sum(1 for b in report.bugs if b.matched is None and not b.neutral)
+    known_reports = sum(1 for b in report.bugs if b.known is not None)
+    consequence_reports = sum(1 for b in report.bugs if b.consequence_of is not None)
 
     # ── completion: verified on the device, then the verdict ──────────────
     reported = report.verdict
@@ -1483,6 +1700,9 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         "defects": defect_stamp(active + found, spec.get("defect_meta"),
                                 spec.get("defects")),
         "false_reports": false_reports,
+        # Neutral reports (QUA-3541, `mark_neutral`): counted, never scored.
+        "known_behaviour_reports": known_reports,
+        "consequence_reports": consequence_reports,
         "precision": precision,
         "recall": recall,
         "f1": f1,
@@ -1718,7 +1938,15 @@ BLOCKER_TIERS = ("L4", "L3")
 #:   directory is the episode's own reach, not `other_episode`. It can un-void a v3
 #:   episode that retyped its own cwd with a wildcard; a pattern that can match a sibling
 #:   stays a hit. Same closure, same pin, as the epic's v4.
-SCORER_VERSION = 4
+#: 5 (QUA-3541): two kinds of NEUTRAL report, neither a find nor a false report
+#:   (`mark_neutral`). A report that matches one of the app's `known_behaviours:` (a real
+#:   quirk of the clean build, listed in the case file) on either build; and, on a seeded
+#:   build, at most one further unmatched report per defect another report found that
+#:   describes an effect of it (`is_consequence`: effect wording plus a screen or element
+#:   term shared with the catch). Both can lower `false_reports` and raise
+#:   precision on a rescore of an earlier verdict; neither moves `bugs_found`, recall or
+#:   completion. Reports carry `known` / `consequence_of`, metrics the two counts.
+SCORER_VERSION = 5
 
 
 def _defect_lookup(m: list[dict]) -> rates.DefectLookup:
