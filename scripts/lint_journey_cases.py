@@ -39,6 +39,11 @@ episodes, and none of them needs a device to catch:
               who owns it: a case carrying `witness_before_action:` (re-authored under that
               ticket; this lint does not ask a second ticket to edit it) and a held-out app
               (its files live outside the repo; the corpus owner audits them).
+  known       an app-level `known_behaviours:` list (QUA-3541) that `journey.
+              load_known_behaviours` refuses: an entry with no id or a duplicate one,
+              no screen quote (`texts`/`patterns`), a text under the evidence floor or a
+              pattern that does not compile — the task builder would refuse the file, so
+              the lint says why first (error).
   quotable    a DISPLAY side bug whose effective marker is below the matcher's evidence
               floor (`journey._evidence`, `_MIN_EVIDENCE_CHARS`): no report can quote it,
               so an exact sighting is either credited nothing or credited to another bug
@@ -384,12 +389,22 @@ def rule_quotable(case: dict, defects: dict[str, dict]) -> list[Finding]:
             if bug_id in display and not journey._evidence(marker)]
 
 
+def rule_known(doc: dict) -> list[Finding]:
+    """The app's `known_behaviours:` list loads (QUA-3541). One finding, the loader's
+    own message: a malformed answer-key entry must stop the task build, never score."""
+    try:
+        journey.load_known_behaviours(doc)
+    except ValueError as exc:
+        return [Finding("error", "known", journey.KNOWN_KEY, str(exc))]
+    return []
+
+
 def lint_doc(doc: dict, truth: dict | None = None, heldout: bool = False) -> list[Finding]:
     """Every rule over one loaded test-case document. `truth` is the app's measured
     journey truth (optional — the diff-based leak check is skipped without it);
     `heldout` downgrades a missing side-bug `reference:` to a warning (rule_reference)."""
     defects = journey.load_defects(doc)
-    findings: list[Finding] = rule_class(doc)
+    findings: list[Finding] = rule_class(doc) + rule_known(doc)
     for case in doc.get("test_cases") or []:
         findings += rule_no_oracle(case)
         findings += rule_route(case)

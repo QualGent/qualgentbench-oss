@@ -336,6 +336,42 @@ caveat on `recorded_is_rescore`: episode summaries written before QUA-2927 did n
 `rescored_from`, so an `--index-from` rebuild over them reads `false` for an episode
 rescored in place, while a fresh build (which reads result.json) reads `true`.
 
+### Neutral reports: known clean-build behaviour and downstream effects (scorer v4)
+
+A journey report that `match_report` leaves unmatched is a false report, with two
+exceptions (`journey.mark_neutral`, QUA-3541). A neutral report is neither a find nor a
+false report: it adds nothing to `bugs_found`, recall or completion, and it is not in
+`false_reports`, so it moves neither the false-alarm rate nor precision.
+
+* **Known clean-build behaviour.** Some apps really do something on the clean build that
+  a careful tester would report: an upstream cosmetic quirk, not a seeded change. Before
+  v4 every accurate report of one was a false report, so the app's clean false-alarm rate
+  measured the app, not the agent. An app's case file may carry an app-level
+  `known_behaviours:` list (`id`, `description`, and a screen quote: `texts`, matched on
+  token boundaries in `observed`, and/or `patterns`, regexes over `observed` as `_norm`
+  folds it; optional `symptoms` (any) and `symptoms_all` (every) over the description).
+  A report that matches an entry is neutral on either build. An entry is always anchored
+  on the report's own quote, never on prose alone. Before you add one, show that the
+  behaviour is upstream (diff the build's code path against the upstream release): a
+  quirk that a seeding patch leaked into the clean build is a build defect, and the fix
+  is the build. The list lives in the case file because it changes scores, so adding an
+  entry changes the corpus version (or the held-out version) of that file.
+* **Downstream effect of a found defect.** On a seeded build, a report that describes an
+  effect of a defect another report already found ("the crash threw the entry away", "the
+  record was never saved") is accurate, but not a second find. Each defect found allows
+  ONE such report, assigned in report order after known behaviours. Nothing is a
+  consequence until a report has actually matched a defect, a clean build has none, and
+  a list of guesses beside one real find still pays for every guess but one. The rule
+  does not judge whether the extra report is related to the defect; the cap is what
+  bounds it, so read seeded precision with that in mind. The clean false-alarm rate (the
+  ranking key) is not affected by it.
+
+Each report in `metrics.reports` carries `known` (the entry id) and `consequence_of` (the
+found defect), and the verdict counts them (`known_behaviour_reports`,
+`consequence_reports`). The episode page shows them in the matched column as "known
+behaviour: <id>" and "consequence of <id>". `scripts/lint_journey_cases.py` refuses a
+malformed list (rule `known`), and so does the task builder.
+
 ## Sanity gates on the whole scheme
 
 Before quoting a number: `scripts/adversary_check.py` runs synthetic spray / prior /
