@@ -227,7 +227,8 @@ token used to stop at the first `*`, so `cd <runs>/<case>/*_<own ep id>/workspac
 `<runs>/<case>/` and voided three memory-arm units of round 1), and a pattern whose
 components match the own episode directory AND whose episode component carries the own
 random episode id literally is the episode's own reach (`contamination._own_glob`); a
-pattern that can match a sibling (`<case>/*/result.json`, `*/../*`) stays a hit. Scorer v4. **A mistyped copy of the agent's OWN episode path is not another episode**
+pattern that can match a sibling (`<case>/*/result.json`, `*/../*`) stays a hit. Scorer v4,
+the same closure and pin as the agent-memory epic's v4. **A mistyped copy of the agent's OWN episode path is not another episode**
 (2026-10-07, `contamination._misfiled_self_path`): claude-code's Write takes an absolute
 path, so writing `findings.yaml` "in your working directory" means retyping
 `<ts>_<case>_<agent>_<model>_<arm>_trial-N_<ep-id>`, and DeepSeek V4.1 Flash got it wrong in
@@ -758,7 +759,7 @@ non-scoring modules are NOT pinned: bump by hand if a change there can move a ve
 writing rescore records `rescored_from` (the old verdict, void, scorer and `defects` stamp),
 `rescored_with` (`{scorer_version, corpus_version, heldout_version}`) and `rescored_at`
 (UTC) in result.json — optional `RunResult` fields, omitted from the dump while None, so
-run-time results are unchanged; a dry run writes none of them. The device
+run-time results are unchanged; a dry run writes none of them. A run rescored after a SCORING-ONLY change can be re-labelled under the new set key with `scripts/relabel_run.py` (QUA-3553, `relabel.py`): a copy under a new run id, re-stamped with the current versions, `restamped_from` on each result; refused unless briefs, budgets, checks, bug ids and APKs are identical to the recorded corpus (docs/scoring.md). The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago), and so is the device CLOCK (below). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
