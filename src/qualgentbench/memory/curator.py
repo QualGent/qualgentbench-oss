@@ -23,6 +23,15 @@ log says who decided it (`by`):
   The model may only pick an operation the gate allowed for that proposal; anything
   else is a NOOP. A verified `contradicts` proposal the model does not use to
   INVALIDATE or UPDATE its target still raises the target's `contra`.
+- `apply`: operations are applied one after another, in proposal order, to the memory
+  as it stands after the earlier ones. The model decides every proposal against M_k,
+  so two text UPDATEs of one entry would overwrite each other: the prompt asks for one
+  combined text per entry, and a later text UPDATE of an entry this pass already
+  rewrote is rejected (NOOP, `by: apply`). An UPDATE that changes nothing (no new
+  text, and the entry was already confirmed by the same episode) is a NOOP too. So
+  every ADD/UPDATE/INVALIDATE in the log changed M_{k+1}, and `counts` (and
+  `proposals_accepted`) equal what landed. In an ADD or UPDATE record, `text` is the
+  entry's text in M_{k+1}; the proposal's own text is `proposal_text`.
 - `lint`: after every write the app file is linted (`memory.lint`); a write that adds
   a lint issue is rolled back and logged as a NOOP. The output always lints clean.
 
@@ -527,7 +536,7 @@ def curate(memory_root: Path | str, out_root: Path | str, *, org_key: str, app_k
             key = f"{ep.id}#{p.index}"
             items.append(_Item(key=key, episode=ep, proposal=p, record={
                 "proposal": key, "episode": ep.id, "type": p.type, "text": p.text,
-                "verified": ep.verified}))
+                "proposal_text": p.text, "verified": ep.verified}))
 
     log: dict[str, Any] = {
         "format": LOG_FORMAT, "stage": stage, "date": date, "org": org_key,
@@ -624,6 +633,7 @@ def curate(memory_root: Path | str, out_root: Path | str, *, org_key: str, app_k
     # ── apply, in proposal order, linting every write ──
     credited: dict[str, set[str]] = {}
     produced: dict[str, str] = {}       # proposal key -> entry id it ADDed/UPDATEd
+    rewritten: dict[str, str] = {}      # entry id -> proposal key that changed its text
     for it in items:
         if it.duplicate_of is not None:
             target = produced.get(it.duplicate_of)
@@ -637,7 +647,8 @@ def curate(memory_root: Path | str, out_root: Path | str, *, org_key: str, app_k
         rec = {**it.record, **it.final}
         before = doc.dumps()
         try:
-            entry_id = _apply(doc, it, rec, stage=stage, date=date, credited=credited)
+            entry_id = _apply(doc, it, rec, stage=stage, date=date, credited=credited,
+                              rewritten=rewritten)
         except (fmt.FormatError, KeyError) as e:
             doc = fmt.loads(before, fmt.APP)
             rec.update(op="NOOP", by="apply", reason=f"could not apply: {e}")
@@ -687,8 +698,12 @@ def _check_decision(it: _Item, d: dict | None) -> dict[str, Any]:
 
 
 def _apply(doc: fmt.MemoryFile, it: _Item, rec: dict[str, Any], *, stage: str,
-           date: str, credited: dict[str, set[str]]) -> str | None:
-    """Apply `rec` (an operation) to `doc`. Returns the entry id written, if any."""
+           date: str, credited: dict[str, set[str]],
+           rewritten: dict[str, str]) -> str | None:
+    """Apply `rec` (an operation) to `doc`. Returns the entry id written, if any.
+
+    `rewritten` maps an entry id to the proposal that changed its text in this pass;
+    a later text change of that entry is rejected (see the module docstring)."""
     ep = it.episode.id
     op = rec["op"]
 
@@ -720,7 +735,12 @@ def _apply(doc: fmt.MemoryFile, it: _Item, rec: dict[str, Any], *, stage: str,
             if n:
                 doc.bump(twin.id, seen=n, confirmed=date)
             rec["seen"] = n
+            rec["text"] = twin.text
             raise_contra(it.contra_target)
+            if not n and rec.get("contra_raised") is None:
+                rec.update(op="NOOP", reason=f"same fact as {twin.id}, already confirmed "
+                                             "by this episode")
+                return None
             return twin.id
         e = doc.add_entry(it.proposal.type, text, {
             "src": AGENT_SRC, "confirmed": date, "seen": 1, "contra": 0, "stage": stage})
@@ -749,14 +769,29 @@ def _apply(doc: fmt.MemoryFile, it: _Item, rec: dict[str, Any], *, stage: str,
     if new_text and entry.type == fmt.ACCEPTED_TYPE:
         rec["note"] = "text change dropped: accepted behavior is human-only (D6)"
         new_text = None
-    if new_text and new_text != entry.text:
+    if new_text and new_text != entry.text and entry.id in rewritten:
+        # Decided against M_k: applying it would overwrite the earlier rewrite.
+        rec.update(op="NOOP", rejected_text=new_text,
+                   reason=f"{entry.id} was already rewritten in this pass by proposal "
+                          f"{rewritten[entry.id]}; a second text for one entry is not "
+                          "applied (one combined UPDATE per entry)")
+        rec["text"] = entry.text
+        return None
+    text_changed = bool(new_text and new_text != entry.text)
+    n = credit(entry.id)
+    if not text_changed and not n:
+        rec.update(op="NOOP", text=entry.text,
+                   reason=f"{entry.id} already confirmed by this episode; nothing to change")
+        return None
+    if text_changed:
         rec["old_text"] = entry.text
         doc.update_entry(entry.id, text=new_text)
-        rec["text"] = new_text
-    n = credit(entry.id)
+        rewritten[entry.id] = it.key
     if n:
         doc.bump(entry.id, seen=n, confirmed=date)
     rec["seen"] = n
+    rec["text_changed"] = text_changed
+    rec["text"] = doc.get(entry.id).text
     return entry.id
 
 
