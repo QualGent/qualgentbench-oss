@@ -393,7 +393,9 @@ def test_a_quality_json_written_by_the_rescore_is_read(tmp_path):
     assert sample["items"][0]["report"] == {
         "summary": "The note is lost", "steps": "", "expected": "The note is listed",
         "actual": "Nothing listed", "failure_step": "Step 2: List"}
-    assert key["items"][0]["stratum"] == "pass"
+    gates = json.loads((d / rq.QUALITY_FILE).read_text())["reports"][0]["gates"]
+    assert gates["G1"]["pass"] is True
+    assert key["items"][0]["stratum"] == qls.stratum_of("seeded", gates)
 
 
 # ── the command ────────────────────────────────────────────────────────────────
