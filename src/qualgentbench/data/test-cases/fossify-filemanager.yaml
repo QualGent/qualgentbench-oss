@@ -195,7 +195,21 @@ test_cases:
               {tap: Compress}, {tap: OK}, wait]
       expect: {present: beta.zip, crash: IllegalArgumentException}
     evidence: [beta.zip]    # screen witness: the archive's row, which only the written archive draws
-    bugs: [compress-dialog-crash]
+    bugs:
+      - id: compress-dialog-crash
+        reference_report:
+          summary: File Manager crashes when the Compress dialog is confirmed with OK
+          steps:
+            - Launch Fossify File Manager (its icon is labelled File Manager_debug).
+            - Tap Download.
+            - Tap QGB.
+            - Press and hold beta.txt.
+            - Tap More options.
+            - Tap Compress.
+            - Tap OK.
+          expected: The archive is created and the QGB folder lists beta.zip next to beta.txt.
+          actual: The app closes and the device returns to the home screen; no archive is created. The device log shows IllegalArgumentException.
+          failure_step: 'Step 4: Keep the proposed name and folder and confirm with OK.'
 
   # CRASH — make an archive, then extract it. The seeded Decompress handler dies before
   # anything is extracted. Witness: QGB's total size in its Properties, which counts the
@@ -224,7 +238,24 @@ test_cases:
               {tap: Properties}, wait]
       expect: {present: '181 B', crash: NumberFormatException}
     evidence: ['181 B']    # screen witness: QGB's total size, which only the extracted copy brings to 181 B
-    bugs: [decompress-name-crash]
+    bugs:
+      - id: decompress-name-crash
+        reference_report:
+          summary: File Manager crashes when Decompress is chosen for a zip archive
+          steps:
+            - Launch Fossify File Manager (its icon is labelled File Manager_debug).
+            - Tap Download.
+            - Tap QGB.
+            - Press and hold alpha.txt.
+            - Tap More options.
+            - Tap Compress.
+            - Tap OK.
+            - Press and hold alpha.zip.
+            - Tap More options.
+            - Tap Decompress.
+          expected: The app asks what to do about the existing file (File "alpha.txt" already exists) and then extracts the archive into a new alpha folder.
+          actual: The app closes and the device returns to the home screen; nothing is extracted. The device log shows NumberFormatException.
+          failure_step: 'Step 3: Long-press the new alpha.zip and choose Decompress from the selection''s More options menu.'
 
   # CRASH — search the whole storage. The seeded search thread dies as soon as the query
   # is searched. Witness: the result's folder header, drawn only in search results.
@@ -248,7 +279,20 @@ test_cases:
               {type: beta}, wait]
       expect: {present: Internal/Download/QGB, crash: PatternSyntaxException}
     evidence: [Internal/Download/QGB]    # screen witness: the result group's header
-    bugs: [search-pattern-crash]
+    bugs:
+      - id: search-pattern-crash
+        reference_report:
+          summary: File Manager crashes when a search is typed at the top of internal storage
+          steps:
+            - Launch Fossify File Manager (its icon is labelled File Manager_debug).
+            - Tap Download.
+            - Tap QGB.
+            - Tap Internal in the breadcrumbs.
+            - Tap the search field at the top of the screen.
+            - Type "beta" into the search field.
+          expected: The search results list beta.txt under the header Internal/Download/QGB.
+          actual: The app closes and the device returns to the home screen; no search results are shown. The device log shows PatternSyntaxException.
+          failure_step: 'Step 3: Tap the search field at the top of the screen and type "beta".'
 
   # CRASH — switch a folder to the grid view. The seeded layout dies as the grid is
   # built. Witness: "Column count", which the folder menu offers only in the grid view.
@@ -272,7 +316,21 @@ test_cases:
               {tap: Grid}, {tap: OK}, wait, {tap: More options}, wait]
       expect: {present: Column count, crash: ArithmeticException}
     evidence: [Column count]    # screen witness: the grid-only menu entry
-    bugs: [grid-span-crash]
+    bugs:
+      - id: grid-span-crash
+        reference_report:
+          summary: File Manager crashes when a folder is switched to the grid view
+          steps:
+            - Launch Fossify File Manager (its icon is labelled File Manager_debug).
+            - Tap Download.
+            - Tap QGB.
+            - Tap More options.
+            - Tap Change view type.
+            - Tap Grid.
+            - Tap OK.
+          expected: The QGB folder is shown as a grid, and its More options menu offers Column count.
+          actual: The app closes and the device returns to the home screen. The device log shows ArithmeticException (divide by zero).
+          failure_step: 'Step 3: Choose Grid and confirm with OK.'
 
   # PERSISTENCE — copy a file into a new folder made from the picker. The seeded Copy to
   # accepts the destination and copies nothing (the picker still makes the folder).
@@ -299,7 +357,26 @@ test_cases:
               {tap: OK}, wait, {tap: Download}, {long_press: QGB}, {tap: Properties}, wait]
       expect: {present: '35 B'}
     evidence: ['35 B']    # screen witness: QGB's total size, which only the copy brings to 35 B
-    bugs: [copy-silently-skipped]
+    bugs:
+      - id: copy-silently-skipped
+        reference_report:
+          summary: 'Copy to a new folder copies nothing: the folder is empty'
+          steps:
+            - Launch Fossify File Manager (its icon is labelled File Manager_debug).
+            - Tap Download.
+            - Tap QGB.
+            - Press and hold alpha.txt.
+            - Tap More options.
+            - Tap Copy to.
+            - Tap the + button of the folder picker.
+            - Type "Backup" into the folder name field.
+            - Tap OK.
+            - Tap Download in the breadcrumbs.
+            - Press and hold QGB.
+            - Tap Properties.
+          expected: 'alpha.txt is copied into QGB/Backup: the Backup folder shows 1 item and the Properties of QGB list a size of 35 B.'
+          actual: 'Nothing is copied: the new Backup folder shows "0 items" and the Properties of QGB list a size of "23 B".'
+          failure_step: 'Step 5: Read the folder''s size.'
 
   # ORDERING — hide a file. The rename to .beta.txt lands before the seeded UI update
   # dies on the worker thread; the death dominates (the cal-search-event shape) and the
@@ -324,7 +401,20 @@ test_cases:
               {tap: Hide}, wait, {tap: More options}, {tap: Temporarily show hidden}, wait]
       expect: {present: .beta.txt, crash: CalledFromWrongThreadException}
     evidence: [.beta.txt]    # screen witness: the hidden file's dot name
-    bugs: [hide-refresh-off-main-thread]
+    bugs:
+      - id: hide-refresh-off-main-thread
+        reference_report:
+          summary: File Manager crashes when a file is hidden from the selection menu
+          steps:
+            - Launch Fossify File Manager (its icon is labelled File Manager_debug).
+            - Tap Download.
+            - Tap QGB.
+            - Press and hold beta.txt.
+            - Tap More options.
+            - Tap Hide.
+          expected: beta.txt is hidden and the app stays open on the QGB folder, which now lists only alpha.txt.
+          actual: The app closes and the device returns to the home screen. The device log shows CalledFromWrongThreadException.
+          failure_step: 'Step 2: Long-press beta.txt and choose Hide from the selection''s More options menu.'
 
   # ANR — select both files and delete them. The seeded Yes handler never returns; the
   # route's next touch is never read, and the input dispatcher raises the ANR itself.
@@ -351,7 +441,23 @@ test_cases:
               {tap: Properties}, wait]
       expect: {present: '0 B', anr: true}
     evidence: ['0 B']    # screen witness: QGB's total size once both files are gone
-    bugs: [multi-delete-blocks-main-thread]
+    bugs:
+      - id: multi-delete-blocks-main-thread
+        reference_report:
+          summary: File Manager freezes when deleting two selected files is confirmed with Yes
+          steps:
+            - Launch Fossify File Manager (its icon is labelled File Manager_debug).
+            - Tap Download.
+            - Tap QGB.
+            - Press and hold alpha.txt.
+            - Tap More options.
+            - Tap Select all.
+            - Tap Delete.
+            - Tap Yes.
+            - Tap anywhere on the screen.
+          expected: Both files are deleted, the QGB folder is empty and the app keeps responding.
+          actual: The app stops responding after Yes; on the next touch Android shows "File Manager_debug isn't responding" with Close app and Wait.
+          failure_step: 'Step 3: Delete the selection and confirm with Yes.'
 
   # NAVIGATION — add QGB to favorites, leave it, and come back through Go to favorite.
   # Witness: "Remove from favorites", which the folder menu offers only inside a favorite
@@ -378,7 +484,23 @@ test_cases:
               {tap: More options}, wait]
       expect: {present: Remove from favorites}
     evidence: [Remove from favorites]    # screen witness: the favorite-only menu entry, opened at the destination
-    bugs: [go-to-favorite-opens-home]
+    bugs:
+      - id: go-to-favorite-opens-home
+        reference_report:
+          summary: 'Go to favorite opens the wrong folder: it stays at the top of internal storage'
+          steps:
+            - Launch Fossify File Manager (its icon is labelled File Manager_debug).
+            - Tap Download.
+            - Tap QGB.
+            - Tap More options.
+            - Tap Add to favorites.
+            - Tap Internal in the breadcrumbs.
+            - Tap Go to favorite.
+            - Tap Internal / Download / QGB.
+            - Tap More options.
+          expected: The QGB folder opens with alpha.txt and beta.txt, and its More options menu offers Remove from favorites.
+          actual: The top of internal storage is shown instead, with folders such as "Alarms" and "DCIM"; the More options menu offers "Add to favorites", not Remove from favorites.
+          failure_step: 'Step 4: Use Go to favorite in the toolbar and pick Internal / Download / QGB.'
 
   # NAVIGATION — find a folder by search and open it from its result header. The seeded
   # header opens the folder above it (QGB), which holds a file of the same name, so the
@@ -409,7 +531,29 @@ test_cases:
               {tap: Properties}, wait]
       expect: {present: /storage/emulated/0/Download/QGB/Backup}
     evidence: [/storage/emulated/0/Download/QGB/Backup]    # screen witness: the opened file's folder
-    bugs: [search-folder-opens-parent]
+    bugs:
+      - id: search-folder-opens-parent
+        reference_report:
+          summary: Tapping a folder header in search results opens its parent folder
+          steps:
+            - Launch Fossify File Manager (its icon is labelled File Manager_debug).
+            - Tap Download.
+            - Tap QGB.
+            - Press and hold alpha.txt.
+            - Tap More options.
+            - Tap Copy to.
+            - Tap the + button of the folder picker.
+            - Type "Backup" into the folder name field.
+            - Tap OK.
+            - Tap Internal in the breadcrumbs.
+            - Tap the search field at the top of the screen.
+            - Type "Backup" into the search field.
+            - Tap the result header Internal/Download/QGB/Backup.
+            - Press and hold alpha.txt.
+            - Tap Properties.
+          expected: The Backup folder opens, holding only alpha.txt, and the Properties of alpha.txt give the path /storage/emulated/0/Download/QGB/Backup.
+          actual: 'The QGB folder opens instead: it lists Backup, alpha.txt and "beta.txt", and the Properties of alpha.txt give the path "/storage/emulated/0/Download/QGB".'
+          failure_step: 'Step 6: Tap the result header Internal/Download/QGB/Backup.'
 
   # LIFECYCLE — process death. Exactly one lifecycle step (`relaunch`) between adding the
   # favorite and reading the favorites list: QGB must still be listed after a cold start.
@@ -435,7 +579,23 @@ test_cases:
               wait]
       expect: {present: /storage/emulated/0/Download/QGB}
     evidence: [/storage/emulated/0/Download/QGB]    # screen witness: the favorite's path on the destination list
-    bugs: [favorites-dropped-on-restart]
+    bugs:
+      - id: favorites-dropped-on-restart
+        reference_report:
+          summary: Favorite folder is gone from Manage favorites after restarting the app
+          steps:
+            - Launch Fossify File Manager (its icon is labelled File Manager_debug).
+            - Tap Download.
+            - Tap QGB.
+            - Tap More options.
+            - Tap Add to favorites.
+            - Launch Fossify File Manager again after closing it from the recent apps list.
+            - Tap More options.
+            - Tap Settings.
+            - Tap Manage favorites.
+          expected: Manage favorites lists /storage/emulated/0/Download/QGB, and the toolbar of the home folder offers "Go to favorite".
+          actual: Manage favorites is empty and shows "You can add frequently used folders to favorites for easy access from anywhere."
+          failure_step: 'Step 5: Read the list.'
 
   # DISPLAY side bug (content-format). The case's own outcome is a move into a new
   # folder, which holds on both arms; the seeded file rows draw beta.txt as 11.3 kB (its
@@ -466,6 +626,15 @@ test_cases:
     bugs:
       - id: list-size-unit-off
         reference: {kind: cross-check, note: "the route's own Properties dialog gives beta.txt's size as 11 B (and the folder picker lists it as 11 B), so a file row that reads 11.3 kB is visibly wrong"}
+        reference_report:
+          summary: File list shows file sizes in the wrong unit, kB instead of bytes
+          steps:
+            - Launch Fossify File Manager (its icon is labelled File Manager_debug).
+            - Tap Download.
+            - Tap QGB.
+          expected: 'The file rows show the real sizes: alpha.txt 12 B and beta.txt 11 B.'
+          actual: The row of beta.txt shows "11.3 kB" and the row of alpha.txt shows 12.3 kB.
+          failure_step: 'Step 1: Open the Download folder, then the QGB folder, and read the files and their sizes.'
 
   # DISPLAY side bug (widget-inventory). The case's own outcome is the combined
   # Properties of the two selected text files, which holds on both arms; the seeded
@@ -494,3 +663,14 @@ test_cases:
     bugs:
       - id: decompress-offered-for-text
         reference: {kind: stated, note: "step 1 states the QGB folder holds two text files and no archives, so an action that extracts an archive has nothing to act on"}
+        reference_report:
+          summary: Selection menu offers Decompress for a text file that is not an archive
+          steps:
+            - Launch Fossify File Manager (its icon is labelled File Manager_debug).
+            - Tap Download.
+            - Tap QGB.
+            - Press and hold alpha.txt.
+            - Tap More options.
+          expected: The menu for a selected text file offers no archive extraction action; QGB holds no archives.
+          actual: The More options menu of the selection lists "Decompress" although only alpha.txt, a text file, is selected.
+          failure_step: 'Step 3: Open the selection''s More options menu, read the actions it offers, and choose Select all.'

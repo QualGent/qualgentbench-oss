@@ -102,6 +102,15 @@ test_cases:
     bugs:
       - id: overview-title-typo
         reference: {kind: stated, note: "steps 1 and 5 name the Overview, the word the screen title misspells"}
+        reference_report:
+          summary: The Overview screen title is misspelled
+          steps:
+            - Launch openScale.
+            - Tap Add new measurement in the top bar.
+            - Go back to the Overview.
+          expected: The top bar of the first screen reads Overview.
+          actual: The top bar reads Overveiw.
+          failure_step: 'Step 1: Open the app to the Overview'
 
   - id: openscale-statistics-range
     name: Check the weight range on the Statistics screen
@@ -127,6 +136,15 @@ test_cases:
     bugs:
       - id: stats-average-drops-latest
         reference: {kind: stated, note: "step 3 states the three weight entries (74, 78, 85 kg) the card summarises"}
+        reference_report:
+          summary: Statistics shows the wrong average weight
+          steps:
+            - Launch openScale.
+            - Tap Open menu at the top left.
+            - Tap Statistics.
+          expected: 'The Weight card shows Avg: 79 kg, the mean of Alice''s three entries (74, 78 and 85 kg).'
+          actual: 'The Weight card shows Avg: 76 kg, with Min: 74 kg and Max: 85 kg.'
+          failure_step: 'Step 3: Find the Weight card and read the values it summarises'
 
   - id: openscale-user-profile
     name: Verify a user's profile details
@@ -150,6 +168,16 @@ test_cases:
     bugs:
       - id: user-age-off-by-one
         reference: {kind: stated, note: "the outcome states the birth date (January 15, 1990) and the launch Overview's cards show the year (2026), so the Users list's age is checkable"}
+        reference_report:
+          summary: The user list shows Alice one year older than her birth date gives
+          steps:
+            - Launch openScale.
+            - Tap Open menu at the top left.
+            - Tap Settings.
+            - Tap User.
+          expected: 'Alice was born on January 15, 1990 and the measurements are dated 2026, so her entry reads Age: 36.'
+          actual: 'Alice''s entry in the user list reads Age: 37, Gender: Male.'
+          failure_step: 'Step 2: Open Settings, then User'
 
   - id: openscale-delete-measurement
     name: Delete the newest measurement
@@ -169,7 +197,17 @@ test_cases:
     check:
       steps: [launch, {tap: 'Delete measurement from Aug 29, 2026 7:00 AM'}, {tap: Delete}, wait]
       expect: {db: openScale.db, equals: '0', query: select count(*) from Measurement where id=3;}
-    bugs: [measurement-delete-broken]
+    bugs:
+      - id: measurement-delete-broken
+        reference_report:
+          summary: A deleted measurement is still listed on the Overview
+          steps:
+            - Launch openScale.
+            - Tap the delete (trash) action on the Aug 29, 2026 7:00 AM card.
+            - Tap Delete in the confirmation dialog.
+          expected: The Aug 29 card is gone and the newest card is Aug 28 with 78 kg.
+          actual: The Aug 29, 2026 7:00 AM card is still on the Overview and still shows 85 kg and +7 kg.
+          failure_step: 'Step 4: Look at the Overview'
 
   # De-leaked 2026-09-14: the brief no longer computes the BMI for the agent; the defect
   # is a display side bug and the oracle checks the weight, which holds on both arms.
@@ -197,3 +235,16 @@ test_cases:
     bugs:
       - id: edit-skips-derived-recalc
         reference: {kind: entered, note: "the route enters 90 kg in place of 85 kg, and the same card showed BMI 29.4 for 85 kg at launch and on the edit screen, so an unchanged 29.4 is visibly stale"}
+        reference_report:
+          summary: BMI is not updated after a measurement's weight is edited
+          steps:
+            - Launch openScale.
+            - Tap the edit (pencil) action on the Aug 29, 2026 7:00 AM card.
+            - Tap Edit Weight.
+            - Tap Clear.
+            - Type "90" into the value field.
+            - Tap OK.
+            - Tap Save measurement in the top bar.
+          expected: The card shows 90 kg and a BMI recalculated for 90 kg (about 31.1 at 170 cm).
+          actual: The card shows 90 kg but its BMI still reads 29.4, the value for the old 85 kg.
+          failure_step: 'Step 5: Look at the values now shown for that measurement on its card'

@@ -202,7 +202,28 @@ test_cases:
               {tap: bottom_app_bar_update_balance_button}, {type: "5"}, {tap: Spend}, wait]
       expect: {db: Catima.db, query: "select balance from cards where store='Cafe';",
                equals: "15", crash: ArithmeticException}
-    bugs: [spend-balance-crash]
+    bugs:
+      - id: spend-balance-crash
+        reference_report:
+          summary: App crashes when spending points from a card's balance
+          steps:
+            - Launch Catima.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "C-101" into the card ID field.
+            - Tap OK.
+            - Type "Cafe" into the name field.
+            - Tap the Options tab.
+            - Type "20" into the balance field.
+            - Tap Save.
+            - Tap the Cafe card in the list.
+            - Tap the balance button at the bottom right of the card screen.
+            - Type "5" into the amount field.
+            - Tap Spend.
+          expected: The dialog closes, the Cafe card screen stays open and the card's balance is 15 points.
+          actual: 'The app crashed on Spend: a dialog reads "We''re sorry, but Catima Debug has crashed." and the Cafe card screen is gone. The device log shows ArithmeticException.'
+          failure_step: 'Step 4: Enter 5 and choose Spend'
 
   # CRASH — put a card into a group from the group's own screen. The seeded Save dies
   # before the selection is written.
@@ -228,7 +249,30 @@ test_cases:
               {tap: edit}, {tap: Bakery}, {tap: Save}, wait]
       expect: {db: Catima.db, query: "select count(*) from cardsGroups where groupId='Food';",
                equals: "1", crash: IndexOutOfBoundsException}
-    bugs: [group-cards-save-crash]
+    bugs:
+      - id: group-cards-save-crash
+        reference_report:
+          summary: App crashes when saving a group after selecting a card for it
+          steps:
+            - Launch Catima.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "B-202" into the card ID field.
+            - Tap OK.
+            - Type "Bakery" into the name field.
+            - Tap Save.
+            - Tap More options on the card list.
+            - Tap Groups.
+            - Tap the + button (Add).
+            - Type "Food" into the group name field.
+            - Tap OK.
+            - Tap the Edit button of the Food group.
+            - Tap the Bakery card.
+            - Tap Save.
+          expected: The Groups screen is shown again and lists Food with "1 card".
+          actual: 'The app crashed on Save: a dialog reads "We''re sorry, but Catima Debug has crashed." and the Groups screen is gone. The device log shows IndexOutOfBoundsException.'
+          failure_step: 'Step 3: Use the Food group''s Edit button, select the Bakery card and save the group'
 
   # CRASH — duplicate a card from the list's selection menu. The seeded duplicate dies as
   # the editor opens, before anything is saved.
@@ -253,7 +297,25 @@ test_cases:
               {long_press: Gym}, {tap: More options}, {tap: Duplicate}, wait, {tap: Save}, wait]
       expect: {db: Catima.db, query: "select count(*) from cards where cardid='M-200';",
                equals: "2", crash: NumberFormatException}
-    bugs: [duplicate-card-id-crash]
+    bugs:
+      - id: duplicate-card-id-crash
+        reference_report:
+          summary: App crashes when Duplicate is chosen for a card in the card list
+          steps:
+            - Launch Catima.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "M-200" into the card ID field.
+            - Tap OK.
+            - Type "Gym" into the name field.
+            - Tap Save.
+            - Press and hold the Gym card in the list.
+            - Tap More options.
+            - Tap Duplicate.
+          expected: The "Add card" editor opens pre-filled with the name Gym and the card ID M-200, ready to be saved as a second card.
+          actual: 'No duplicate was created. The app crashed on Duplicate: a dialog reads "We''re sorry, but Catima Debug has crashed." instead of the editor. The device log shows NumberFormatException.'
+          failure_step: 'Step 2: Long-press the Gym card and choose Duplicate from the selection''s More options menu'
 
   # CRASH — archive a card from its card screen. The seeded Archive dies before the
   # archive flag is written.
@@ -277,7 +339,25 @@ test_cases:
               {tap: Cinema}, {tap: Overflow menu}, {tap: Archive}, wait]
       expect: {db: Catima.db, query: "select archive from cards where store='Cinema';",
                equals: "1", crash: IllegalStateException}
-    bugs: [card-screen-archive-crash]
+    bugs:
+      - id: card-screen-archive-crash
+        reference_report:
+          summary: App crashes when Archive is chosen from a card screen's overflow menu
+          steps:
+            - Launch Catima.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "K-303" into the card ID field.
+            - Tap OK.
+            - Type "Cinema" into the name field.
+            - Tap Save.
+            - Tap the Cinema card in the list.
+            - Tap the Overflow menu (three dots) on the card screen.
+            - Tap Archive.
+          expected: The Cinema card is archived and its card screen stays open.
+          actual: 'The app crashed on Archive: a dialog reads "We''re sorry, but Catima Debug has crashed." and the Cinema card screen is gone. The device log shows IllegalStateException.'
+          failure_step: 'Step 2: Open the Cinema card and choose Archive from the card screen''s overflow menu'
 
   # DISPLAY side bug (content-format). The case's own outcome is a received amount, which
   # holds on both arms; the seeded card list draws the balance ten times too large
@@ -309,6 +389,27 @@ test_cases:
     bugs:
       - id: list-balance-tenfold
         reference: {kind: cross-check, note: "the route sets the balance to 20 points and receives 5, and the card screen's balance dialog states the current balance as 20 points, so a list row that reads 250 points (or 200 before the receive) is visibly wrong"}
+        reference_report:
+          summary: Card list shows a card's balance ten times too large
+          steps:
+            - Launch Catima.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "P-404" into the card ID field.
+            - Tap OK.
+            - Type "Pharmacy" into the name field.
+            - Tap the Options tab.
+            - Type "20" into the balance field.
+            - Tap Save.
+            - Tap the Pharmacy card in the list.
+            - Tap the balance button at the bottom right of the card screen.
+            - Type "5" into the amount field.
+            - Tap Receive.
+            - Tap Navigate up (the back arrow) to return to the card list.
+          expected: 'The Pharmacy row in the card list reads "25 points": 20 points plus the 5 received.'
+          actual: The Pharmacy row in the card list reads "250 points", ten times the real balance of 25 points.
+          failure_step: 'Step 5: Go back to the card list and read the Pharmacy card''s balance there'
 
   # DISPLAY side bug (widget-inventory). The case's own outcome is a delete from the card
   # screen, which holds on both arms; the seeded overflow menu also offers Unarchive for a
@@ -341,6 +442,29 @@ test_cases:
     bugs:
       - id: unarchive-offered-for-active-card
         reference: {kind: stated, note: "step 3 states the Library card has never been archived, so a menu that offers to unarchive it offers an action with nothing to act on"}
+        reference_report:
+          summary: Card screen's overflow menu offers Unarchive for a card that was never archived
+          steps:
+            - Launch Catima.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "T-505" into the card ID field.
+            - Tap OK.
+            - Type "Theater" into the name field.
+            - Tap Save.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "L-505" into the card ID field.
+            - Tap OK.
+            - Type "Library" into the name field.
+            - Tap Save.
+            - Tap the Library card in the list.
+            - Tap the Overflow menu (three dots) on the card screen.
+          expected: The menu offers Archive, Duplicate and Delete. The Library card is not archived, so there is nothing to unarchive.
+          actual: 'The menu lists Archive, "Unarchive", Duplicate and Delete: it offers both Archive and Unarchive for a card that was never archived.'
+          failure_step: 'Step 3: Open the Library card and open the card screen''s overflow menu; read the actions it offers'
 
   # DISPLAY side bug (content-format). The case's own outcome is a group membership set
   # from the card editor, which holds on both arms; the seeded Groups screen counts the
@@ -372,6 +496,30 @@ test_cases:
     bugs:
       - id: group-card-count-off-by-one
         reference: {kind: entered, note: "the route adds exactly one card to the new Travel group, so a Groups screen that lists Travel with 2 cards is visibly wrong"}
+        reference_report:
+          summary: Groups screen counts one card too many for a group
+          steps:
+            - Launch Catima.
+            - Tap More options on the card list.
+            - Tap Groups.
+            - Tap the + button (Add).
+            - Type "Travel" into the group name field.
+            - Tap OK.
+            - Tap Navigate up (the back arrow) to return to the card list.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "A-606" into the card ID field.
+            - Tap OK.
+            - Type "Airline" into the name field.
+            - Tap the Options tab.
+            - Tap the Travel group.
+            - Tap Save.
+            - Tap More options on the card list.
+            - Tap Groups.
+          expected: The Groups screen lists Travel with "1 card", because Airline is the only card in the group.
+          actual: The Groups screen lists Travel with "2 cards" although only the Airline card was added to it.
+          failure_step: 'Step 4: From the main menu, open Groups and read the Travel group''s card count'
 
   # PERSISTENCE — rename a card from its card screen. The seeded editor closes as if
   # saved and the stored name stays Florist.
@@ -397,7 +545,27 @@ test_cases:
               wait, {tap: Navigate up}, wait]
       expect: {db: Catima.db, query: "select count(*) from cards where store='Garden';",
                equals: "1"}
-    bugs: [edit-not-saved]
+    bugs:
+      - id: edit-not-saved
+        reference_report:
+          summary: Renaming a card is not saved; the card keeps its old name
+          steps:
+            - Launch Catima.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "F-707" into the card ID field.
+            - Tap OK.
+            - Type "Florist" into the name field.
+            - Tap Save.
+            - Tap the Florist card in the list.
+            - Tap Edit on the card screen.
+            - Type "Garden" into the name field, replacing "Florist".
+            - Tap Save.
+            - Tap Navigate up (the back arrow) to return to the card list.
+          expected: After Save the card screen's title is Garden, and the card list lists the card as Garden.
+          actual: The editor closed as if saved, but the card screen's title is still "Florist" and the card list still lists the card as Florist. The name did not change.
+          failure_step: 'Step 3: Change the name to "Garden" and save'
 
   # NAVIGATION — open a card from search results and star it there. The seeded result
   # opens the card at the same position in the unfiltered list (Aquarium), so the star
@@ -428,7 +596,32 @@ test_cases:
       expect: {db: Catima.db,
                query: "select group_concat(store) from cards where starstatus=1 and store in ('Aquarium','Museum');",
                equals: "Museum"}
-    bugs: [search-result-opens-other-card]
+    bugs:
+      - id: search-result-opens-other-card
+        reference_report:
+          summary: Tapping a search result opens a different card than the one tapped
+          steps:
+            - Launch Catima.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "Q-808" into the card ID field.
+            - Tap OK.
+            - Type "Aquarium" into the name field.
+            - Tap Save.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "Q-909" into the card ID field.
+            - Tap OK.
+            - Type "Museum" into the name field.
+            - Tap Save.
+            - Tap Search on the card list.
+            - Type "Museum" into the search field.
+            - Tap the Museum card in the results.
+          expected: 'The Museum card opens: the card screen''s title is Museum and its card ID is Q-909.'
+          actual: 'The wrong card opened: the card screen''s title is "Aquarium" and its card ID is "Q-808". The star in the toolbar then adds Aquarium to favorites, not the Museum card.'
+          failure_step: 'Step 4: Open the Museum card from the results and add it to favorites with the star in the toolbar'
 
   # LIFECYCLE — configuration change. Exactly one lifecycle step (`rotate`) between typing
   # the note and saving the card: the stored note must be the one typed.
@@ -453,7 +646,25 @@ test_cases:
               {tap: noteEdit}, {type: Table 4}, {rotate: landscape}, {tap: Save}, wait]
       expect: {db: Catima.db, query: "select note from cards where store='Pizza';",
                equals: "Table 4"}
-    bugs: [note-lost-on-rotation]
+    bugs:
+      - id: note-lost-on-rotation
+        reference_report:
+          summary: A note typed for a new card is cleared when the device is rotated before saving
+          steps:
+            - Launch Catima.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "Z-111" into the card ID field.
+            - Tap OK.
+            - Type "Pizza" into the name field.
+            - Tap the Options tab.
+            - Type "Table 4" into the Note field.
+            - Rotate the device to landscape.
+            - Tap Save.
+          expected: The Note field still reads Table 4 after the rotation, and the saved Pizza card is listed with the note Table 4.
+          actual: 'After rotating, the note was cleared: the field on the Options tab is empty and shows only its hint "Note". After Save the card list shows Pizza without the note Table 4.'
+          failure_step: 'Step 3: Turn the device to landscape before saving'
 
   # ORDERING — give a new card a barcode type through the barcode picker. Back in the
   # editor the seeded barcode preview is drawn off the main thread and the app dies before
@@ -481,7 +692,26 @@ test_cases:
               {tap: Continue}, wait, {tap: Code 39}, wait, {tap: Save}, wait]
       expect: {db: Catima.db, query: "select barcodetype from cards where store='Bookshop';",
                equals: "CODE_39", crash: CalledFromWrongThreadException}
-    bugs: [barcode-preview-off-main-thread]
+    bugs:
+      - id: barcode-preview-off-main-thread
+        reference_report:
+          summary: App crashes when Code 39 is chosen as the barcode type of a new card
+          steps:
+            - Launch Catima.
+            - Tap the + button (Add).
+            - Tap More options.
+            - Tap Add a card with no barcode.
+            - Type "B-222" into the card ID field.
+            - Tap OK.
+            - Type "Bookshop" into the name field.
+            - Tap Edit barcode.
+            - Tap More options.
+            - Tap Enter the barcode manually.
+            - Tap Continue.
+            - Tap Code 39 in the barcode list.
+          expected: The "Add card" editor is shown again with a Code 39 barcode preview for B-222 and the Save button.
+          actual: The card was not saved. The app crashed after Code 39 was chosen and the device went back to the home screen; the device log shows CalledFromWrongThreadException.
+          failure_step: 'Step 3: In the barcode list, choose Code 39'
 
   # ANR — delete a group. The seeded OK handler never returns; the route's next input (a
   # Back key, which needs no anchor on a screen a frozen app cannot dump) is never read,
@@ -507,4 +737,23 @@ test_cases:
               {press: back}, wait]
       expect: {db: Catima.db, query: "select group_concat(_id) from groups where _id in ('Travel','Work');",
                equals: "Work", anr: true}
-    bugs: [group-delete-blocks-main-thread]
+    bugs:
+      - id: group-delete-blocks-main-thread
+        reference_report:
+          summary: App freezes after confirming the deletion of a group
+          steps:
+            - Launch Catima.
+            - Tap More options on the card list.
+            - Tap Groups.
+            - Tap the + button (Add).
+            - Type "Travel" into the group name field.
+            - Tap OK.
+            - Tap the + button (Add).
+            - Type "Work" into the group name field.
+            - Tap OK.
+            - Tap the Delete button of the Travel group.
+            - Tap OK.
+            - Press the back button.
+          expected: Travel is removed, the Groups screen lists only Work, and back returns to the card list with the group tabs All and Work.
+          actual: After OK the app stopped responding to input, and Android showed "Catima Debug isn't responding" with the buttons Close app and Wait.
+          failure_step: 'Step 3: Use the Travel group''s Delete button and confirm with OK'

@@ -185,6 +185,16 @@ test_cases:
         reference:
           kind: stated
           note: "Step 4 sends the agent to the contacts list, and the brief spells \"contacts\"; the list's tab label reads \"Contatcs\"."
+        reference_report:
+          summary: The Contacts tab label is misspelled
+          steps:
+            - Launch Fossify Contacts.
+            - Tap the + button (Create new contact).
+            - Type "Alice" into the First name field.
+            - Tap Save.
+          expected: The bottom tabs read "Contacts", "Favorites" and "Groups".
+          actual: The first tab reads "Contatcs". It is misspelled from launch on, before and after the contact is created.
+          failure_step: 'Step 4: Read the contacts list'
 
   - id: contacts-phone
     name: Create a contact with a phone number
@@ -206,7 +216,20 @@ test_cases:
     check:
       steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {tap: contact_number}, {type: '555-1234'}, {tap: Save}, wait]
       expect: {content: content://com.android.contacts/data, contains: data1=555-1234}
-    bugs: [phone-number-dropped]
+    bugs:
+      - id: phone-number-dropped
+        reference_report:
+          summary: The phone number entered for a new contact is not saved
+          steps:
+            - Launch Fossify Contacts.
+            - Tap the + button (Create new contact).
+            - Type "Alice" into the First name field.
+            - Type "555-1234" into the Number field.
+            - Tap Save.
+            - Tap Alice in the contacts list.
+          expected: Alice's details screen shows the phone number 555-1234.
+          actual: 'The contact is saved and "Alice" is listed, but her details screen shows no phone number: 555-1234 is missing.'
+          failure_step: 'Step 6: Read the phone number shown'
 
   - id: contacts-favorite
     name: Add a contact to favorites
@@ -226,7 +249,21 @@ test_cases:
     check:
       steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {tap: Save}, {long_press: Alice}, {tap: Add to favorites}, wait]
       expect: {content: content://com.android.contacts/contacts, contains: starred=1}
-    bugs: [favorite-not-saved]
+    bugs:
+      - id: favorite-not-saved
+        reference_report:
+          summary: Add to favorites does nothing; the contact is not added to the Favorites tab
+          steps:
+            - Launch Fossify Contacts.
+            - Tap the + button (Create new contact).
+            - Type "Alice" into the First name field.
+            - Tap Save.
+            - Press and hold Alice in the contacts list.
+            - Tap Add to favorites.
+            - Tap the Favorites tab.
+          expected: Alice is listed on the Favorites tab.
+          actual: The selection closes and the list is refreshed as if it worked, but "Alice" is not listed on the Favorites tab.
+          failure_step: 'Step 4: Open the Favorites tab'
 
   - id: contacts-delete
     name: Delete a contact
@@ -248,7 +285,21 @@ test_cases:
       # dialog; the contact screen carries a direct Delete action, so the route goes there.
       steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {tap: Save}, wait, {tap: Alice}, {tap: Delete}, {tap: "Yes"}, wait]
       expect: {content: content://com.android.contacts/contacts, contains: display_name=Alice, absent: true}
-    bugs: [contact-delete-broken]
+    bugs:
+      - id: contact-delete-broken
+        reference_report:
+          summary: A contact is still listed after its deletion is confirmed
+          steps:
+            - Launch Fossify Contacts.
+            - Tap the + button (Create new contact).
+            - Type "Alice" into the First name field.
+            - Tap Save.
+            - Tap Alice in the contacts list.
+            - Tap Delete.
+            - Tap Yes.
+          expected: Alice is removed and the contacts list reads "No contacts found".
+          actual: The contacts list is shown again and "Alice" is still listed.
+          failure_step: 'Step 5: Read the contacts list'
 
   # ── CRASH x2 and LIFECYCLE cases (QUA-2727, epic QUA-2723) — seeded in place of the
   # pruned contacts-edit. Each keeps the polarity rule every case here obeys: the CLEAN
@@ -296,7 +347,19 @@ test_cases:
         # length 0") out of viewContact. Substring, case-insensitive, matched against the
         # normalised signature + exception + message.
         crash: IndexOutOfBoundsException
-    bugs: [contact-without-number-open-crash]
+    bugs:
+      - id: contact-without-number-open-crash
+        reference_report:
+          summary: The app crashes when a contact without a phone number is opened
+          steps:
+            - Launch Fossify Contacts.
+            - Tap the + button (Create new contact).
+            - Type "Alice" into the First name field.
+            - Tap Save.
+            - Tap Alice in the contacts list.
+          expected: Alice's details screen opens and shows her name.
+          actual: The app closes when Alice is tapped; her details screen never opens. The device log shows an IndexOutOfBoundsException.
+          failure_step: 'Step 3: Open "Alice" from the contacts list'
 
   # CRASH — creating a contact group. The route is the hunt corpus's `create_group`
   # CONTROL plus nothing: Groups tab -> + -> name -> OK -> the account picker's "Phone
@@ -330,7 +393,20 @@ test_cases:
         # The gate: java.lang.NullPointerException from the member count's `!!` in
         # MyViewPagerFragment.setupGroupsAdapter.
         crash: NullPointerException
-    bugs: [empty-group-count-crash]
+    bugs:
+      - id: empty-group-count-crash
+        reference_report:
+          summary: The app crashes when a new group is created
+          steps:
+            - Launch Fossify Contacts.
+            - Tap the Groups tab.
+            - Tap the + button.
+            - Type "Friends" into the group name field.
+            - Tap OK.
+            - Tap Phone storage.
+          expected: The Groups tab lists the new group as "Friends (0)".
+          actual: The app closes after Phone storage is chosen, before the Groups tab can be read. The device log shows a NullPointerException.
+          failure_step: 'Step 4: When asked where to create it, choose Phone storage'
 
   # LIFECYCLE — the shape CLAUDE.md prescribes and fossify-calendar's
   # cal-repeat-survives-rotation uses: the steps that PRODUCE the state first, then
@@ -375,4 +451,16 @@ test_cases:
       steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {press: back},
               {rotate: landscape}, {tap: Save}, wait]
       expect: {content: content://com.android.contacts/contacts, contains: display_name=Alice}
-    bugs: [new-contact-lost-on-rotation]
+    bugs:
+      - id: new-contact-lost-on-rotation
+        reference_report:
+          summary: The name typed into a new contact is cleared when the phone is rotated to landscape
+          steps:
+            - Launch Fossify Contacts.
+            - Tap the + button (Create new contact).
+            - Type "Alice" into the First name field.
+            - Press the back button to close the keyboard.
+            - Rotate the device to landscape.
+          expected: The new-contact form still shows "Alice" as the first name after the rotation, and Save stores her.
+          actual: 'After the rotation the form is blank: the field shows only its hint, "First name". Tapping Save then leaves the form open and no Alice is saved.'
+          failure_step: 'Step 3: With the new contact still open, turn the phone sideways to landscape'

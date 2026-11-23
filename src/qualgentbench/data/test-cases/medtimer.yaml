@@ -262,6 +262,14 @@ test_cases:
         reference:
           kind: stated
           note: "Step 1 states Aspirin and Ibuprofen each have 10 in stock; their Medicine-tab rows read \"9 left\"."
+        reference_report:
+          summary: The Medicine tab shows one unit less in stock than each medicine has
+          steps:
+            - Launch MedTimer.
+            - Tap the Medicine tab.
+          expected: With 10 of each in stock, the cards read "Aspirin (10 left, ...)" and "Ibuprofen (10 left, ...)".
+          actual: The cards read "Aspirin (9 left, 9/21/26)" and "Ibuprofen (9 left, After 10/14/26)".
+          failure_step: 'Step 1: Open the Medicine tab, which lists Aspirin and Ibuprofen with 10 of each in stock'
 
   # READ-ONLY case: the agent writes nothing, so no `db:` oracle can tell a run from a
   # no-op, and the row-reading step that once made this scoreable pointed straight at
@@ -303,7 +311,25 @@ test_cases:
     # dosage are what the brief promises, and the Medicine-tab row is exactly what the
     # seeded display bug shifts. QUA-2767 / QUA-2768 remove this key.
     witness_before_action: QUA-2768
-    bugs: [reminder-time-display-shifted, stock-left-display-low]
+    bugs:
+      - id: reminder-time-display-shifted
+        reference_report:
+          summary: The Medicine tab shows Aspirin's 8:00 AM reminder one hour late
+          steps:
+            - Launch MedTimer.
+            - Tap the Medicine tab.
+          expected: The Aspirin card shows its reminder at 8:00 AM, the time shown on Aspirin's own screen.
+          actual: The Aspirin card on the Medicine tab shows the reminder at "9:00 AM". Aspirin's own screen still shows 8:00 AM.
+          failure_step: 'Step 1: Open the Medicine tab'
+      - id: stock-left-display-low
+        reference_report:
+          summary: The Medicine tab shows one unit less in stock than Aspirin has
+          steps:
+            - Launch MedTimer.
+            - Tap the Medicine tab.
+          expected: Aspirin has an amount of 10 in stock, so its card reads "Aspirin (10 left, ...)".
+          actual: The card reads "Aspirin (9 left, 9/21/26)".
+          failure_step: 'Step 1: Open the Medicine tab'
 
   # CRASH case (QUA-2710) — the corpus's first, and the shape later ones copy.
   #
@@ -355,7 +381,20 @@ test_cases:
         # The gate: the death this case claims. Substring, case-insensitive, matched
         # against the normalised signature + exception + message.
         crash: NoSuchElementException
-    bugs: [medicine-list-empty-reminders-crash]
+    bugs:
+      - id: medicine-list-empty-reminders-crash
+        reference_report:
+          summary: The app crashes when returning to the Medicine tab after adding a medicine
+          steps:
+            - Launch MedTimer.
+            - Tap the Medicine tab.
+            - Tap the Add medicine button.
+            - Type "Lisinopril" into the Medicine name field.
+            - Tap OK.
+            - Press the back button.
+          expected: The Medicine tab is shown and lists Lisinopril together with Aspirin and Ibuprofen.
+          actual: The app closes and the device's home screen is shown. The device log shows a NoSuchElementException (List is empty).
+          failure_step: 'Step 4: Go back to the Medicine tab'
 
   # ── FREEZE cases (QUA-2711) — the corpus's first two, and a PAIR on purpose: they
   # exercise the two different ways a hang is detected, and only one of them is a
@@ -428,7 +467,17 @@ test_cases:
         # defect. A seeded arm that dies some OTHER way (a java crash) is therefore
         # INCONCLUSIVE, not a FAIL that agrees.
         anr: true
-    bugs: [overview-action-blocks-main-thread]
+    bugs:
+      - id: overview-action-blocks-main-thread
+        reference_report:
+          summary: The app freezes after a raised reminder is answered with Taken
+          steps:
+            - Launch MedTimer.
+            - Tap the status icon of the raised "Ibuprofen (4)" reminder on the Overview.
+            - Tap Taken.
+          expected: The dose is recorded as taken, the Overview stays usable, and the Medicine tab opens and lists Aspirin and Ibuprofen.
+          actual: 'The app stops responding after Taken is tapped: Android shows the dialog "MedTimer isn''t responding" with Close app and Wait, and the Medicine tab cannot be opened.'
+          failure_step: 'Step 2: Answer it with Taken'
 
   # (2) STUCK SCREEN — no pending input, so ONLY the probe can see it.
   #
@@ -477,7 +526,17 @@ test_cases:
     # step 1. The table's other columns are the fixture's own values, on the Overview row
     # too. QUA-2767 / QUA-2768 remove this key.
     witness_before_action: QUA-2768
-    bugs: [analysis-table-freezes-on-open]
+    bugs:
+      - id: analysis-table-freezes-on-open
+        reference_report:
+          summary: The app freezes when the Tabular view is opened on the Analysis tab
+          steps:
+            - Launch MedTimer.
+            - Tap the Analysis tab.
+            - Tap Tabular view.
+          expected: The Tabular view opens with the columns Taken, Name, Dosage and Reminded and lists today's Ibuprofen event with dosage 2.5.
+          actual: 'The app stops responding as soon as Tabular view is tapped: the table never loads, and after another tap Android reports "MedTimer isn''t responding".'
+          failure_step: 'Step 2: Switch to the Tabular view'
 
   # ── CRASH x2 and NAVIGATION cases (QUA-2728, epic QUA-2723) — seeded in place of the
   # three pruned persistence cases. Each keeps the polarity rule every case here obeys:
@@ -526,7 +585,21 @@ test_cases:
         # value for MinuteOfHour"). Substring, case-insensitive, matched against the
         # normalised signature + exception + message.
         crash: DateTimeException
-    bugs: [new-reminder-time-crash]
+    bugs:
+      - id: new-reminder-time-crash
+        reference_report:
+          summary: The app crashes when a time based reminder is created with the suggested time
+          steps:
+            - Launch MedTimer.
+            - Tap the Medicine tab.
+            - Tap the Ibuprofen card, the one that shows 0 reminders.
+            - Tap Add reminder.
+            - Tap Time based reminder.
+            - Type "1" into the Dosage field.
+            - Tap Create reminder.
+          expected: The dialog closes and Ibuprofen's screen lists a new reminder at 8:00 AM with a dosage of 1.
+          actual: 'The app closes and the device''s home screen is shown; no reminder is created. The device log shows a DateTimeException (Invalid value for MinuteOfHour: 480).'
+          failure_step: 'Step 5: Create the reminder'
 
   # CRASH — correcting a logged dose. The route is the pruned medtimer-skip-logged-dose's
   # (card -> editor sheet -> close with back), whose clean arm derived HOLDS through this
@@ -592,7 +665,20 @@ test_cases:
         query: "select (select count(*) from ReminderEvent where medicineName='Ibuprofen' and amount='3') || ',' || (select count(*) from ReminderEvent where medicineName='Ibuprofen' and amount='2.5');"
         # The gate: java.lang.StringIndexOutOfBoundsException out of the editor's save.
         crash: StringIndexOutOfBoundsException
-    bugs: [dose-edit-save-crash]
+    bugs:
+      - id: dose-edit-save-crash
+        reference_report:
+          summary: The app crashes when the editor of a logged dose is closed after changing the amount
+          steps:
+            - Launch MedTimer.
+            - Tap the "Ibuprofen (2.5)" event card on the Overview.
+            - Tap the amount field, which shows 2.5.
+            - Type "3" into the amount field, replacing 2.5.
+            - Press the back button to close the keyboard.
+            - Press the back button again to close the editor.
+          expected: The editor closes and the Overview shows the event as "Ibuprofen (3)".
+          actual: The app closes and the device's home screen is shown when the editor is closed. The device log shows a StringIndexOutOfBoundsException.
+          failure_step: 'Step 3: Close the editor so the change is saved'
 
   # PERSISTENCE (QUA-2870): the pruned medtimer-edit-reminder-dosage, re-admitted with its
   # 2026-09 route unchanged (Aspirin's 8:00 AM reminder, dosage 2 -> 3; the medicine screen
@@ -623,7 +709,22 @@ test_cases:
     check:
       steps: [launch, {tap: Medicine}, {tap: 1 reminder}, {tap: '2'}, {type: '3'}, {press: back}, {press: back}, wait]
       expect: {db: medTimer, equals: '1', query: select count(*) from Reminder where amount='3';}
-    bugs: [reminder-amount-edit-lost]
+    bugs:
+      - id: reminder-amount-edit-lost
+        reference_report:
+          summary: A changed reminder dosage is not saved
+          steps:
+            - Launch MedTimer.
+            - Tap the Medicine tab.
+            - Tap the Aspirin card, the one that shows 1 reminder.
+            - Tap the dosage field of the 8:00 AM reminder, which shows 2.
+            - Type "3" into the dosage field, replacing 2.
+            - Press the back button to close the keyboard.
+            - Press the back button again to return to the Medicine tab.
+            - Tap the Aspirin card, the one that shows 1 reminder.
+          expected: Leaving Aspirin's screen for the Medicine tab (bottom tabs Overview, Medicine, Analysis) saves the change, and Aspirin's 8:00 AM reminder shows a dosage of 3 when reopened.
+          actual: 'The 8:00 AM reminder shows the old dosage, 2: the change to 3 did not save. Nothing on screen reports a problem.'
+          failure_step: 'Step 7: Read the reminder''s dosage'
 
   # WRONG NAVIGATION — the stock screen, reached the way a tester reaches it: Medicine
   # tab -> Ibuprofen -> the "Medicine stock" icon. The first three steps are the route to
@@ -662,4 +763,15 @@ test_cases:
       steps: [launch, {tap: Medicine}, {tap: 0 reminders}, {tap: Medicine stock}, wait]
       expect: {present: Amount}
     evidence: ['Amount']        # screen witness: the stock row the brief sends the agent to read
-    bugs: [stock-button-opens-settings]
+    bugs:
+      - id: stock-button-opens-settings
+        reference_report:
+          summary: The Medicine stock button opens the wrong screen, Medicine settings
+          steps:
+            - Launch MedTimer.
+            - Tap the Medicine tab.
+            - Tap the Ibuprofen card, the one that shows 0 reminders.
+            - Tap the Medicine stock button.
+          expected: The "Medicine stock settings" screen opens and shows an Amount of 10.
+          actual: 'The "Medicine settings" screen opens: it shows Color, Notification priority and "Medicine cannot be skipped", and no Amount.'
+          failure_step: 'Step 3: Tap the Medicine stock button to open its stock screen'

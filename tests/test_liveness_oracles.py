@@ -763,7 +763,7 @@ def test_the_anr_case_answers_ibuprofens_reminder_whatever_the_hour():
     assert '"Ibuprofen (4)"' in case["steps"][0], "the brief names the same reminder"
     assert "amount='4'" in case["check"]["expect"]["query"]
     assert case["check"]["expect"]["anr"] is True
-    assert case["bugs"] == ["overview-action-blocks-main-thread"]
+    assert [b["id"] for b in journey.case_bugs(case)] == ["overview-action-blocks-main-thread"]
 
 
 def _medtimer_hunt_features() -> dict:

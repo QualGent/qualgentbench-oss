@@ -205,7 +205,21 @@ test_cases:
               {type: Call the plumber}, {tap: Priority}, {tap: A}, wait, {tap: Toggle done}, wait]
       expect: {present: "pri:A", crash: ArrayIndexOutOfBoundsException}
     evidence: ["2026-09-16"]    # screen witness: the completion date only the toggled line carries
-    bugs: [todo-toggle-done-crash]
+    bugs:
+      - id: todo-toggle-done-crash
+        reference_report:
+          summary: Markor crashes when a To-Do task with a priority is marked done with Toggle done
+          steps:
+            - Launch Markor.
+            - Tap To-Do.
+            - Tap the text area of the To-Do list.
+            - Type "Call the plumber".
+            - Tap Priority.
+            - Tap A.
+            - Tap Toggle done.
+          expected: The task line is rewritten as "x <today's date> Call the plumber pri:A" (marked done, priority kept as a tag) and Markor stays open.
+          actual: Markor closes and the device returns to the home screen; the task is never marked done. The device log shows ArrayIndexOutOfBoundsException.
+          failure_step: 'Step 4: Use the Toggle done button to mark the task done.'
 
   # CRASH — choosing a priority for a task. The rewritten line "(B) <task>" is first
   # drawn by the choice.
@@ -229,7 +243,20 @@ test_cases:
               {type: Renew the passport}, {tap: Priority}, {tap: B}, wait]
       expect: {present: "(B) Renew the passport", crash: StringIndexOutOfBoundsException}
     evidence: ["(B) Renew the passport"]    # screen witness: the line as the choice rewrites it
-    bugs: [todo-priority-crash]
+    bugs:
+      - id: todo-priority-crash
+        reference_report:
+          summary: Markor crashes when a priority is chosen for a To-Do task
+          steps:
+            - Launch Markor.
+            - Tap To-Do.
+            - Tap the text area of the To-Do list.
+            - Type "Renew the passport".
+            - Tap Priority.
+            - Tap B.
+          expected: The task line is rewritten as "(B) Renew the passport" and Markor stays open.
+          actual: Markor closes and the device returns to the home screen; the priority is never set. The device log shows StringIndexOutOfBoundsException.
+          failure_step: 'Step 3: With the cursor on that line, use the Priority button and choose B.'
 
   # CRASH — a new note from the built-in cooking-recipe template. The template's section
   # headings are first drawn in the new note's editor.
@@ -254,7 +281,21 @@ test_cases:
               {tap: OK}, wait]
       expect: {present: Ingredients, crash: IllegalArgumentException}
     evidence: [Ingredients, Preparation]    # screen witness: the template's own headings in the new note
-    bugs: [template-create-crash]
+    bugs:
+      - id: template-create-crash
+        reference_report:
+          summary: Markor crashes when a new note is created from the cooking-recipe.md template
+          steps:
+            - Launch Markor.
+            - Tap the + button (Create a new file or folder).
+            - Tap the name field of the new file dialog.
+            - Type "Lasagna" into the name field.
+            - Tap the template field of the dialog.
+            - Tap cooking-recipe.md.
+            - Tap OK.
+          expected: A note named Lasagna opens in the editor with the recipe template, including the Ingredients and Preparation sections.
+          actual: Markor closes and the device returns to the home screen; no note is created. The device log shows IllegalArgumentException.
+          failure_step: 'Step 3: Choose the template cooking-recipe.md and confirm with OK.'
 
   # CRASH — copy a note from Recipes into the top folder. The route ends by opening the
   # copy there; its body is on no screen of the route before.
@@ -279,7 +320,21 @@ test_cases:
               {tap: ".."}, {tap: SELECT THIS FOLDER}, wait, {tap: ".."}, wait, {tap: Soup.md}, wait]
       expect: {present: "Carrots, onions and stock.", crash: IllegalStateException}
     evidence: ["Carrots, onions and stock."]    # screen witness: the copy's body, first opened by the last step
-    bugs: [copy-into-folder-crash]
+    bugs:
+      - id: copy-into-folder-crash
+        reference_report:
+          summary: Markor crashes when a folder is chosen as the destination for copying a note
+          steps:
+            - Launch Markor.
+            - Tap Recipes.
+            - Press and hold Soup.md.
+            - Tap More options.
+            - Tap Copy.
+            - Tap ".." in the folder picker to go up to the markor folder.
+            - Tap SELECT THIS FOLDER.
+          expected: Soup.md is copied into the markor folder and Markor stays open on the file list.
+          actual: Markor closes and the device returns to the home screen; nothing is copied. The device log shows IllegalStateException.
+          failure_step: 'Step 3: In the folder picker, go up one level to the markor folder and choose Select this folder.'
 
   # DISPLAY side bug (content-format). The case's own outcome is a note written and
   # saved, read through Details (the size comes from the file on disk); the seeded counts
@@ -309,6 +364,24 @@ test_cases:
     bugs:
       - id: details-word-count-off
         reference: {kind: entered, note: "the route types the three words passport tickets charger, so a word count of 4 is visibly wrong"}
+        reference_report:
+          summary: File Details count one word too many for a note
+          steps:
+            - Launch Markor.
+            - Tap the + button (Create a new file or folder).
+            - Tap the name field of the new file dialog.
+            - Type "Packing" into the name field.
+            - Tap OK.
+            - Tap the text area of the editor.
+            - Type "passport tickets charger".
+            - Tap Save.
+            - Tap More options.
+            - Tap File Browser.
+            - Press and hold Packing.md.
+            - Tap Details.
+          expected: 'The "Text Lines / Words / Characters" row reads "1 / 3 / 24": the note has three words.'
+          actual: The "Text Lines / Words / Characters" row reads "1 / 4 / 24", one word too many. The size is correct at 24 Bytes.
+          failure_step: 'Step 5: Read the dialog.'
 
   # DISPLAY side bug (widget-inventory). The case's own outcome is a move of both recipes
   # into the top folder, read by opening one of them there; with the two files selected
@@ -339,6 +412,16 @@ test_cases:
     bugs:
       - id: rename-offered-for-multiple
         reference: {kind: stated, note: "step 1 selects two files at once, and renaming applies to one file, so a Rename action for the pair is out of place"}
+        reference_report:
+          summary: Rename action is offered in the toolbar while two files are selected
+          steps:
+            - Launch Markor.
+            - Tap Recipes.
+            - Press and hold Pancakes.md.
+            - Tap Soup.md.
+          expected: With two files selected the toolbar offers only actions that apply to several files; Rename, a single-file action, is not shown.
+          actual: With Pancakes.md and Soup.md both selected, the toolbar also offers "Rename".
+          failure_step: 'Step 2: Read the actions offered for the two selected files.'
 
   # PERSISTENCE — the reused hunt bug. The edit is saved and the editor closed; Details
   # reads the file's size from disk (31 B for the new text, 58 B for the old one).
@@ -364,7 +447,23 @@ test_cases:
               {tap: File Browser}, wait, {long_press: Shopping.md}, {tap: Details}, wait]
       expect: {present: "31 Bytes"}
     evidence: ["31 Bytes"]    # screen witness: the size Details reads from the saved file
-    bugs: [content-not-saved]
+    bugs:
+      - id: content-not-saved
+        reference_report:
+          summary: 'Edited note is not saved: Details still show the old size after Save'
+          steps:
+            - Launch Markor.
+            - Tap Shopping.md.
+            - Tap the note text in the editor.
+            - Type "Milk, bread, apples and cheese." in place of the note's whole existing text.
+            - Tap Save.
+            - Tap More options.
+            - Tap File Browser.
+            - Press and hold Shopping.md.
+            - Tap Details.
+          expected: Details of Shopping.md show a size of 31 Bytes and "1 / 5 / 31", the new text.
+          actual: 'Details of Shopping.md still show "58 Bytes" and "4 / 9 / 54": the file holds the old text, the save wrote nothing.'
+          failure_step: 'Step 5: Read the size.'
 
   # NAVIGATION — a note found by search, then the editor's File Browser. The clean build
   # opens the note's own folder, Recipes, whose Soup.md is on no earlier screen of the
@@ -390,7 +489,21 @@ test_cases:
               wait, {tap: More options}, {tap: File Browser}, wait]
       expect: {present: Soup.md}
     evidence: [Soup.md]    # screen witness: the destination folder's other note
-    bugs: [file-browser-opens-notebook-root]
+    bugs:
+      - id: file-browser-opens-notebook-root
+        reference_report:
+          summary: File Browser from a note in Recipes opens the wrong folder, the top folder
+          steps:
+            - Launch Markor.
+            - Tap Search.
+            - Type "pancake" into the search field.
+            - Tap OK.
+            - Tap Recipes/Pancakes.md.
+            - Tap More options.
+            - Tap File Browser.
+          expected: 'The file list shows the note''s own folder: the title reads "> Recipes" and the list holds Pancakes.md and Soup.md.'
+          actual: 'The file list shows the top folder instead: the title reads "Markor" and the list holds Recipes, "Shopping.md" and "Travel.md". Soup.md is not listed.'
+          failure_step: 'Step 3: From the editor''s More options menu, choose File Browser.'
 
   # NAVIGATION — a new note created inside Recipes, then back. The clean build returns
   # to Recipes, where the new Waffles.md row is drawn for the first time.
@@ -414,7 +527,21 @@ test_cases:
               {type: Waffles}, {tap: OK}, wait, {press: back}, wait]
       expect: {present: Waffles.md}
     evidence: [Waffles.md]    # screen witness: the new note's row, first drawn by the list the back lands on
-    bugs: [back-from-editor-resets-folder]
+    bugs:
+      - id: back-from-editor-resets-folder
+        reference_report:
+          summary: Going back from a new note created in Recipes lands in the top folder, the wrong folder
+          steps:
+            - Launch Markor.
+            - Tap Recipes.
+            - Tap the + button (Create a new file or folder).
+            - Tap the name field of the new file dialog.
+            - Type "Waffles" into the name field.
+            - Tap OK.
+            - Press the Back button.
+          expected: 'The file list returns to the Recipes folder: the title reads "> Recipes" and the list holds Pancakes.md, Soup.md and the new Waffles.md.'
+          actual: 'The file list shows the top folder instead: the title reads "Markor" and the list holds Recipes, "Shopping.md" and "Travel.md". Waffles.md is not listed.'
+          failure_step: 'Step 3: When the new note opens in the editor, go back to the file list.'
 
   # LIFECYCLE — configuration change. The note is opened with the phone sideways (a
   # rotation BEFORE any text is typed: nothing is unsaved, so it changes nothing on either
@@ -447,7 +574,25 @@ test_cases:
               {tap: Details}, wait]
       expect: {present: "38 Bytes"}
     evidence: ["38 Bytes"]    # screen witness: the size Details reads from the file after the rotation
-    bugs: [rotation-drops-unsaved-edit]
+    bugs:
+      - id: rotation-drops-unsaved-edit
+        reference_report:
+          summary: Unsaved edit in the editor is lost after rotating the phone back to portrait
+          steps:
+            - Launch Markor.
+            - Tap Recipes.
+            - Tap Pancakes.md.
+            - Rotate the device to landscape.
+            - Tap the note text in the editor.
+            - Type "Flour, milk, eggs and a pinch of salt." in place of the note's whole existing text.
+            - Rotate the device to portrait.
+            - Tap More options.
+            - Tap File Browser.
+            - Press and hold Pancakes.md.
+            - Tap Details.
+          expected: The editor keeps "Flour, milk, eggs and a pinch of salt." after the rotation, and Details of Pancakes.md show 38 Bytes and "1 / 8 / 38".
+          actual: After the rotation the editor shows the old Pancakes text again; Details of Pancakes.md show "71 Bytes" and "4 / 13 / 67", the old file.
+          failure_step: 'Step 3: Turn the phone back upright to portrait.'
 
   # LIFECYCLE — process death. The note is rewritten and saved with Save, then exactly
   # ONE `relaunch` (a kill, so the editor never pauses normally), then the read: Details
@@ -473,7 +618,24 @@ test_cases:
               {tap: Recipes}, {long_press: Soup.md}, {tap: Details}, wait]
       expect: {present: "33 Bytes"}
     evidence: ["33 Bytes"]    # screen witness: the size Details reads from the file after the restart
-    bugs: [save-deferred-until-close]
+    bugs:
+      - id: save-deferred-until-close
+        reference_report:
+          summary: Note saved with the Save button is lost after restarting the app
+          steps:
+            - Launch Markor.
+            - Tap Recipes.
+            - Tap Soup.md.
+            - Tap the note text in the editor.
+            - Type "Carrots, onions, leeks and stock." in place of the note's whole existing text.
+            - Tap Save.
+            - Launch Markor again after closing it from the recent apps list.
+            - Tap Recipes.
+            - Press and hold Soup.md.
+            - Tap Details.
+          expected: Details of Soup.md show a size of 33 Bytes and "1 / 5 / 33", the saved text.
+          actual: 'Details of Soup.md show "35 Bytes" and "3 / 6 / 32": the file still holds the old text, the saved edit did not survive the restart.'
+          failure_step: 'Step 5: Read the size.'
 
   # ANR — create a folder, then a note inside it. The seeded FOLDER click handler never
   # returns; the route's next input (a list scroll, which needs no anchor: a frozen
@@ -502,7 +664,20 @@ test_cases:
               {tap: OK}, wait, {press: back}, wait]
       expect: {present: Ideas.md, anr: true}
     evidence: [Ideas.md]    # screen witness: the new note's row inside the new folder
-    bugs: [new-folder-blocks-main-thread]
+    bugs:
+      - id: new-folder-blocks-main-thread
+        reference_report:
+          summary: Markor freezes when FOLDER is tapped in the new file dialog
+          steps:
+            - Launch Markor.
+            - Tap the + button (Create a new file or folder).
+            - Tap the name field of the new file dialog.
+            - Type "Archive" into the name field.
+            - Tap FOLDER.
+            - Swipe down on the screen.
+          expected: The Archive folder is created and listed in the file list, and the app keeps responding.
+          actual: The app stops responding after FOLDER is tapped and no folder is created; on the next touch Android shows "Markor isn't responding" with Close app and Wait.
+          failure_step: 'Step 1: In the file list, use the + button, enter the name "Archive" and choose FOLDER.'
 
 # ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
 # Benign UI changes compiled into the journey APK beside the defects (the patches are in

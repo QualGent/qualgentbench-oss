@@ -204,7 +204,23 @@ test_cases:
         equals: "1"
         query: "select count(*) from Habits where name='Run' and type=1 and unit='km' and target_value=2.5 and freq_den=7;"
         crash: NumberFormatException
-    bugs: [measurable-target-decimal-crash]
+    bugs:
+      - id: measurable-target-decimal-crash
+        reference_report:
+          summary: Saving a measurable habit with a decimal target crashes and the habit is not created
+          steps:
+            - Launch Loop Habit Tracker.
+            - Tap Add habit.
+            - Tap Measurable.
+            - Type "Run" into the Name field.
+            - Type "km" into the unit field.
+            - Type "2.5" into the target field.
+            - Tap the Frequency field.
+            - Tap Every week.
+            - Tap SAVE.
+          expected: The habit is saved and "Run" is listed on the Habits screen; opening it shows a target of 2.5 km, Every week.
+          actual: 'The create screen closes abruptly when SAVE is tapped and no habit is created: the Habits screen lists only QASEED, not Run. The device log shows a NumberFormatException for "2.5".'
+          failure_step: 'Step 4: Save the habit'
 
   # CRASH — archive a habit, list archived habits, then unarchive it. The habit is
   # archived (1) on both arms before the seeded Unarchive dies, so `archived = 0` holds
@@ -235,7 +251,27 @@ test_cases:
         equals: "1"
         query: "select count(*) from Habits where name='Walk' and archived=0;"
         crash: NoSuchElementException
-    bugs: [unarchive-crash]
+    bugs:
+      - id: unarchive-crash
+        reference_report:
+          summary: The app crashes when an archived habit is unarchived
+          steps:
+            - Launch Loop Habit Tracker.
+            - Tap Add habit.
+            - Tap Yes or No.
+            - Type "Walk" into the Name field.
+            - Tap SAVE.
+            - Press and hold Walk in the habit list.
+            - Tap More options.
+            - Tap Archive.
+            - Tap Filter.
+            - Tap Hide archived.
+            - Press and hold Walk in the habit list.
+            - Tap More options.
+            - Tap Unarchive.
+          expected: Walk is unarchived and stays listed on the Habits screen.
+          actual: The app closes and the device's home screen is shown. The device log shows a NoSuchElementException.
+          failure_step: 'Step 4: Long-press Walk and choose Unarchive'
 
   # CRASH — change a habit's color from the list's selection. The seeded pick dies
   # before the color command runs. The picker's fifth swatch ("Color 5") is stored as
@@ -265,7 +301,23 @@ test_cases:
         equals: "1"
         query: "select count(*) from Habits where name='Swim' and color=7;"
         crash: ArrayIndexOutOfBoundsException
-    bugs: [color-pick-crash]
+    bugs:
+      - id: color-pick-crash
+        reference_report:
+          summary: The app crashes when the fifth color is picked for a habit from the habit list
+          steps:
+            - Launch Loop Habit Tracker.
+            - Tap Add habit.
+            - Tap Yes or No.
+            - Type "Swim" into the Name field.
+            - Type "Did you swim today?" into the Question field.
+            - Tap SAVE.
+            - Press and hold Swim in the habit list.
+            - Tap Change color.
+            - Tap Color 5.
+          expected: The color picker closes and Swim is shown in the habit list with the fifth color.
+          actual: The app closes and the device's home screen is shown. The device log shows an ArrayIndexOutOfBoundsException.
+          failure_step: 'Step 4: Pick the fifth color (Color 5)'
 
   # DISPLAY side bug (content-format). The case's own outcome is the stored weekly
   # frequency, which holds on both arms; the seeded habit screen reads "2 times per
@@ -298,6 +350,22 @@ test_cases:
     bugs:
       - id: frequency-label-off-by-one
         reference: {kind: entered, note: "the route sets the frequency to 3 times per week, and the edit screen showed that before Save, so a habit screen reading 2 times per week is visibly wrong"}
+        reference_report:
+          summary: A habit saved as 3 times per week shows the wrong frequency on its own screen
+          steps:
+            - Launch Loop Habit Tracker.
+            - Tap Add habit.
+            - Tap Yes or No.
+            - Type "Stretch" into the Name field.
+            - Tap the Frequency field.
+            - Select the times-per-week option.
+            - Type "3" into the times-per-week number field.
+            - Tap the dialog's save button.
+            - Tap SAVE.
+            - Tap Stretch in the habit list.
+          expected: The Stretch screen shows the frequency "3 times per week".
+          actual: The Stretch screen shows "2 times per week".
+          failure_step: 'Step 5: Read the frequency on its screen'
 
   # DISPLAY side bug (content-format). The case's own outcome is the stored reminder,
   # which holds on both arms; the seeded habit screen reads "9:00 AM" for an 8:00 AM
@@ -329,6 +397,23 @@ test_cases:
     bugs:
       - id: reminder-label-hour-late
         reference: {kind: entered, note: "the route accepts 8:00 AM in the time picker and the edit screen showed 8:00 AM before Save, so a habit screen reading 9:00 AM is visibly wrong"}
+        reference_report:
+          summary: A reminder set for 8:00 AM is shown one hour later on the habit's screen
+          steps:
+            - Launch Loop Habit Tracker.
+            - Tap Add habit.
+            - Tap Yes or No.
+            - Type "Meditate" into the Name field.
+            - Tap SAVE.
+            - Press and hold Meditate in the habit list.
+            - Tap Edit.
+            - Tap the Reminder field.
+            - Tap DONE.
+            - Tap SAVE.
+            - Tap Meditate in the habit list.
+          expected: The Meditate screen shows the reminder time "8:00 AM", the time accepted in the picker.
+          actual: The Meditate screen shows the reminder time "9:00 AM".
+          failure_step: 'Step 5: Open Meditate from the habit list and read its reminder time'
 
   # DISPLAY side bug (widget-inventory). The case's own outcome is the archive, which
   # holds on both arms; the seeded selection menu of the new, never-archived habit also
@@ -361,6 +446,19 @@ test_cases:
     bugs:
       - id: unarchive-offered-for-active
         reference: {kind: stated, note: "step 1 states Journal has never been archived, so an action that unarchives it has nothing to act on"}
+        reference_report:
+          summary: The selection menu offers Unarchive for a habit that has never been archived
+          steps:
+            - Launch Loop Habit Tracker.
+            - Tap Add habit.
+            - Tap Yes or No.
+            - Type "Journal" into the Name field.
+            - Tap SAVE.
+            - Press and hold Journal in the habit list.
+            - Tap More options.
+          expected: For a habit that is not archived the menu offers Archive and Delete only.
+          actual: 'The menu lists Archive, Unarchive and Delete: "Unarchive" is offered although Journal is not archived.'
+          failure_step: 'Step 2: Long-press Journal and open the selection''s More options menu'
 
   # DISPLAY side bug (content-format). The case's own outcome is the stored measurable
   # target, which holds on both arms; the seeded habit screen reads "75 mi" for 7.5 mi.
@@ -391,6 +489,22 @@ test_cases:
     bugs:
       - id: target-decimal-dropped
         reference: {kind: entered, note: "the route types the target 7.5 with unit mi, so a habit screen reading 75 mi is visibly wrong"}
+        reference_report:
+          summary: A target of 7.5 mi is shown without its decimal point on the habit's screen
+          steps:
+            - Launch Loop Habit Tracker.
+            - Tap Add habit.
+            - Tap Measurable.
+            - Type "Cycle" into the Name field.
+            - Type "mi" into the unit field.
+            - Type "7.5" into the target field.
+            - Tap the Target Type field.
+            - Tap At most.
+            - Tap SAVE.
+            - Tap Cycle in the habit list.
+          expected: The Cycle screen shows the target "7.5 mi".
+          actual: The Cycle screen shows the target "75 mi".
+          failure_step: 'Step 5: Open Cycle from the habit list and read its target'
 
   # PERSISTENCE — the reused hunt bug. The edit screen closes normally on Save; the
   # seeded EditHabitCommand never runs, so the name the db oracle reads is unchanged.
@@ -417,7 +531,23 @@ test_cases:
         db: uhabits.db
         equals: "1"
         query: "select count(*) from Habits where name='Pilates';"
-    bugs: [rename-not-saved]
+    bugs:
+      - id: rename-not-saved
+        reference_report:
+          summary: Renaming a habit from the habit list is not saved; the old name is still shown
+          steps:
+            - Launch Loop Habit Tracker.
+            - Tap Add habit.
+            - Tap Yes or No.
+            - Type "Yoga" into the Name field.
+            - Tap SAVE.
+            - Press and hold Yoga in the habit list.
+            - Tap Edit.
+            - Type "Pilates" into the Name field, replacing "Yoga".
+            - Tap SAVE.
+          expected: The habit list shows "Pilates" in place of "Yoga".
+          actual: The edit screen closes as if saved, but the habit list still shows "Yoga"; there is no "Pilates".
+          failure_step: 'Step 4: Read the habit list'
 
   # NAVIGATION — open the second of two habits and delete it from its screen. The
   # seeded tap opens the first habit in the list, so the route deletes that one; the
@@ -447,7 +577,24 @@ test_cases:
         db: uhabits.db
         equals: "10"
         query: "select (select count(*) from Habits where name='Read') * 10 + (select count(*) from Habits where name='Write');"
-    bugs: [card-opens-first-habit]
+    bugs:
+      - id: card-opens-first-habit
+        reference_report:
+          summary: Tapping a habit in the list opens the wrong habit, the first one in the list
+          steps:
+            - Launch Loop Habit Tracker.
+            - Tap Add habit.
+            - Tap Yes or No.
+            - Type "Read" into the Name field.
+            - Tap SAVE.
+            - Tap Add habit.
+            - Tap Yes or No.
+            - Type "Write" into the Name field.
+            - Tap SAVE.
+            - Tap Write in the habit list.
+          expected: The screen of the habit "Write" opens, with Write as its title.
+          actual: The screen that opens is titled "QASEED", the first habit in the list, not Write. Deleting from this screen removes QASEED and leaves Write in the list.
+          failure_step: 'Step 3: Tap Write in the habit list to open its screen'
 
   # NAVIGATION — Edit from the habit's own screen. The seeded Edit opens a blank create
   # screen, so Save makes a second habit and the original keeps its name; the oracle
@@ -476,7 +623,21 @@ test_cases:
         db: uhabits.db
         equals: "10"
         query: "select (select count(*) from Habits where name='Green tea') * 10 + (select count(*) from Habits where name='Tea');"
-    bugs: [detail-edit-opens-create]
+    bugs:
+      - id: detail-edit-opens-create
+        reference_report:
+          summary: Edit on a habit's own screen opens an empty form for a new habit
+          steps:
+            - Launch Loop Habit Tracker.
+            - Tap Add habit.
+            - Tap Yes or No.
+            - Type "Tea" into the Name field.
+            - Tap SAVE.
+            - Tap Tea in the habit list.
+            - Tap Edit in the toolbar.
+          expected: The "Edit habit" screen opens with the name Tea filled in.
+          actual: A screen titled "Create habit" opens with an empty Name field showing the hint "e.g. Exercise". Saving "Green tea" there adds a second habit and Tea keeps its name.
+          failure_step: 'Step 3: Tap Edit in the toolbar'
 
   # LIFECYCLE — configuration change. The steps that produce the state (a frequency of
   # 4 times per month picked on the create screen), exactly ONE `rotate`, then Save and
@@ -506,7 +667,23 @@ test_cases:
         db: uhabits.db
         equals: "1"
         query: "select count(*) from Habits where name='Floss' and freq_num=4 and freq_den=30;"
-    bugs: [frequency-lost-on-rotation]
+    bugs:
+      - id: frequency-lost-on-rotation
+        reference_report:
+          summary: The frequency picked for a new habit is reset when the phone is rotated to landscape
+          steps:
+            - Launch Loop Habit Tracker.
+            - Tap Add habit.
+            - Tap Yes or No.
+            - Type "Floss" into the Name field.
+            - Tap the Frequency field.
+            - Select the times-per-month option.
+            - Type "4" into the times-per-month number field.
+            - Tap the dialog's save button.
+            - Rotate the device to landscape.
+          expected: The Create habit screen still shows the frequency "4 times per month" after the rotation, and the habit is saved with it.
+          actual: After the rotation the Frequency field shows "Every day" again; the name Floss is kept. Saving stores Floss without the 4 times per month frequency.
+          failure_step: 'Step 3: Turn the phone sideways to landscape'
 
   # ORDERING — delete one of two habits from the list's selection. The seeded
   # confirmation runs on a worker thread and dies on Android's thread check; the gate
@@ -537,7 +714,27 @@ test_cases:
         equals: "10"
         query: "select (select count(*) from Habits where name='Piano') * 10 + (select count(*) from Habits where name='Chess');"
         crash: CalledFromWrongThreadException
-    bugs: [delete-confirm-off-main-thread]
+    bugs:
+      - id: delete-confirm-off-main-thread
+        reference_report:
+          summary: The app crashes when deleting a habit from the habit list is confirmed
+          steps:
+            - Launch Loop Habit Tracker.
+            - Tap Add habit.
+            - Tap Yes or No.
+            - Type "Chess" into the Name field.
+            - Tap SAVE.
+            - Tap Add habit.
+            - Tap Yes or No.
+            - Type "Piano" into the Name field.
+            - Tap SAVE.
+            - Press and hold Chess in the habit list.
+            - Tap More options.
+            - Tap Delete.
+            - Tap Yes.
+          expected: Chess is removed and the habit list still shows Piano.
+          actual: The app closes and the device's home screen is shown. The device log shows a CalledFromWrongThreadException.
+          failure_step: 'Step 4: Confirm with Yes'
 
 # ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
 # Benign UI changes compiled into the journey APK beside the defects (the patches are in
