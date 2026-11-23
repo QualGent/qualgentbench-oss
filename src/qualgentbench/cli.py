@@ -629,6 +629,7 @@ async def _run_episodes(
     creation=None,
     memory=None,
     drift: tuple[str, ...] = (),
+    system_addendum: str | None = None,
 ) -> list[RunResult]:
     """Run the selected apps over one or more devices. Every (app, kind, trial) is
     one unit in a longest-first queue; each device is a lane pulling from it
@@ -765,7 +766,12 @@ async def _run_episodes(
                     # Only for a memory run, so every other plan.json keeps its shape.
                     **({"memory_arm": memory.as_dict()} if memory is not None else {}),
                     # Likewise drift (QUA-3492): only on a drift run; a resume reads it.
-                    **({"drift": list(drift)} if drift else {}))
+                    **({"drift": list(drift)} if drift else {}),
+                    # Likewise the system-prompt addendum: the text itself, so a
+                    # resume runs the same treatment, and its sha256.
+                    **({"system_addendum": {"text": system_addendum,
+                                            "sha256": _addendum_sha256(system_addendum)}}
+                       if system_addendum else {}))
 
     segment, log = 0, None
     if resume is not None:
@@ -803,7 +809,7 @@ async def _run_episodes(
                   # stores it relative — it needs the runs dir to resolve against.
                   hooks=Hooks(verify=partial(_verify_episode, runs_dir=runs_dir)),
                   results=out, segment=segment, log=log, creation=creation,
-                  memory=memory, drift=tuple(drift))
+                  memory=memory, drift=tuple(drift), system_addendum=system_addendum)
     # Ctrl+C still leaves a usable result: finished episodes are already scored
     # on disk, so print the board over whatever completed.
     finished = False
@@ -1774,6 +1780,13 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="Journey only: drift flag ids (QUA-3490) to switch on in every episode "
                    "of an app that declares them, both versions of each case. Used by "
                    "`memory sequence` for a stage's drift. Default: no drift.")
+@click.option("--system-addendum-file", "system_addendum_file", default=None,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Append this file's text to the agent's system prompt in every "
+                   "episode (codex-cli developer_instructions, claude-code "
+                   "--append-system-prompt-file); never the brief. A prompt-wording "
+                   "treatment: its sha256 is in plan.json and every result.json. Not "
+                   "with --mode create.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -1816,6 +1829,7 @@ def run_benchmark(
     memory_org: str | None,
     memory_config: Path | None,
     drift: str | None,
+    system_addendum_file: Path | None,
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
@@ -1934,6 +1948,7 @@ def run_benchmark(
         values={"mode": memory_mode, "budget": memory_budget, "diff": memory_diff,
                 "snapshot": memory_snapshot, "org": memory_org})
     drift_ids = _gate_drift(drift, mode, resume_plan, tier_filter, app_filter)
+    system_addendum = _gate_system_addendum(system_addendum_file, mode, resume_plan)
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     _SEGMENT_STARTED.clear()
     # The segment-end hook runs once the whole segment is on disk — board.json and the
@@ -1947,7 +1962,7 @@ def run_benchmark(
             devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
             resume=resume_plan, force_resume=force_resume, credit_policy=credit_policy,
             run_id_file=run_id_file, case_filter=case_filter, create_arm=create_arm,
-            memory=memory_arm, drift=drift_ids,
+            memory=memory_arm, drift=drift_ids, system_addendum=system_addendum,
         ))
         rc = 0
     except SystemExit as exc:
@@ -2075,7 +2090,7 @@ _SCOPE_FLAGS = {"models": "--models", "app_filter": "--app", "tier_filter": "--t
                 "memory_mode": "--memory-mode", "memory_budget": "--memory-budget",
                 "memory_diff": "--memory-diff", "memory_snapshot": "--memory-snapshot",
                 "memory_org": "--memory-org", "memory_config": "--memory-config",
-                "drift": "--drift"}
+                "drift": "--drift", "system_addendum_file": "--system-addendum-file"}
 
 
 def _gate_memory(agent: str, mode: str, resume_plan, *, memory_config: Path | None,
@@ -2108,6 +2123,36 @@ def _gate_memory(agent: str, mode: str, resume_plan, *, memory_config: Path | No
     if not arm.root().is_dir():
         raise click.ClickException(f"memory arm: memory root missing: {arm.root()}")
     return arm
+
+
+#: The longest system-prompt addendum `run` accepts, in characters.
+SYSTEM_ADDENDUM_MAX_CHARS = 8000
+
+
+def _addendum_sha256(text: str) -> str:
+    from .episode_runner import addendum_sha256
+    return addendum_sha256(text)
+
+
+def _gate_system_addendum(path: Path | None, mode: str, resume_plan) -> str | None:
+    """The run's system-prompt addendum text: --system-addendum-file, or on a resume
+    plan.json's `system_addendum.text`. Refused before any probe when it is empty, too
+    long, or given to a creation run (whose system channel is the creator template)."""
+    if resume_plan is not None:
+        rec = resume_plan.raw.get("system_addendum") or {}
+        return str(rec.get("text") or "") or None
+    if path is None:
+        return None
+    if mode == "create":
+        raise click.UsageError("--system-addendum-file does not apply to --mode create")
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        raise click.ClickException(f"--system-addendum-file: {path} is empty")
+    if len(text) > SYSTEM_ADDENDUM_MAX_CHARS:
+        raise click.ClickException(
+            f"--system-addendum-file: {len(text)} characters, more than "
+            f"{SYSTEM_ADDENDUM_MAX_CHARS}")
+    return text
 
 
 def _gate_drift(drift: str | None, mode: str, resume_plan, tier_filter: str | None,
@@ -2623,6 +2668,7 @@ async def _leaderboard_bugs(
     create_arm=None,
     memory=None,
     drift: tuple[str, ...] = (),
+    system_addendum: str | None = None,
 ) -> None:
     """Run the benchmark. The MCP server, if any, is the caller's to run."""
     await _run_bugs(models, agent, trials, mcp_server, runs_dir, push_sheet,
@@ -2630,7 +2676,7 @@ async def _leaderboard_bugs(
                     devices=devices, lanes=lanes, plain=plain, yes=yes,
                     resume=resume, force_resume=force_resume, credit_policy=credit_policy,
                     run_id_file=run_id_file, case_filter=case_filter, create_arm=create_arm,
-                    memory=memory, drift=drift)
+                    memory=memory, drift=drift, system_addendum=system_addendum)
 
 
 async def _run_bugs(
@@ -2658,6 +2704,7 @@ async def _run_bugs(
     create_arm=None,
     memory=None,
     drift: tuple[str, ...] = (),
+    system_addendum: str | None = None,
 ) -> None:
     from . import leaderboard as lb
     from .session import DeviceSession
@@ -2689,6 +2736,7 @@ async def _run_bugs(
             resume=resume, force_resume=force_resume, credit_policy=credit_policy,
             run_id_file=run_id_file, case_filter=case_filter, mcp_identity=mcp_identity,
             creation=creation, memory=memory, drift=drift,
+            system_addendum=system_addendum,
         )
     except _credit.RunStopped as stopped:
         # Out of provider budget with work left. Everything is already on disk — the

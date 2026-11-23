@@ -209,6 +209,12 @@ class EpisodeOptions:
     # the condition becomes `<tooling>+mem-<mode>-<budget>-<diff>` (internal-only, D13)
     # unless `condition_label` is set, and result.json carries the memory metrics.
     memory: object | None = None
+    # A run-wide system-prompt addendum (`run --system-addendum-file`): text appended
+    # to the agent's system channel (codex-cli `developer_instructions`, claude-code
+    # `--append-system-prompt-file`), never the brief. A prompt-wording experiment's
+    # treatment. None = no addendum, the episode exactly as before. Its sha256 is
+    # recorded in result.json metrics (`system_addendum_sha256`).
+    system_addendum: str | None = None
 
 
 # Tools withheld from the agent, from QGB_DISALLOWED_TOOLS (comma-separated).
@@ -232,6 +238,24 @@ Every device tool takes the device as its first argument — always pass device=
 ## Your QA Task
 
 {task.instruction}"""
+
+
+#: The condition suffix of an episode run with a system-prompt addendum.
+SYSTEM_ADDENDUM_MARKER = "+sys-"
+
+
+def addendum_sha256(text: str) -> str:
+    """The recorded identity of a system-prompt addendum: sha256 of its UTF-8 text."""
+    import hashlib
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _developer_instructions(creation, addendum: str | None) -> str | None:
+    """The agent's system-channel text: a creation episode's template, then the run's
+    addendum (`run --system-addendum-file`). None when neither is set."""
+    parts = [t.rstrip() for t in ((creation.developer_instructions
+                                   if creation is not None else None), addendum) if t]
+    return "\n\n".join(parts) if parts else None
 
 
 def _prepare_memory(task: BenchmarkTask, opts: EpisodeOptions):
@@ -1797,6 +1821,10 @@ async def run_episode(
     cond_label = opts.condition_label or ("mcp" if opts.mcp_server else "raw")
     if memory is not None and not opts.condition_label:
         cond_label = memory.arm.condition("mcp" if opts.mcp_server else "raw")
+    if opts.system_addendum and not opts.condition_label:
+        # A prompt-wording arm is its own board row (`mcp+sys-<sha8>`), never merged
+        # with the same agent and model without the addendum.
+        cond_label = f"{cond_label}{SYSTEM_ADDENDUM_MARKER}{addendum_sha256(opts.system_addendum)[:8]}"
     # Blind (QUA-2806): the directory — the agent's cwd and every path beside it —
     # names the case and an opaque episode id, never the version. See
     # `agent_visible_task_id`.
@@ -1930,8 +1958,7 @@ async def run_episode(
             "ANDROID_ADB_SERVER_HOST": "127.0.0.1",
         },
         # The creator template (private, read at run time) for a creation episode.
-        developer_instructions=(creation.developer_instructions
-                                if creation is not None else None),
+        developer_instructions=_developer_instructions(creation, opts.system_addendum),
         memory_text=(memory.text if memory is not None else None),
         memory_file=(memory.system_file if memory is not None else None),
     )
@@ -2208,6 +2235,9 @@ async def run_episode(
         # beside the current one. Journey only: the hash covers the journey corpus.
         from .corpus import episode_stamp
         verifier.metrics.update(episode_stamp(str(task.bug_spec.get("app_id") or "")))
+    if opts.system_addendum:
+        # Only on addendum episodes, so every other result.json keeps its shape.
+        verifier.metrics["system_addendum_sha256"] = addendum_sha256(opts.system_addendum)
     if memory is not None:
         # Rendered.metrics() + the arm + where the proposals file is (QUA-3488). Only on
         # memory episodes, so every other result.json keeps its shape.

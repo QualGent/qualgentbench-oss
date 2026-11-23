@@ -202,6 +202,9 @@ class LaneRun:
     # declares them (`run --drift`, the memory sequence runner's stage drift, QUA-3492).
     # Empty = no drift: journey specs byte-identical to before.
     drift: tuple[str, ...] = ()
+    # `run --system-addendum-file`: system-prompt text handed to every episode
+    # (`EpisodeOptions.system_addendum`). None = no addendum.
+    system_addendum: str | None = None
 
 
 async def run_lanes(plan: RunPlan, cfg: LaneRun) -> list[RunResult]:
@@ -452,6 +455,7 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
             # A creation unit gets the run's creation surface (QUA-2856).
             creation=(cfg.creation if unit.kind == _create_kind() else None),
             memory=cfg.memory,
+            system_addendum=cfg.system_addendum,
         )
         s.board.start(i, unit, budget)
         s.inflight[i] = (unit, time.monotonic())
