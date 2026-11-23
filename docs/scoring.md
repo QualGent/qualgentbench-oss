@@ -353,8 +353,10 @@ must be supplied as data roots (`--old-corpus`, `--old-heldout`) that hash to th
 versions the run recorded. Then, per app, the journey APK's sha256 and the case ids must
 be identical, and per case `name`, `steps`, `expected_outcome`, `step_budget`, `check`
 and the seeded bug ids. It also refuses a run that recorded no held-out split while one
-is configured now (that would claim held-out episodes it never ran). Held-out changes are
-counted, never named, in its output. A view of the copy lists the re-label in the
+is configured now (that would claim held-out episodes it never ran), and an episode with no
+transcript unless its agent was never launched (staging failed, so it is excluded and has no
+report; it is copied and re-stamped without a rescore). Held-out changes are counted, never
+named, in its output. A view of the copy lists the re-label in the
 manifest (`versions.restamped_from`).
 
 ### Neutral reports: known clean-build behaviour and downstream effects (scorer v5)
