@@ -65,13 +65,13 @@ def test_matched_false_known_and_consequence_reports(tmp_path):
     assert "report_source" not in q     # that name is per report now (QUA-3585)
     matched, consequence, known, false = q["reports"]
 
-    assert matched["gates"] == {"G1": {"pass": True,
-                                       "reason": "matched seeded defect delete-bug"}}
+    assert matched["gates"]["G1"] == {"pass": True,
+                                      "reason": "matched seeded defect delete-bug"}
     assert matched["neutral"] is False and matched["index"] == 0 and matched["step"] == 2
     # Valid, but the other headline gates have not run: not known to be customer-ready.
     assert matched["customer_ready"] is None
 
-    assert false["gates"] == {"G1": {"pass": False, "reason": "matched no seeded defect"}}
+    assert false["gates"]["G1"] == {"pass": False, "reason": "matched no seeded defect"}
     assert false["neutral"] is False and false["customer_ready"] is False
 
     for neutral, key, value in ((consequence, "consequence_of", "delete-bug"),
@@ -79,10 +79,10 @@ def test_matched_false_known_and_consequence_reports(tmp_path):
         assert neutral["neutral"] is True and neutral[key] == value
         assert neutral["gates"] == {} and neutral["customer_ready"] is None
 
-    assert q["totals"] == {
-        "reports": 4, "neutral": 2, "scored": 2,
-        "gates": {"G1": {"name": "valid", "evaluated": 2, "passed": 1}},
-        "customer_ready": 0, "customer_ready_unknown": 1}
+    totals = dict(q["totals"])
+    assert totals.pop("gates")["G1"] == {"name": "valid", "evaluated": 2, "passed": 1}
+    assert totals == {"reports": 4, "neutral": 2, "scored": 2,
+                      "customer_ready": 0, "customer_ready_unknown": 1}
 
 
 def test_an_episode_with_no_report(tmp_path):
@@ -90,10 +90,10 @@ def test_an_episode_with_no_report(tmp_path):
     assert metrics["reports"] == []
     q = rq.score_episode(_episode(tmp_path, "ep1", metrics))
     assert q["reports"] == []
-    assert q["totals"] == {
-        "reports": 0, "neutral": 0, "scored": 0,
-        "gates": {"G1": {"name": "valid", "evaluated": 0, "passed": 0}},
-        "customer_ready": 0, "customer_ready_unknown": 0}
+    totals = dict(q["totals"])
+    assert totals.pop("gates")["G1"] == {"name": "valid", "evaluated": 0, "passed": 0}
+    assert totals == {"reports": 0, "neutral": 0, "scored": 0,
+                      "customer_ready": 0, "customer_ready_unknown": 0}
 
 
 def test_customer_ready_needs_every_headline_gate():

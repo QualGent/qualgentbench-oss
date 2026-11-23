@@ -20,7 +20,9 @@ Report quality never moves the board.
   `tests/test_report_quality.py` asserts both.
 - The module imports nothing from the rest of the package. What it knows about a report
   is what the scorer already saved.
-- This version uses no model. Every gate here is a deterministic rule.
+- Scoring uses no model. Every gate here is a deterministic rule. G4 reads the saved
+  result of a replay, in which a model acted and a rule decided; scoring never starts
+  a replay.
 
 Read a quality number beside the ranking numbers, never in place of them.
 
@@ -59,7 +61,7 @@ A gate tests one property of one report and answers pass or fail with a reason.
 | G1 | valid | the scorer matched the report to a seeded defect | yes |
 | G2 | located | the report names the step where the defect shows, and its quote comes from that step | later |
 | G3 | complete | the report has an observed result, an expected result and real reproduction steps | later |
-| G4 | reproducible | a fresh agent given only the report reproduces the defect | later |
+| G4 | reproducible | a fresh agent given only the report reproduces the defect | yes, from saved replays (see "G4: replay from the report") |
 
 G1 decides nothing new. It reads the `matched` field the scorer saved.
 
@@ -216,8 +218,196 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
 | `totals.reports` / `neutral` / `scored` | all reports, neutral ones, and the rest (`scored` is the denominator) |
 | `totals.gates.<id>` | `evaluated`: scored reports the gate ran on; `passed`: how many passed |
 | `totals.customer_ready` / `customer_ready_unknown` | scored reports that are ready, and those not yet decidable |
+| `replay` | present only when `quality_replay.json` is saved beside the episode: `replay_version` and `replayer`, the replayer and replay rules behind the G4 answers |
 
 An episode with no report has an empty `reports` list and zero totals.
+
+## G4: replay from the report
+
+G4 asks whether a second agent, given only the report as a customer would read it, can
+make the bug happen again. It is the one gate that needs a device and a model, so it is
+split in two:
+
+- `src/qualgentbench/quality_replay.py` runs the replays and saves their results.
+- `report_quality.gate_reproducible` reads the saved result. It starts nothing. With no
+  saved result the gate answers "did not run" (`pass: null`).
+
+### A replay episode
+
+- **Build and state.** The seeded build of the case the report came from, staged the way
+  a journey episode of that case is staged: the same defects switched on, the same
+  fixtures, the same pinned clock, the same check that the starting screen is right.
+- **Brief.** The customer-shaped report (title, steps, expected result, actual result,
+  failed-at) and the instruction to reproduce it. The replayer does not get the test
+  case, the truth file or the first agent's transcript. Its working directory is named
+  `replay-<12 hex>`, which names neither the case nor the defect.
+- **Budget.** Tool calls: `budget_factor` (2) times the length of the case's reference
+  route, `check.steps`. A case with no recorded route keeps its journey budget.
+- **Attempts.** One per report.
+- **Task type.** `result.json` carries `task_type: report_replay`, never `journey_case`,
+  and its metrics have no `reports` list. The journey board, the rescore, the rates and
+  `report_quality` itself all skip it; `tests/test_quality_replay.py` asserts each.
+
+### The verdict
+
+The verdict is a rule, `quality_replay.decide`. The model is the actor only; what it
+says (`RESULT: reproduced=yes|no`) is recorded and never scored.
+
+A replay **reproduced** the defect when both hold:
+
+1. The defect's canary fired. A seeded patch reports that its own code path ran; the
+   harness reads that after the replayer exits (`fault_fired` in the metrics).
+2. One of the defect's truth texts appeared in what the device answered the replayer:
+   the marker and measured texts of a display defect, the screen texts only the seeded
+   build shows for a blocking defect, or the crash signature or system dialog of a crash
+   or hang. For a crash or hang, a crash of the app that the harness itself recorded
+   during the replay also counts. Text the replayer typed does not count.
+
+Some defects give condition 2 nothing to look for: the truth row measured no text
+(`state`), or the defect only removes text (`absence`). These are judged on the canary
+alone and marked `basis: canary_only`, so a reader can report them apart. The setting
+`textless: exclude` leaves them out of G4 instead. In the public corpus 10 of the 150
+(case, defect) pairs are of this kind (6 `state`, 4 `absence`).
+
+### Ceiling and control
+
+A failed replay only says something about a report when a good report of the same
+defect does replay, and when the defect is not found by accident. Two measurements
+decide that per (case, defect), using the hand-written reference report
+(`reference_reports.py`):
+
+| Measurement | What is replayed | The defect is excluded when |
+|---|---|---|
+| ceiling | the reference report, `ceiling_attempts` (3) times | fewer than `ceiling_min` (2) reproduce |
+| control | the reference report with its steps deleted, once | it reproduces |
+
+An excluded defect is out of G4 for every arm: its reports get `pass: null` with the
+reason, and they are in no G4 pass rate. Every exclusion is listed with one of these
+codes:
+
+| Code | Meaning |
+|---|---|
+| `ceiling` | the reference report reproduced fewer than 2 of 3 times |
+| `control` | the reference report reproduced with its steps deleted |
+| `canary_silent` | the reference replay showed the defect's text but its canary never fired: verdict unavailable |
+| `no_canary` | the build spec has no canary call for the defect: verdict unavailable |
+| `no_reference` | the case has no reference report for the defect |
+| `no_truth_text` | nothing to find on screen, and `textless` is `exclude` |
+
+Every public defect has a canary call in its build spec, so `no_canary` excludes none of
+them. For 40 public (case, defect) pairs the truth row recorded no fired canary, because
+those rows were derived before a pass kept its canaries. That is a missing record, not a
+missing canary, so those defects are replayed like the others and `canary_silent`
+catches a build that really does not report one.
+
+To save replays, a ceiling stops as soon as it is decided (2 of 2 reproduced, or 0 of
+2), the control runs only after the ceiling passed, and a report is replayed only after
+its defect is known to be in.
+
+### Running it
+
+```bash
+# What would run and the most episodes it can take. No device, no agent.
+uv run qualgent-bench run --mode journey --quality-replay <run dir> --quality-replay-plan
+
+# Run it. --agent and --models name the replayer.
+uv run qualgent-bench run --mode journey --quality-replay <run dir> \
+    --agent <agent> --models <model> --mcp-server <url> --device <serial>
+
+# Rebuild the saved files from the replay episodes. No device, no agent.
+uv run python -m qualgentbench.quality_replay fold <run dir> --agent <agent> --model <model>
+```
+
+The run command prints the plan and asks `Continue?` like any other run; without a
+terminal it needs `--yes`. `--quality-replay-max N` caps the episodes started.
+`--quality-replay-unit KEY` runs one unit, for a fan-out over several machines; the keys
+are in `--quality-replay-plan --quality-replay-json`. Run it again to continue: the
+replay episodes on disk are the state, and nothing is replayed twice.
+
+Replay episodes are saved under `<run dir>/quality-replay/` (`--quality-replay-dir`
+moves it). Several boards replayed by the same replayer can share one directory, and
+then share the ceilings and controls. Episodes of a different replayer or replay version
+in the directory are ignored and counted.
+
+### The replayer
+
+One replayer replays every arm, so that the arms differ only in their reports.
+`src/qualgentbench/data/quality-replay.json` pins it together with the rules above:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `agent`, `model`, `provider` | null | the replayer; null until the pilot picks one |
+| `tooling` | `mcp` | how the replayer drives the device (`mcp` or `raw`) |
+| `give_test_case` | false | true adds the case's name, steps and expected outcome to the brief |
+| `attempts` | 1 | replays per report; reproduced when any reproduces |
+| `ceiling_attempts`, `ceiling_min` | 3, 2 | the ceiling |
+| `ceiling_early_stop` | true | stop a ceiling once it is decided |
+| `control_attempts` | 1 | replays of the report with its steps deleted |
+| `budget_factor`, `budget_floor` | 2, 0 | the tool-call budget |
+| `textless` | `canary_only` | how a defect with no text to find is judged |
+| `max_retries` | 1 | retries of a replay that did not run |
+
+While the pin names no replayer, `--agent` and `--models` must name one. Once it does, a
+different one on the command line is refused; `--quality-replay-config` runs an
+experiment under another file. The replayer and the rules are stamped into every replay
+episode, into `quality_replay.json` and into `quality.json` (`replay`).
+
+`scripts/quality_replay_pilot.py` is how the replayer is chosen. For each candidate it
+replays the reference reports of the same 10 public defects (ceiling 3 times, control
+once: at most 40 episodes per candidate) and prints one line per candidate: ceiling,
+control failures, cost and wall time per replay. Without `--run` it prints the plan and
+runs nothing.
+
+### `quality_replay.json`
+
+Written beside `result.json` of every journey episode that has a valid report. One entry
+per valid report:
+
+```json
+{
+  "replay_version": 1,
+  "replayer": {"agent": "<agent>", "model": "<model>", "provider": null, "tooling": "mcp",
+               "give_test_case": false, "budget_factor": 2.0, "budget_floor": 0,
+               "textless": "canary_only", "replay_version": 1, "attempts": 1,
+               "ceiling_attempts": 3, "ceiling_min": 2, "control_attempts": 1},
+  "reports": [
+    {
+      "index": 0,
+      "defect": "<defect id>",
+      "status": "replayed",
+      "reproduced": true,
+      "reason": "the canary fired and its text appeared",
+      "basis": "canary_and_text",
+      "excluded": null,
+      "ceiling": {"reproduced": 2, "attempts": 3},
+      "control": {"reproduced": 0, "attempts": 1},
+      "attempts": [
+        {"episode": "replay-<12 hex>/<episode dir>", "valid": true, "reproduced": true,
+         "canary_fired": true, "symptom_seen": true, "reason": "...", "steps": 11,
+         "step_budget": 14, "truncated": false, "cost_usd": 0.42, "wall_time_sec": 95.0}
+      ]
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `index` | the report's position in `result.json`'s `metrics.reports` |
+| `defect` | the defect the report was matched to when it was replayed. G4 ignores an entry whose defect is no longer the report's `matched` |
+| `status` | `replayed`, `excluded` (the defect is out of G4), `pending` (ceiling, control or the replay itself not run yet) or `unavailable` (the replay could not be run) |
+| `reproduced` | true or false when `status` is `replayed`, else null |
+| `basis` | `canary_and_text` or `canary_only` |
+| `excluded` | null, or one of the codes above |
+| `ceiling`, `control` | reproductions and valid replays of the reference report |
+| `attempts[]` | every replay episode of this report. `episode` is relative to the replay directory. `valid: false` is a replay that did not run (staging failed, a provider limit) |
+
+`<replay dir>/baseline.json` holds the ceiling and control of every defect with the same
+fields, keyed `<app>/<case>/<defect>`, plus the corpus version.
+
+In `quality.json`, G4 is `reports[].gates.G4` (`pass` true, false or null, with the
+reason) and `totals.gates.G4`. A report of an excluded defect has `pass: null`, so its
+`customer_ready` stays null and it is counted in `customer_ready_unknown`.
 
 ## The version rule
 

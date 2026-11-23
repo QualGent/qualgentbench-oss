@@ -48,6 +48,12 @@ RESULT_FILE = "result.json"
 QUALITY_FILE = "quality.json"
 #: The saved agent transcript, relative to the episode directory.
 TRANSCRIPT_FILE = "agent/transcript.txt"
+#: Saved replay-from-report results for an episode's reports, beside its `result.json`.
+#: Written by `quality_replay`; gate G4 only reads it.
+REPLAY_FILE = "quality_replay.json"
+#: The default directory of replay episodes inside a run directory. Its episodes are not
+#: journey episodes, so `episode_dirs` does not search it.
+REPLAY_DIR = "quality-replay"
 
 #: The gates a report must ALL pass to be customer-ready. A gate named here that is not
 #: registered in `GATES` yet (or that did not run for a report) leaves `customer_ready`
@@ -395,9 +401,48 @@ def gate_valid(episode: Episode, report: dict[str, Any], index: int) -> GateResu
     return GateResult(False, "matched no seeded defect")
 
 
+def saved_replay(episode: Episode) -> dict[str, Any] | None:
+    """The episode's saved replay results (`quality_replay.json`), or None when there
+    are none or the file is unreadable. Memoised on the episode."""
+    if "replay" not in episode._cache:
+        try:
+            doc = json.loads((episode.dir / REPLAY_FILE).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            doc = None
+        episode._cache["replay"] = doc if isinstance(doc, dict) else None
+    return episode._cache["replay"]
+
+
+def gate_reproducible(episode: Episode, report: dict[str, Any], index: int) -> GateResult:
+    """G4, reproducible: a second agent given only the customer-shaped report made the
+    matched defect happen again. This gate starts nothing: it reads the answer the
+    replay runner saved beside the episode. No saved answer, an answer for another
+    defect, or a defect that is excluded from replay gives "did not run"."""
+    matched = report.get("matched")
+    if not matched:
+        return GateResult(None, "runs only on a valid report")
+    entries = (saved_replay(episode) or {}).get("reports")
+    entry = next((e for e in entries if isinstance(e, dict) and e.get("index") == index),
+                 None) if isinstance(entries, list) else None
+    if entry is None:
+        return GateResult(None, "no replay saved for this report")
+    if entry.get("defect") != matched:
+        return GateResult(None, f"the saved replay is for defect {entry.get('defect')}, "
+                                f"not {matched}")
+    reason = str(entry.get("reason") or "")
+    if entry.get("excluded"):
+        return GateResult(None, f"defect excluded from replay ({entry['excluded']}): {reason}")
+    reproduced = entry.get("reproduced")
+    if not isinstance(reproduced, bool):
+        return GateResult(None, reason or "the replay gave no verdict")
+    return GateResult(reproduced, ("reproduced from the report: " if reproduced
+                                   else "not reproduced from the report: ") + reason)
+
+
 #: Every gate, in the order it is evaluated and listed. Later tickets append here.
 GATES: tuple[Gate, ...] = (
     Gate("G1", "valid", gate_valid),
+    Gate("G4", "reproducible", gate_reproducible),
 )
 
 
@@ -477,7 +522,12 @@ def score_episode(episode_dir: Path | str) -> dict[str, Any]:
     episode = load_episode(episode_dir)
     metrics = episode.metrics
     reports = [_score_report(episode, r, i) for i, r in enumerate(metrics["reports"])]
+    replay = saved_replay(episode)
     return {
+        # Only when replay results are saved beside the episode: which replayer and
+        # replay rules produced the G4 answers above.
+        **({"replay": {"replay_version": replay.get("replay_version"),
+                       "replayer": replay.get("replayer")}} if replay else {}),
         "quality_version": QUALITY_VERSION,
         # The scorer whose `matched` / neutral marks the gates read (None on a verdict
         # saved before the scorer stamped its version).
@@ -520,7 +570,8 @@ def episode_dirs(root: Path | str) -> Iterator[Path]:
     if (root / RESULT_FILE).is_file():
         yield root
         return
-    for child in sorted(p for p in root.iterdir() if p.is_dir() and not p.is_symlink()):
+    for child in sorted(p for p in root.iterdir() if p.is_dir() and not p.is_symlink()
+                        and p.name != REPLAY_DIR):
         yield from episode_dirs(child)
 
 

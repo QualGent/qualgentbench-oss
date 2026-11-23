@@ -256,6 +256,11 @@ def _ablation_instruction(task: BenchmarkTask, device_serial: str, tooling: str)
     # Use the app's own brief: substituting a bare feature list once dropped the
     # acceptance criteria AND the incremental AREA banking, so truncated ablation
     # episodes scored 0.
+    if (task.bug_spec or {}).get("report_replay") is not None:
+        # A replay-from-report episode (QUA-3591): staged like the journey case, but the
+        # replayer is given the bug report, never the test case.
+        from . import quality_replay
+        return quality_replay.brief(task, device_serial, tooling)
     if str((task.bug_spec or {}).get("mode") or "") == "journey":
         from . import journey
         return journey.brief(task, device_serial, tooling)
