@@ -277,6 +277,15 @@ test_cases:
         reference:
           kind: stated
           note: "Step 1 names the item \"Event\"; the new-event editor's title spells it \"Evnet\"."
+        reference_report:
+          summary: The title of the new event screen is misspelled
+          steps:
+            - Launch Fossify Calendar.
+            - Tap the + button.
+            - Tap Event.
+          expected: The editor's toolbar title reads "New Event".
+          actual: The editor's toolbar title reads "New Evnet".
+          failure_step: 'Step 1: Tap the + button and choose Event'
 
   - id: cal-create-task
     name: Create a task
@@ -301,6 +310,15 @@ test_cases:
         reference:
           kind: stated
           note: "Step 1 names the item \"Task\"; the new-task editor's title spells it \"Tsak\"."
+        reference_report:
+          summary: The title of the new task screen is misspelled
+          steps:
+            - Launch Fossify Calendar.
+            - Tap the + button.
+            - Tap Task.
+          expected: The editor's toolbar title reads "New Task".
+          actual: The editor's toolbar title reads "New Tsak".
+          failure_step: 'Step 1: Tap the + button and choose Task'
 
   - id: cal-edit-event
     name: Rename an event
@@ -323,7 +341,22 @@ test_cases:
       steps: [launch, {tap: calendar_fab}, {tap: Event}, {tap: event_title}, {type: Draft}, {tap: Save}, {tap: Draft}, {tap: event_title}, {type: Final}, {tap: Save}]
       # The brief promises "no longer shows Draft" too: a rename that left a copy behind used to pass.
       expect: {db: events.db, equals: "1,0", query: "select (select count(*) from events where title='Final') || ',' || (select count(*) from events where title='Draft');"}
-    bugs: [edit-event-not-saved]
+    bugs:
+      - id: edit-event-not-saved
+        reference_report:
+          summary: Renaming an event is not saved; the calendar still shows the old title
+          steps:
+            - Launch Fossify Calendar.
+            - Tap the + button.
+            - Tap Event.
+            - Type "Draft" into the Title field.
+            - Tap Save.
+            - Tap the event "Draft" in the event list.
+            - Type "Final" into the Title field, replacing "Draft".
+            - Tap Save.
+          expected: The event list shows "Final" on 16 Wednesday and no longer shows "Draft".
+          actual: The editor closes as if saved, but the event list still shows "Draft" at 11:00 AM; there is no "Final".
+          failure_step: 'Step 6: Look at the calendar for today'
 
   # ── FORCED-ORDERING exemplar (QUA-2714) ─────────────────────────────────────────
   # The route is the hunt corpus's `search` CONTROL plus a `wait`: proven to work on
@@ -376,7 +409,21 @@ test_cases:
       expect: {db: events.db, equals: "1",
                query: "select count(*) from events where title='Dentist' and type=0;",
                crash: "CalledFromWrongThreadException"}
-    bugs: [search-results-off-main-thread]
+    bugs:
+      - id: search-results-off-main-thread
+        reference_report:
+          summary: The app crashes when text is typed into the search field
+          steps:
+            - Launch Fossify Calendar.
+            - Tap the + button.
+            - Tap Event.
+            - Type "Dentist" into the Title field.
+            - Tap Save.
+            - Tap Search in the toolbar.
+            - Type "Dent" into the search field.
+          expected: The search stays open and lists the event "Dentist".
+          actual: The app closes a moment after the text is typed, before any result can be read. The device log shows a CalledFromWrongThreadException.
+          failure_step: 'Step 4: Type "Dent" into the search field'
 
   # ── WRONG-NAVIGATION exemplar (QUA-2713) ────────────────────────────────────────
   # Route: 10 steps over 5 screen states — event list -> new-event editor -> event
@@ -440,7 +487,23 @@ test_cases:
     # witness). QUA-2767 makes credit order-aware; QUA-2768 re-authors this case or gives
     # it a non-text completion signal, and removes this key.
     witness_before_action: QUA-2768
-    bugs: [view-switch-stuck-on-year]
+    bugs:
+      - id: view-switch-stuck-on-year
+        reference_report:
+          summary: The calendar is stuck on the yearly view; choosing Simple event list does not switch back
+          steps:
+            - Launch Fossify Calendar.
+            - Tap the + button.
+            - Tap Event.
+            - Type "Standup" into the Title field.
+            - Tap Save.
+            - Tap Change view in the toolbar.
+            - Tap Yearly view.
+            - Tap Change view in the toolbar.
+            - Tap Simple event list.
+          expected: The simple event list is shown again, with "16 Wednesday" and the event "Standup" at 11:00 AM.
+          actual: 'The yearly view is still shown: twelve month grids from "JANUARY" to "DECEMBER", and no "Standup".'
+          failure_step: 'Step 4: Use the toolbar to switch the calendar back to the simple event list'
 
   # ── LIFECYCLE exemplar (QUA-2712) ───────────────────────────────────────────────
   # Route: 9 steps, and the shape CLAUDE.md prescribes for a lifecycle case — the steps
@@ -502,7 +565,22 @@ test_cases:
       # and the fired marker is what tells the two apart.
       expect: {db: events.db, equals: "604800",
                query: "select repeat_interval from events where title='Planning' and type=0;"}
-    bugs: [repeat-lost-on-rotation]
+    bugs:
+      - id: repeat-lost-on-rotation
+        reference_report:
+          summary: A weekly repetition set on a new event is lost when the phone is rotated before saving
+          steps:
+            - Launch Fossify Calendar.
+            - Tap the + button.
+            - Tap Event.
+            - Type "Planning" into the Title field.
+            - Tap the repetition field, which shows "No repetition".
+            - Tap Weekly.
+            - Rotate the device to landscape.
+            - Tap Save.
+          expected: 'The event list shows "Planning" every week: under "16 Wednesday", "23 Wednesday", "30 Wednesday" and, in OCTOBER, "7 Wednesday".'
+          actual: 'The event does not repeat: "Planning" is listed only once, under "16 Wednesday" at 11:00 AM, and there are no later Wednesdays.'
+          failure_step: 'Step 6: Look at the calendar for the next few weeks'
 
   # ── CRASH on the task screen (QUA-2726, re-authored QUA-2742) ────────────────────
   # Route: 9 steps — the hunt's `complete_task` check (8 steps, which derives HOLDS on
@@ -556,7 +634,21 @@ test_cases:
       expect: {db: events.db, equals: "1",
                query: "select count(*) from tasks where task_id=(select id from events where title='Taxes');",
                crash: IllegalArgumentException}
-    bugs: [task-complete-crash]
+    bugs:
+      - id: task-complete-crash
+        reference_report:
+          summary: The app crashes when Mark completed is tapped and the task is not marked as completed
+          steps:
+            - Launch Fossify Calendar.
+            - Tap the + button.
+            - Tap Task.
+            - Type "Taxes" into the Title field.
+            - Tap Save.
+            - Tap the task "Taxes" in the event list.
+            - Tap Mark completed.
+          expected: 'The task screen closes normally and "Taxes" is completed: opening it again offers "Mark incomplete".'
+          actual: The task screen closes abruptly and the event list comes back. The device log shows an IllegalArgumentException. Opening "Taxes" again still offers "Mark completed".
+          failure_step: 'Step 4: Tap "Mark completed"'
 
   # ── CRASH in the event editor (QUA-2726) ─────────────────────────────────────────
   # Route: 7 steps — cal-create-event's route with one more tap, "All-day" (the editor's
@@ -590,7 +682,20 @@ test_cases:
       expect: {db: events.db, equals: "1",
                query: "select count(*) from events where title='Vacation' and type=0 and (flags & 1) = 1;",
                crash: IllegalFieldValueException}
-    bugs: [all-day-save-crash]
+    bugs:
+      - id: all-day-save-crash
+        reference_report:
+          summary: The app crashes when an all-day event is saved and the event is not created
+          steps:
+            - Launch Fossify Calendar.
+            - Tap the + button.
+            - Tap Event.
+            - Type "Vacation" into the Title field.
+            - Tap All-day.
+            - Tap Save.
+          expected: The event is saved and the event list shows "Vacation" under 16 Wednesday, marked All-day.
+          actual: 'The editor closes abruptly when Save is tapped and the event is not saved: the event list reads "No upcoming events." The device log shows an IllegalFieldValueException.'
+          failure_step: 'Step 4: Save the event'
 
   # ── WRONG-NAVIGATION, the second (QUA-2726) ─────────────────────────────────────
   # Route: 7 steps. The first six are cal-create-task's route with another title; the
@@ -635,4 +740,17 @@ test_cases:
               {type: Laundry}, {tap: Save}, {tap: Laundry}]
       expect: {present: "Mark completed"}
     evidence: ["Mark completed"]    # screen witness: the task screen's own button
-    bugs: [task-row-opens-event-editor]
+    bugs:
+      - id: task-row-opens-event-editor
+        reference_report:
+          summary: Tapping a task in the event list does not open it
+          steps:
+            - Launch Fossify Calendar.
+            - Tap the + button.
+            - Tap Task.
+            - Type "Laundry" into the Title field.
+            - Tap Save.
+            - Tap the task "Laundry" in the event list.
+          expected: The "Edit Task" screen opens for Laundry, with its title and a "Mark completed" button.
+          actual: 'The task screen never opens: the event list stays on screen, still showing "SEPTEMBER", "16 Wednesday" and the Laundry row with its "Task" label.'
+          failure_step: 'Step 3: In the event list, tap "Laundry" to open it'

@@ -56,6 +56,17 @@ episodes, and none of them needs a device to catch:
               replayable or that matches no case's route, an `affects:` naming an unknown
               case, a flag no case would derive, or a drift id list that differs from the
               benchmark spec's `drift:` patches (error).
+  refreport   a `bugs:` entry with no `reference_report:` — the hand-written,
+              customer-shaped report of that defect on that case (summary, steps,
+              expected, actual, failure_step; `qualgentbench.reference_reports`) — or one
+              that would not pass the deterministic report-quality gates if an agent had
+              written it: the journey matcher does not credit it to its own defect, its
+              `actual` quotes no text the truth file measured (for a defect that only
+              removes text, its `expected`), its `failure_step` names no step of the
+              case, or its `steps` are not reproduction steps (at least two, each
+              starting with an action verb, from app launch, not the summary repeated).
+              It also may not name the defect id: it is written in a tester's words.
+              Public and held-out alike (error). A defect no case seeds needs none.
 
 Exit 1 on any error. `--app a,b` narrows the files. The rules are pure functions over a
 loaded document so `tests/test_lint_journey_cases.py` can drive each one in isolation.
@@ -67,7 +78,7 @@ import argparse
 import re
 import sys
 
-from qualgentbench import journey
+from qualgentbench import journey, reference_reports
 from qualgentbench.submission import route_item, step_problem
 
 _MIN_WITNESS_CHARS = 3
@@ -97,7 +108,7 @@ class Finding:
     def __init__(self, level: str, rule: str, case: str, detail: str) -> None:
         self.level = level          # "error" | "warning"
         self.rule = rule            # leak | brief | no-oracle | route | class | columns | short
-                                    # | reference | quotable | drift
+                                    # | reference | quotable | drift | refreport
         self.case = case            # the case id (the defect id for `class`)
         self.detail = detail
 
@@ -411,6 +422,30 @@ def rule_quotable(case: dict, defects: dict[str, dict]) -> list[Finding]:
             if bug_id in display and not journey._evidence(marker)]
 
 
+def rule_refreport(case: dict, defects: dict[str, dict], row: dict | None = None,
+                   app_name: str = "") -> list[Finding]:
+    """Every defect a case seeds carries a `reference_report:` on its `bugs:` entry, and
+    the report holds up: `reference_reports.problems` puts it through the checks the
+    deterministic report-quality gates put an agent's report through, against this
+    case's truth row. One finding per problem, so a file can be fixed in one pass. A
+    case whose `bugs:` do not resolve is left to `case_design`'s own error."""
+    cid = str(case.get("id"))
+    try:
+        journey.case_design(case, defects)
+    except ValueError:
+        return []
+    found: list[Finding] = []
+    for bug_id, raw in reference_reports._raw_entries(case):
+        if raw is None:
+            found.append(Finding("error", "refreport", cid,
+                                 f"bug {bug_id} has no `{reference_reports.KEY}:` — write the "
+                                 f"report a tester would file for it on this case"))
+            continue
+        for problem in reference_reports.problems(case, defects, row, bug_id, raw, app_name):
+            found.append(Finding("error", "refreport", cid, f"bug {bug_id}: {problem}"))
+    return found
+
+
 def rule_drift(doc: dict, spec_drift_ids: set[str] | None = None) -> list[Finding]:
     """QUA-3490: the case file's `drift:` block. A drift flag is a BENIGN UI change, so
     it must never be confusable with a defect: its id is no defect id and no case
@@ -488,10 +523,12 @@ def rule_known(doc: dict) -> list[Finding]:
 
 
 def lint_doc(doc: dict, truth: dict | None = None, heldout: bool = False,
-             spec_drift_ids: set[str] | None = None) -> list[Finding]:
+             spec_drift_ids: set[str] | None = None, app_name: str = "") -> list[Finding]:
     """Every rule over one loaded test-case document. `truth` is the app's measured
-    journey truth (optional — the diff-based leak check is skipped without it);
-    `heldout` downgrades a missing side-bug `reference:` to a warning (rule_reference)."""
+    journey truth (optional — the diff-based leak check is skipped without it, and a
+    reference report then has no truth text to quote); `heldout` downgrades a missing
+    side-bug `reference:` to a warning (rule_reference); `app_name` is the app's display
+    name, which Android's crash dialog carries (rule_refreport)."""
     defects = journey.load_defects(doc)
     findings: list[Finding] = rule_class(doc) + rule_drift(doc, spec_drift_ids) + rule_known(doc)
     for case in doc.get("test_cases") or []:
@@ -504,6 +541,8 @@ def lint_doc(doc: dict, truth: dict | None = None, heldout: bool = False,
         findings += rule_short(case)
         findings += rule_reference(case, defects, heldout=heldout)
         findings += rule_quotable(case, defects)
+        findings += rule_refreport(case, defects, (truth or {}).get(str(case.get("id"))),
+                                   app_name)
     return findings
 
 
@@ -521,14 +560,16 @@ def lint_corpus(app_ids: list[str] | None = None) -> dict[str, list[Finding]]:
             out[app_id] = [Finding("error", "no-oracle", app_id, "file did not load")]
             continue
         spec_drift: set[str] | None = None
+        app_name = app_id
         spec_path = corpus.spec_path(app_id)
         if spec_path.exists():
             import yaml
             spec = yaml.safe_load(spec_path.read_text()) or {}
             spec_drift = {str(d.get("id")) for d in spec.get("drift") or [] if isinstance(d, dict)}
+            app_name = str((spec.get("app") or {}).get("name") or app_id)
         out[app_id] = lint_doc(doc, journey.load_truth(app_id),
                                heldout=app_id in set(corpus.heldout_apps()),
-                               spec_drift_ids=spec_drift)
+                               spec_drift_ids=spec_drift, app_name=app_name)
     return out
 
 
@@ -555,11 +596,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\n{cases} case(s) in {len(results)} file(s): {errors} error(s), {warnings} warning(s)")
     if errors:
         print("FAIL: a completion witness or a brief carries a seeded defect, a case has "
-              "no oracle, a route step is not replayable, a defect has no valid class, or "
-              "a side bug has no reference in its brief or no quotable marker")
+              "no oracle, a route step is not replayable, a defect has no valid class, "
+              "a side bug has no reference in its brief or no quotable marker, or a "
+              "seeded defect has no sound reference report")
         return 1
     print("PASS: no leaked marker, no oracle-less case, every route step replayable, "
-          "every defect classed, every side bug referenced and quotable")
+          "every defect classed, every side bug referenced and quotable, every seeded "
+          "defect with a sound reference report")
     return 0
 
 

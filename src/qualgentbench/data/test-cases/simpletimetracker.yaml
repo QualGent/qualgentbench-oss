@@ -207,7 +207,28 @@ test_cases:
         equals: "1"
         query: "select count(*) from categories c join recordTypeCategory rc on rc.category_id = c.id join recordTypes t on t.id = rc.record_type_id where c.name='Study' and t.name='Reading';"
         crash: IllegalArgumentException
-    bugs: [category-save-crash]
+    bugs:
+      - id: category-save-crash
+        reference_report:
+          summary: App crashes when a new category with an activity is saved
+          steps:
+            - Launch Simple Time Tracker (its icon is labelled Debug Simple Time Tracker).
+            - Tap Add.
+            - Tap the activity name field.
+            - Type "Reading" into the name field.
+            - Tap Color.
+            - Tap SAVE.
+            - Tap Settings.
+            - Tap Edit categories and tags.
+            - Tap Add category.
+            - Tap the category name field.
+            - Type "Study" into the name field.
+            - Tap Activities.
+            - Tap Reading.
+            - Tap SAVE.
+          expected: The category is saved and the Categories and tags screen lists Study.
+          actual: The app closes and the device returns to the home screen; the category is not saved. The device log shows IllegalArgumentException.
+          failure_step: 'Step 5: Save the category and read the Categories and tags screen.'
 
   # CRASH — create a record tag for a new activity. The seeded SAVE dies before the tag
   # is written.
@@ -237,7 +258,28 @@ test_cases:
         equals: "1"
         query: "select count(*) from recordTags g join recordTypeToTag rt on rt.record_tag_id = g.id join recordTypes t on t.id = rt.record_type_id where g.name='Scales' and t.name='Guitar';"
         crash: IndexOutOfBoundsException
-    bugs: [tag-save-crash]
+    bugs:
+      - id: tag-save-crash
+        reference_report:
+          summary: App crashes when a new record tag for an activity is saved
+          steps:
+            - Launch Simple Time Tracker (its icon is labelled Debug Simple Time Tracker).
+            - Tap Add.
+            - Tap the activity name field.
+            - Type "Guitar" into the name field.
+            - Tap Color.
+            - Tap SAVE.
+            - Tap Settings.
+            - Tap Edit categories and tags.
+            - Tap Add record tag.
+            - Tap the tag name field.
+            - Type "Scales" into the name field.
+            - Tap Activity.
+            - Tap Guitar.
+            - Tap SAVE.
+          expected: The record tag is saved and the Categories and tags screen lists Scales.
+          actual: The app closes and the device returns to the home screen; the tag is not saved. The device log shows IndexOutOfBoundsException.
+          failure_step: 'Step 5: Save the tag and read the Categories and tags screen.'
 
   # CRASH — track a session, then add a comment to its record. The seeded SAVE dies
   # before the record is rewritten, so the comment never reaches the db.
@@ -267,7 +309,29 @@ test_cases:
         equals: "1"
         query: "select count(*) from records r join recordTypes t on t.id = r.type_id where t.name='Essay' and r.comment='First draft';"
         crash: NumberFormatException
-    bugs: [record-comment-save-crash]
+    bugs:
+      - id: record-comment-save-crash
+        reference_report:
+          summary: App crashes when a record is saved with a comment
+          steps:
+            - Launch Simple Time Tracker (its icon is labelled Debug Simple Time Tracker).
+            - Tap Add.
+            - Tap the activity name field.
+            - Type "Essay" into the name field.
+            - Tap Color.
+            - Tap SAVE.
+            - Tap Essay to start a timer.
+            - Tap Essay again to stop the timer.
+            - Tap Records.
+            - Tap the Essay record.
+            - Tap Comment.
+            - Tap the comment field.
+            - Type "First draft" into the comment field.
+            - Tap Comment.
+            - Tap SAVE.
+          expected: The record is saved and the Records list shows the Essay record with the comment First draft.
+          actual: The app closes and the device returns to the home screen; the comment is not saved. The device log shows NumberFormatException.
+          failure_step: 'Step 5: Save the record and read the Records list.'
 
   # DISPLAY side bug (content-format). The case's own outcome is the stored record, which
   # holds on both arms; the seeded Statistics list draws "50%" for the only activity
@@ -299,6 +363,22 @@ test_cases:
     bugs:
       - id: statistics-share-halved
         reference: {kind: cross-check, note: "Gym is the only activity the route tracks, and the same screen's Total tracked equals Gym's own time, so a Gym share of 50% contradicts the row below it"}
+        reference_report:
+          summary: Statistics shows the wrong percentage for the only tracked activity
+          steps:
+            - Launch Simple Time Tracker (its icon is labelled Debug Simple Time Tracker).
+            - Tap Add.
+            - Tap the activity name field.
+            - Type "Gym" into the name field.
+            - Tap Color.
+            - Tap SAVE.
+            - Tap Gym to start a timer.
+            - Tap Gym again to stop the timer.
+            - Tap Records.
+            - Tap Statistics.
+          expected: Gym is the only activity tracked, so its row shows 100% of Total tracked.
+          actual: Gym's row shows "50%" although it is the whole of Total tracked.
+          failure_step: 'Step 5: Read Gym''s row and the total tracked time.'
 
   # DISPLAY side bug (content-format). The case's own outcome is the stored session goal,
   # which holds on both arms; the seeded goal field reads "2h" for the 1h the route picks.
@@ -330,6 +410,21 @@ test_cases:
     bugs:
       - id: goal-duration-label-doubled
         reference: {kind: entered, note: "the route picks the 1h suggestion for the Session goal, so a goal field reading 2h is visibly not what was entered"}
+        reference_report:
+          summary: Session goal duration set to 1h is shown as twice the value
+          steps:
+            - Launch Simple Time Tracker (its icon is labelled Debug Simple Time Tracker).
+            - Tap Add.
+            - Tap the activity name field.
+            - Type "Piano" into the name field.
+            - Tap More.
+            - Tap Goal.
+            - Tap the Duration value (Disabled) under Session.
+            - Tap 1h.
+            - Tap SAVE in the duration dialog.
+          expected: The Session goal's Duration reads 1h, the value picked.
+          actual: The Session goal's Duration reads "2h". It also reads 2h when the saved activity is reopened.
+          failure_step: 'Step 2: Tap More, open Goal, and set the Session goal''s duration to 1h.'
 
   # DISPLAY side bug (widget-inventory). The case's own outcome is the stored activity and
   # its record, which hold on both arms; the seeded Add screen of the not-yet-saved
@@ -363,6 +458,14 @@ test_cases:
     bugs:
       - id: new-activity-offers-archive
         reference: {kind: stated, note: "step 1 states the activity does not exist yet, so a button that archives it has nothing to act on"}
+        reference_report:
+          summary: Add activity screen shows an Archive button for an activity that is not saved yet
+          steps:
+            - Launch Simple Time Tracker (its icon is labelled Debug Simple Time Tracker).
+            - Tap Add.
+          expected: 'The screen for a new activity offers no Archive button: there is nothing to archive until the activity is saved.'
+          actual: The new-activity screen shows an "Archive" button.
+          failure_step: 'Step 1: On the Timers screen tap Add; this activity does not exist yet. Read the buttons the screen shows.'
 
   # PERSISTENCE — the reused hunt bug. The edit screen closes normally on SAVE; the
   # seeded repo returns the activity's id without rewriting its row, so the name the db
@@ -391,7 +494,27 @@ test_cases:
         db: simpleTimeTrackerDB
         equals: "1"
         query: "select count(*) from recordTypes where name='Studying';"
-    bugs: [activity-rename-not-saved]
+    bugs:
+      - id: activity-rename-not-saved
+        reference_report:
+          summary: 'Renaming an activity is not saved: Timers still shows the old name'
+          steps:
+            - Launch Simple Time Tracker (its icon is labelled Debug Simple Time Tracker).
+            - Tap Add.
+            - Tap the activity name field.
+            - Type "Reading" into the name field.
+            - Tap Color.
+            - Tap SAVE.
+            - Press and hold Reading.
+            - Tap the activity name field.
+            - Type "Studying" into the name field in place of Reading.
+            - Tap Color.
+            - Tap SAVE.
+            - Tap Records.
+            - Tap Timers.
+          expected: The Timers screen shows the activity as Studying in place of Reading.
+          actual: The Timers screen still shows "Reading"; there is no Studying activity.
+          failure_step: 'Step 5: Read the activities on the Timers screen.'
 
   # NAVIGATION — open the second of two categories and delete it. The seeded tap opens the
   # first category, so the route deletes that one; the oracle reads both names (tens =
@@ -421,7 +544,29 @@ test_cases:
         db: simpleTimeTrackerDB
         equals: "10"
         query: "select (select count(*) from categories where name='Home') * 10 + (select count(*) from categories where name='Work');"
-    bugs: [category-card-opens-first]
+    bugs:
+      - id: category-card-opens-first
+        reference_report:
+          summary: Tapping the second category opens the first category, so Delete removes the wrong one
+          steps:
+            - Launch Simple Time Tracker (its icon is labelled Debug Simple Time Tracker).
+            - Tap Settings.
+            - Tap Edit categories and tags.
+            - Tap Add category.
+            - Tap the category name field.
+            - Type "Home" into the name field.
+            - Tap Color.
+            - Tap SAVE.
+            - Tap Add category.
+            - Tap the category name field.
+            - Type "Work" into the name field.
+            - Tap Color.
+            - Tap SAVE.
+            - Tap Work.
+            - Tap Delete.
+          expected: Tapping Work opens the Work category; after Delete the Categories and tags screen lists only the Home category.
+          actual: Tapping Work opens the category named "Home"; after Delete the Categories and tags screen still lists "Work" and the Home category is gone.
+          failure_step: 'Step 4: Tap Work to open it, then tap Delete.'
 
   # LIFECYCLE — configuration change. The steps that produce the state (a 15m default
   # duration picked on the Add screen), exactly ONE `rotate`, then SAVE and the db read.
@@ -449,7 +594,24 @@ test_cases:
         db: simpleTimeTrackerDB
         equals: "1"
         query: "select count(*) from recordTypes where name='Tea' and instantDuration=900;"
-    bugs: [default-duration-lost-on-rotation]
+    bugs:
+      - id: default-duration-lost-on-rotation
+        reference_report:
+          summary: Default duration picked for a new activity is lost after rotating the phone before saving
+          steps:
+            - Launch Simple Time Tracker (its icon is labelled Debug Simple Time Tracker).
+            - Tap Add.
+            - Tap the activity name field.
+            - Type "Tea" into the name field.
+            - Tap More.
+            - Tap the default duration value (Disabled).
+            - Tap 15m.
+            - Tap SAVE in the duration dialog.
+            - Rotate the device to landscape.
+            - Tap SAVE.
+          expected: The activity screen keeps the 15m default duration across the rotation, and Tea is saved with a default duration of 15m.
+          actual: 'The Timers screen lists "Tea", but it was saved without a default duration: the rotation reset the picked 15m back to Disabled.'
+          failure_step: 'Step 5: Read the Timers screen.'
 
   # LIFECYCLE — process death. A timer is started, the app is killed and reopened
   # (`relaunch`), and the db read asks whether the timer is still running.
@@ -477,7 +639,22 @@ test_cases:
         db: simpleTimeTrackerDB
         equals: "1"
         query: "select count(*) from runningRecords r join recordTypes t on t.id = r.id where t.name='Walk';"
-    bugs: [running-timer-lost-on-restart]
+    bugs:
+      - id: running-timer-lost-on-restart
+        reference_report:
+          summary: Running timer is gone after the app is closed and reopened
+          steps:
+            - Launch Simple Time Tracker (its icon is labelled Debug Simple Time Tracker).
+            - Tap Add.
+            - Tap the activity name field.
+            - Type "Walk" into the name field.
+            - Tap Color.
+            - Tap SAVE.
+            - Tap Walk to start a timer.
+            - Launch Simple Time Tracker again after closing it from the recent apps list.
+          expected: 'The Walk timer is still running: Timers shows the Walk timer card with the hint "Click on card to stop tracking".'
+          actual: 'No timer is running: Timers shows only the hint "Click on activity to start tracking" and Walk is listed as an idle activity.'
+          failure_step: 'Step 3: Close the app completely and open it again.'
 
   # ORDERING — type a name that is already used, then a new one. The seeded name error is
   # applied off the main thread and dies on Android's thread check; the gate names it.
@@ -507,7 +684,23 @@ test_cases:
         equals: "11"
         query: "select (select count(*) from recordTypes where name='Reading') * 10 + (select count(*) from recordTypes where name='Writing');"
         crash: CalledFromWrongThreadException
-    bugs: [name-error-off-main-thread]
+    bugs:
+      - id: name-error-off-main-thread
+        reference_report:
+          summary: App crashes when a new activity is given a name that is already used
+          steps:
+            - Launch Simple Time Tracker (its icon is labelled Debug Simple Time Tracker).
+            - Tap Add.
+            - Tap the activity name field.
+            - Type "Reading" into the name field.
+            - Tap Color.
+            - Tap SAVE.
+            - Tap Add.
+            - Tap the activity name field.
+            - Type "Reading" into the name field.
+          expected: The name field shows the error "Name already used" and the app stays open.
+          actual: The app closes and the device returns to the home screen. The device log shows CalledFromWrongThreadException.
+          failure_step: 'Step 2: Tap Add again and type the name "Reading"; read what the screen says about it.'
 
   # ANR — delete a tracked record from its edit screen. The seeded Delete parks the main
   # thread. A tap answered before the handler ran leaves no input pending, and a frozen
@@ -542,7 +735,26 @@ test_cases:
         equals: "10"
         query: "select (select count(*) from recordTypes where name='Chess') * 10 + (select count(*) from records r join recordTypes t on t.id = r.type_id where t.name='Chess');"
         anr: true
-    bugs: [record-delete-blocks-main-thread]
+    bugs:
+      - id: record-delete-blocks-main-thread
+        reference_report:
+          summary: App freezes when a tracked record is deleted from its edit screen
+          steps:
+            - Launch Simple Time Tracker (its icon is labelled Debug Simple Time Tracker).
+            - Tap Add.
+            - Tap the activity name field.
+            - Type "Chess" into the name field.
+            - Tap Color.
+            - Tap SAVE.
+            - Tap Chess to start a timer.
+            - Tap Chess again to stop the timer.
+            - Tap Records.
+            - Tap the Chess record.
+            - Tap Delete.
+            - Press the Back button.
+          expected: The record is deleted, the Records list shows "Record (Chess) removed" and no Chess record, and the app keeps responding.
+          actual: The app stops responding after Delete and the record is not deleted; after Back Android shows "Debug Simple Time Tracker isn't responding" with Close app and Wait.
+          failure_step: 'Step 4: Tap Delete and read the Records list.'
 
 # ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
 # Benign UI changes compiled into the journey APK beside the defects (the patches are in
