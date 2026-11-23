@@ -124,7 +124,9 @@ def parse(raw: Any, *, app_id: str = "", case_id: str = "", defect_id: str = "")
     strings); content is checked by `problems`."""
     where = f"{case_id}/{defect_id}"
     if not isinstance(raw, dict):
-        raise ValueError(f"{where}: `{KEY}` must be a mapping with {', '.join(FIELDS)}")
+        # ValueError like every other shape problem: callers catch one type.
+        raise ValueError(  # noqa: TRY004
+            f"{where}: `{KEY}` must be a mapping with {', '.join(FIELDS)}")
     unknown = sorted(set(raw) - set(FIELDS))
     if unknown:
         raise ValueError(f"{where}: unknown `{KEY}` key(s) {unknown}")
