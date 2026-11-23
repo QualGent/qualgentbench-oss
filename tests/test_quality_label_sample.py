@@ -259,6 +259,12 @@ def test_strata_come_from_the_failed_headline_gates():
     assert qls.stratum_of("seeded", {"G1": {"pass": True}}) == "pass"
     assert qls.stratum_of("seeded", {"G1": {"pass": True}, "G2": {"pass": None}}) == "pass"
     assert qls.stratum_of("seeded", {"G3": {"pass": False}, "G1": {"pass": False}}) == "fail:G1+G3"
+    # Unknown is neither a pass nor a failure: it is named on its own.
+    unknown = {"pass": None, "reason": "cannot tell", "unknown": True}
+    assert qls.stratum_of("seeded", {"G1": {"pass": True}, "G2": unknown}) == "unknown:G2"
+    assert qls.stratum_of("seeded", {"G1": {"pass": True}, "G2": unknown,
+                                     "G3": {"pass": False}}) == "fail:G3,unknown:G2"
+    assert qls.stratum_of("clean", {"G2": unknown}) == "clean"
     # A side gate is not a headline gate.
     assert qls.stratum_of("seeded", {"G1": {"pass": True}, "G5": {"pass": False}}) == "pass"
 
@@ -448,3 +454,20 @@ def test_the_command_refuses_mixed_quality_versions_and_same_named_boards(tmp_pa
     twin.mkdir(parents=True)
     assert qls.main([str(board), str(twin), "--out", str(tmp_path / "out")]) == 2
     assert "same name" in capsys.readouterr().err
+
+
+def test_reports_a_gate_could_not_decide_are_a_stratum_of_their_own(tmp_path):
+    board = tmp_path / "b"
+    unknown = {"G1": True, "G2": None, "G3": True}
+    for n in range(6):
+        _write_episode(board, f"p{n}", app="alpha", build="seeded", reports=[
+            {"matched": "d", "gates": {"G1": True, "G2": True, "G3": True},
+             "actual": f"Passed {n}."}])
+        d = _write_episode(board, f"u{n}", app="alpha", build="seeded", reports=[
+            {"matched": "d", "gates": unknown, "actual": f"Undecided {n}."}])
+        q = json.loads((d / rq.QUALITY_FILE).read_text())
+        q["reports"][0]["gates"]["G2"]["unknown"] = True
+        (d / rq.QUALITY_FILE).write_text(rq.render(q))
+    _, key = _build(board, total=6, clean=0)
+    assert key["pool"]["by_stratum"] == {"pass": 6, "unknown:G2": 6}
+    assert key["drawn"]["by_stratum"] == {"pass": 3, "unknown:G2": 3}

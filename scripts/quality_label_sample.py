@@ -31,6 +31,8 @@ What is drawn (defaults: 120 reports, about 20 from clean builds, 40 with step l
 * Strata. A report on a clean build is in stratum `clean`. A report on a seeded build
   is in the stratum of the headline gates it FAILED: `pass` when it failed none,
   `fail:G1`, `fail:G1+G3`, ... A gate that did not run for a report is not a failure.
+  A gate that ran and answered unknown is named beside them (`unknown:G2`,
+  `fail:G3,unknown:G2`): such a report is kept apart from both passes and failures.
 * The seeded strata share the reports left after the clean ones equally; a stratum with
   fewer candidates gives its unused share to the others, so failures of every gate are
   present as far as the boards have them.
@@ -200,12 +202,19 @@ class Candidate:
 
 def stratum_of(build: str, gates: dict[str, Any]) -> str:
     """`clean` for a clean build; else the headline gates the report failed, as
-    `fail:G1+G3`, or `pass` when it failed none. A gate that did not run (`pass` null,
-    or absent from this quality version) is not a failure."""
+    `fail:G1+G3`, or `pass` when it failed none. A gate that ran and could not decide
+    (`unknown: true`) is neither a pass nor a failure, so it is named on its own:
+    `unknown:G2`, `fail:G3,unknown:G2`. A gate that did not run (`pass` null without
+    `unknown`, or absent from this quality version) is not named at all."""
     if build != "seeded":
         return STRATUM_CLEAN
-    failed = [g for g in rq.HEADLINE_GATES if (gates.get(g) or {}).get("pass") is False]
-    return "fail:" + "+".join(failed) if failed else STRATUM_PASS
+    answers = {g: gates.get(g) or {} for g in rq.HEADLINE_GATES}
+    failed = [g for g, a in answers.items() if a.get("pass") is False]
+    unknown = [g for g, a in answers.items() if a.get("pass") is None and a.get("unknown")]
+    parts = [f"fail:{'+'.join(failed)}"] if failed else []
+    if unknown:
+        parts.append(f"unknown:{'+'.join(unknown)}")
+    return ",".join(parts) or STRATUM_PASS
 
 
 def render_step(step: Any) -> str:
@@ -587,9 +596,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  clean builds: {drawn['clean']} (target {args.clean})   "
           f"step subset: {drawn['step_subset']} (target {args.steps})   "
           f"held-out: {drawn['heldout']}")
-    print("  stratum          drawn  pool  with steps")
+    print(f"  {'stratum':<24} drawn  pool  with steps")
     for s, n in key["pool"]["by_stratum"].items():
-        print(f"  {s:<16} {drawn['by_stratum'].get(s, 0):>5} {n:>5} "
+        print(f"  {s:<24} {drawn['by_stratum'].get(s, 0):>5} {n:>5} "
               f"{drawn['step_subset_by_stratum'].get(s, 0):>11}")
     print(f"  apps: {len(drawn['by_app'])}")
     for what, n in read.items():

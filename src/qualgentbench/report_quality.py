@@ -7,8 +7,9 @@ one yes/no gate at a time, and writes the answer to `quality.json` next to the e
 
 Three rules keep it apart from the ranking:
 
-* It only READS `result.json` (and, for later gates, the other saved artifacts). It never
-  writes `result.json` and never changes a verdict, a rate or a ranking key.
+* It only READS `result.json` and the other saved artifacts (and, for gate G2, the
+  corpus's case and truth files). It never writes `result.json` and never changes a
+  verdict, a rate or a ranking key.
 * The scoring modules never import it, so it is not in the pinned scorer closure
   (`tests/scorer_closure.py`) and `journey.SCORER_VERSION` does not move when it changes.
   It imports nothing from the package either: what it knows about a report is what the
@@ -27,6 +28,7 @@ See docs/report-quality.md for the file format and the version rule.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import re
@@ -66,9 +68,15 @@ class GateResult:
     why. A gate that did not run is in no pass rate."""
     passed: bool | None
     reason: str
+    #: The gate ran and could not decide (`passed` is then None). Counted on its own in
+    #: the totals of a gate that declares `reports_unknown`; never a pass.
+    unknown: bool = False
 
     def as_dict(self) -> dict[str, Any]:
-        return {"pass": self.passed, "reason": self.reason}
+        out: dict[str, Any] = {"pass": self.passed, "reason": self.reason}
+        if self.unknown:
+            out["unknown"] = True
+        return out
 
 
 @dataclass(frozen=True)
@@ -94,6 +102,8 @@ class Gate:
     id: str            # "G1", "G2", ... the key in a report's `gates` map
     name: str          # one word, for tables: "valid", "located", ...
     fn: GateFn
+    #: The gate can answer "unknown"; its totals then carry an `unknown` count.
+    reports_unknown: bool = False
 
 
 def is_neutral(report: dict[str, Any]) -> bool:
@@ -395,6 +405,747 @@ def gate_valid(episode: Episode, report: dict[str, Any], index: int) -> GateResu
     return GateResult(False, "matched no seeded defect")
 
 
+# ── G2, located (QUA-3586) ─────────────────────────────────────────────────────
+#
+# A valid report is LOCATED when all three hold:
+#
+#   1. it names a step of the test case;
+#   2. the truth file shows the matched defect's symptom at that step;
+#   3. the device showed the report's `observed` text while the agent was on that step.
+#
+# The scorer's `grounded` asks only whether the quote appeared anywhere in the episode.
+# This gate adds the "where". It reads the saved transcript, the case file and the truth
+# file; it decides nothing about the catch. docs/report-quality.md, "G2, located", has
+# the rules in prose; the comments below say why each one is what it is.
+#
+# Two step numberings meet here. A report names a step of the BRIEF (`steps:` in the case
+# file, what the agent was given). The truth file numbers the harness ROUTE
+# (`check.steps`, one entry per tap or text entry), and a brief step is usually several
+# route steps. `_route_spans` lines the two up.
+
+HELDOUT_ENV = "QGB_HELDOUT_DIR"
+_CORPUS_DIR = Path(__file__).resolve().parent / "data"
+#: The brief the agent was sent, relative to the episode directory.
+BRIEF_FILE = "instruction_sent.md"
+
+# The route keys whose value is text the route types or aims at (the scorer's
+# `ECHO_ROUTE_KEYS`; a test compares the two).
+_ROUTE_TEXT_KEYS = ("type", "append", "tap", "long_press", "row")
+#: The shortest text that counts as a quote or an anchor (the scorer's floor).
+MIN_EVIDENCE_CHARS = 2
+
+# MCP tools whose result is NOT device evidence, tools whose reply is the caller's own
+# argument handed back, and tools that act on the app (what the meter charges more than
+# a screen read for, less the three log reads and `mobile_dismiss_dialogs`, which are no
+# step of any test case). Copies of three views of the scorer's one tool table, which
+# this module may not import; tests/test_gate_located.py fails when they differ from it.
+_MCP_NOT_EVIDENCE = frozenset((
+    "mobile_boot_emulator", "mobile_boot_simulator", "mobile_get_action_log",
+    "mobile_get_otp", "mobile_get_otp_number", "mobile_list_available_devices",
+    "mobile_list_avds", "mobile_list_simulators", "mobile_mark_step",
+    "mobile_note_anomaly", "mobile_release_otp_number", "mobile_report_result",
+    "mobile_workspace_info"))
+_MCP_ECHO = frozenset((
+    "mobile_app_logs", "mobile_crash_logs", "mobile_device_logs", "mobile_edit_field",
+    "mobile_get_permissions", "mobile_get_screen_recording_capabilities",
+    "mobile_insert_credential", "mobile_install_app", "mobile_js_console_logs",
+    "mobile_js_evaluate", "mobile_js_profiler_query", "mobile_launch_app",
+    "mobile_native_profiler_query", "mobile_native_profiler_start",
+    "mobile_native_profiler_stop", "mobile_open_url", "mobile_paste_text",
+    "mobile_prepare_app_screen_capture", "mobile_press_button",
+    "mobile_profiler_combined_report", "mobile_push_media", "mobile_react_profiler_query",
+    "mobile_set_orientation", "mobile_set_permission",
+    "mobile_stop_synthetic_screen_recording", "mobile_swipe", "mobile_terminate_app",
+    "mobile_type_text", "mobile_uninstall_app", "mobile_visual_baseline",
+    "mobile_visual_compare", "mobile_web_eval", "mobile_web_fill"))
+_MCP_ACTIONS = frozenset((
+    "mobile_double_tap", "mobile_edit_field", "mobile_launch_app", "mobile_long_press",
+    "mobile_open_url", "mobile_paste_text", "mobile_pinch", "mobile_press_button",
+    "mobile_rotate_gesture", "mobile_set_orientation", "mobile_set_permission",
+    "mobile_setup_app", "mobile_swipe", "mobile_swipe_coordinates", "mobile_tap",
+    "mobile_tap_and_observe", "mobile_terminate_app", "mobile_type_text",
+    "mobile_web_click", "mobile_web_fill"))
+# Tools that start or stop the app: a step of the case only where its route restarts it.
+_MCP_LIFECYCLE = frozenset(("mobile_launch_app", "mobile_terminate_app"))
+# Arguments that name the device or the app, never something on the screen.
+_MCP_PLUMBING_ARGS = frozenset(("device", "udid", "serial", "package", "package_id",
+                                "app_id", "bundle_id"))
+
+_SPACE_RUN_RE = re.compile(r"[\s  ]+")
+_JSON_WS_ESCAPE_RE = re.compile(r"(?<!\\)\\[nrt]")
+_UNICODE_ESCAPE_RE = re.compile(
+    r"\\\\"
+    r"|\\u([dD][89abAB][0-9a-fA-F]{2})\\u([dD][c-fC-F][0-9a-fA-F]{2})"
+    r"|\\u([0-9a-fA-F]{4})")
+# A refused MCP call: the server's error envelope, which repeats the call's arguments.
+_REFUSED_REPLY_RE = re.compile(
+    r"^\s*(?:error\s+executing\s+tool\b|input\s+validation\s+error\b|unknown\s+tool\b"
+    r"|mcp\s+error\b)"
+    r"|\b\d+\s+validation\s+errors?\s+for\s+\w+arguments\b",
+    re.IGNORECASE)
+# The agent saying which step it is starting: "Step 3: open the drawer".
+_STEP_SAID_RE = re.compile(r"\bstep\s+(\d+)\s*:", re.IGNORECASE)
+# Raw arm: a shell command that acts on the app, and the text it types.
+_RAW_ACTION_RE = re.compile(r"\binput\s+\S|\bam\s+(?:start|force-stop)\b|\bmonkey\b")
+_RAW_TYPED_RE = re.compile(r"\binput\s+(?:\w+\s+)?text\s+(?:'([^']*)'|\"([^\"]*)\"|(\S+))")
+_CRASH_STEP_RE = re.compile(r"^\s*step\s+(\d+)\s*:", re.IGNORECASE)
+
+
+def _norm_text(value: Any) -> str:
+    """A quote or an anchor as it is matched: trimmed, outer quotes dropped, lower case,
+    every whitespace run one space. The scorer's `_norm`."""
+    return _SPACE_RUN_RE.sub(" ", str(value or "").strip().strip("\"'").lower())
+
+
+def _needle(value: Any) -> str:
+    """`_norm_text`, or "" when the text is too short to identify anything."""
+    text = _norm_text(value)
+    return text if len(text) >= MIN_EVIDENCE_CHARS else ""
+
+
+def _has_word(needle: str, text: str) -> bool:
+    """`needle` in `text` on token boundaries (the scorer's `_word`)."""
+    return re.search(r"(?<![a-z0-9])" + re.escape(needle) + r"(?![a-z0-9])",
+                     text) is not None
+
+
+def _has_name(needle: str, text: str) -> bool:
+    """`_has_word`, with `_` counted as part of a word: the word `event` is not in the
+    resource id `event_all_day`."""
+    return re.search(r"(?<![a-z0-9_])" + re.escape(needle) + r"(?![a-z0-9_])",
+                     text) is not None
+
+
+_ARTICLE_RE = re.compile(r"(?<![a-z0-9_])(?:the|an|a)\s+(?=[a-z0-9\"'])")
+
+
+def _plain(text: str) -> str:
+    """Normalised text without its articles, so the route's `Create reminder` is found
+    in the brief's "Create the reminder". Only for lining steps up, never for a quote."""
+    return _ARTICLE_RE.sub("", text)
+
+
+def _device_text(payload: str) -> str:
+    """A device result as it is searched: lower case, a spelled-out `\\n` read as the
+    space it stands for, whitespace folded. The scorer's `_device_text`."""
+    return _SPACE_RUN_RE.sub(" ", _JSON_WS_ESCAPE_RE.sub(" ", (payload or "").lower()))
+
+
+def _decode_unicode_escapes(text: str) -> str:
+    """JSON `\\uXXXX` escapes decoded (codex keeps them, claude-code keeps the
+    character); an escaped backslash stays as it is. The scorer's normaliser."""
+    if not text or "\\u" not in text:
+        return text
+
+    def decode(m: re.Match) -> str:
+        if m.group(1):
+            hi, lo = int(m.group(1), 16), int(m.group(2), 16)
+            return chr(0x10000 + ((hi - 0xD800) << 10) + (lo - 0xDC00))
+        if m.group(3):
+            cp = int(m.group(3), 16)
+            return m.group(0) if 0xD800 <= cp <= 0xDFFF else chr(cp)
+        return m.group(0)
+    return _UNICODE_ESCAPE_RE.sub(decode, text)
+
+
+def _result_text(result: Any) -> str:
+    """The text a tool call returned: text blocks joined, images dropped."""
+    if result is None:
+        return ""
+    if isinstance(result, str):
+        return result
+    if isinstance(result, list):
+        return " ".join(str(b.get("text", "")) for b in result
+                        if isinstance(b, dict) and b.get("type") == "text")
+    if isinstance(result, dict):
+        blocks = result.get("content")
+        if isinstance(blocks, (list, str)):
+            return _result_text(blocks)
+        return json.dumps({k: v for k, v in result.items() if k != "content"})
+    return str(result)
+
+
+def _mcp_is_evidence(name: str) -> bool:
+    return "mobile_" in name and name not in _MCP_NOT_EVIDENCE
+
+
+@dataclass
+class _Event:
+    """One thing the agent did, in transcript order: something it said, or a tool call
+    with the text that came back."""
+    said: str = ""                    # the agent's own text (no call)
+    name: str = ""                    # the tool's base name, or "shell" on the raw arm
+    targets: tuple[str, ...] = ()     # normalised text the call typed or aimed at
+    device: bool = False              # a call to the device
+    acts: bool = False                # it changes the screen (a tap), not only reads it
+    grounds: bool = False             # its result may ground a quote (echo rules applied)
+    result: str | None = None         # `_device_text` of the result; None = no answer
+    lifecycle: bool = False           # it starts or stops the app
+    point: tuple[int, int] | None = None    # a tap on coordinates, with no text target
+    refused: bool = False             # the server refused the call: nothing was done
+    reply: str = ""                   # the result as sent, to look a tapped point up in
+
+
+def _mcp_event(name: str, args: Any, raw: bool) -> _Event:
+    """A tool call that is not a shell command. On the raw arm nothing is filtered as an
+    echo, as in the scorer."""
+    device = _mcp_is_evidence(name)
+    args = args if isinstance(args, dict) else {}
+    targets = tuple(t for t in (_needle(v) for k, v in sorted(args.items())
+                                if k not in _MCP_PLUMBING_ARGS and isinstance(v, str)) if t)
+    x, y = args.get("x"), args.get("y")
+    point = (x, y) if all(isinstance(v, int) and not isinstance(v, bool)
+                          for v in (x, y)) else None
+    return _Event(name=name, targets=targets if device else (), device=device,
+                  acts=device and name in _MCP_ACTIONS,
+                  grounds=device and (raw or name not in _MCP_ECHO),
+                  lifecycle=name in _MCP_LIFECYCLE, point=point if not targets else None)
+
+
+def _shell_event(command: str, raw: bool, *, mentions_adb: bool | None = None) -> _Event:
+    """A shell command. It is a device call only on the raw arm, when it runs adb
+    (`mentions_adb`: the scorer's own test, when the caller has already made it)."""
+    device = raw and ("adb" in command.lower() if mentions_adb is None else mentions_adb)
+    typed = [a or b or c for a, b, c in _RAW_TYPED_RE.findall(command)] if device else []
+    return _Event(name="shell", device=device, grounds=device,
+                  acts=device and _RAW_ACTION_RE.search(command) is not None,
+                  targets=tuple(t for t in (_needle(v.replace("%s", " ")) for v in typed)
+                                if t))
+
+
+def _answer(event: _Event, text: str, *, mcp: bool, raw: bool) -> None:
+    """Attach a call's result. A refused MCP call's reply repeats its arguments, so it
+    grounds nothing (not applied on the raw arm, as in the scorer)."""
+    if mcp:
+        text = _decode_unicode_escapes(text)
+    if not raw and _REFUSED_REPLY_RE.search(text or ""):
+        event.grounds = False
+        event.refused = True
+    event.result = _device_text(text)
+    event.reply = text or ""
+
+
+def agent_events(transcript: str, raw: bool) -> list[_Event]:
+    """The episode in order: what the agent said and each tool call with its result.
+    Reads the two formats the harness records (claude-code stream-json, codex
+    `exec --json`). `raw` is the bare-adb arm. Which results count as device output,
+    and which of those may ground a quote, follow the scorer's rules; a test compares
+    the grounding text with the scorer's own."""
+    events: list[_Event] = []
+    open_calls: dict[str, tuple[_Event, bool]] = {}      # claude: call id -> (event, mcp)
+    for line in transcript.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        message = ev.get("message")
+        blocks = message.get("content") if isinstance(message, dict) else None
+        if ev.get("type") == "assistant" and isinstance(blocks, list):
+            for b in blocks:
+                if not isinstance(b, dict):
+                    continue
+                if b.get("type") == "text" and isinstance(b.get("text"), str):
+                    events.append(_Event(said=b["text"]))
+                elif b.get("type") == "tool_use":
+                    name = b.get("name") if isinstance(b.get("name"), str) else ""
+                    mcp = name.startswith("mcp__") and _base_tool_name(name) != name
+                    args = b.get("input")
+                    if raw:
+                        # The scorer's raw-arm rule: any call that mentions adb.
+                        command = args.get("command") if isinstance(args, dict) else None
+                        event = _shell_event(
+                            command if isinstance(command, str) else "", raw,
+                            mentions_adb="adb" in f"{name} {json.dumps(args or {})}".lower())
+                    else:
+                        event = _mcp_event(_base_tool_name(name), args, raw)
+                    events.append(event)
+                    if isinstance(b.get("id"), str):
+                        open_calls[b["id"]] = (event, mcp)
+        elif ev.get("type") == "user" and isinstance(blocks, list):
+            for b in blocks:
+                if (isinstance(b, dict) and b.get("type") == "tool_result"
+                        and b.get("tool_use_id") in open_calls):
+                    event, mcp = open_calls[b["tool_use_id"]]
+                    _answer(event, _result_text(b.get("content", "")), mcp=mcp, raw=raw)
+        elif ev.get("type") == "item.completed" and isinstance(ev.get("item"), dict):
+            item = ev["item"]
+            kind = item.get("type")
+            if kind == "agent_message" and isinstance(item.get("text"), str):
+                events.append(_Event(said=item["text"]))
+            elif kind == "mcp_tool_call":
+                event = _mcp_event(_base_tool_name(str(item.get("tool") or "")),
+                                   item.get("arguments"), raw)
+                status = str(item.get("status") or "").lower()
+                error = item.get("error")
+                text = ""
+                if status != "in_progress" and ("result" in item or error):
+                    text = _result_text(item.get("result"))
+                    if not text and error:
+                        text = (str(error.get("message") or "")
+                                if isinstance(error, dict) else str(error))
+                _answer(event, text, mcp=True, raw=raw)
+                events.append(event)
+            elif kind == "command_execution":
+                event = _shell_event(str(item.get("command") or ""), raw)
+                event.result = _device_text(str(item.get("aggregated_output") or ""))
+                events.append(event)
+    return events
+
+
+def grounding_texts(events: list[_Event]) -> list[str]:
+    """Every device result that may ground a quote, in order."""
+    return [e.result for e in events if e.grounds and e.result is not None]
+
+
+# ── the case and its truth ─────────────────────────────────────────────────────
+
+def _corpus_json(rel: str) -> Any:
+    """A corpus file, read from the held-out directory when it is there, else from the
+    packaged data. None when neither has it."""
+    roots = [Path(os.environ[HELDOUT_ENV]).expanduser()] if os.environ.get(
+        HELDOUT_ENV, "").strip() else []
+    for root in (*roots, _CORPUS_DIR):
+        path = root / rel
+        if path.is_file():
+            stat = path.stat()
+            return _parsed_file(str(path), stat.st_mtime_ns, stat.st_size)
+    return None
+
+
+@functools.lru_cache(maxsize=64)
+def _parsed_file(path: str, mtime_ns: int, size: int) -> Any:
+    """One corpus file parsed, kept while the file does not change (a board has many
+    episodes per app). Callers only read the result."""
+    import yaml  # the case files are YAML; the one import here that is not stdlib
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+        return json.loads(text) if path.endswith(".json") else yaml.safe_load(text)
+    except (OSError, ValueError, yaml.YAMLError):
+        return {"_unreadable": Path(path).name}
+
+
+@dataclass(frozen=True)
+class CaseTruth:
+    """What G2 needs to know about one test case: the brief's steps, the route's steps
+    and the truth row derived for it."""
+    brief: tuple[str, ...]
+    route: tuple[Any, ...]
+    row: dict[str, Any]
+
+
+def load_case_truth(app_id: str, case_id: str) -> CaseTruth | str:
+    """The case and its truth row, or a sentence saying why they cannot be used."""
+    if not app_id or not case_id:
+        return "the saved result names no app or case"
+    cases = _corpus_json(f"test-cases/{app_id}.yaml")
+    truth = _corpus_json(f"truth/journey-{app_id}.json")
+    for doc, what in ((cases, "test-case file"), (truth, "truth file")):
+        if not isinstance(doc, dict):
+            return f"no {what} for this app in the corpus"
+        if "_unreadable" in doc:
+            return f"unreadable {what}"
+    case = next((c for c in cases.get("test_cases") or []
+                 if isinstance(c, dict) and str(c.get("id")) == case_id), None)
+    row = truth.get(case_id)
+    if case is None or not isinstance(row, dict):
+        return "the corpus has no such case, or no truth row for it"
+    route = (case.get("check") or {}).get("steps") if isinstance(case.get("check"),
+                                                                 dict) else None
+    brief = case.get("steps")
+    if not isinstance(route, list) or not route or not isinstance(brief, list) or not brief:
+        return "the case has no steps or no route"
+    return CaseTruth(tuple(str(s) for s in brief), tuple(route), row)
+
+
+def _route_values(step: Any) -> list[str]:
+    """The text one route step types or aims at, normalised."""
+    if not isinstance(step, dict):
+        return []
+    return [t for t in (_needle(step[k]) for k in _ROUTE_TEXT_KEYS if k in step) if t]
+
+
+def _route_spans(brief: tuple[str, ...], route: tuple[Any, ...]) -> list[tuple[int, int]]:
+    """For each route step, the brief steps it can belong to, as `(first, last)`
+    (1-based, inclusive).
+
+    A route step that types or taps a text "fits" a brief step whose sentence contains
+    that text. Route steps are done in brief order, so the assignment never goes
+    backwards. Among all such assignments, the ones with the most fits are kept, and a
+    route step's span is every brief step it takes in any of them. A route step with
+    no text (`launch`, `wait`, a tap on a resource id) floats between its neighbours."""
+    n_brief, n_route = len(brief), len(route)
+    sentences = [_plain(_norm_text(s)) for s in brief]
+    fits = [[any(_has_name(_plain(v), sentences[j]) for v in _route_values(route[i]))
+             for j in range(n_brief)] for i in range(n_route)]
+    worst = -1
+    before = [[worst] * n_brief for _ in range(n_route)]   # best fits of route[..i], i at j
+    after = [[worst] * n_brief for _ in range(n_route)]    # best fits of route[i..], i at j
+    for i in range(n_route):
+        best = worst
+        for j in range(n_brief):
+            best = 0 if i == 0 else max(best, before[i - 1][j])
+            before[i][j] = best + fits[i][j]
+    for i in reversed(range(n_route)):
+        best = worst
+        for j in reversed(range(n_brief)):
+            best = 0 if i == n_route - 1 else max(best, after[i + 1][j])
+            after[i][j] = best + fits[i][j]
+    most = max(before[-1])
+    spans = []
+    for i in range(n_route):
+        at = [j for j in range(n_brief) if before[i][j] + after[i][j] - fits[i][j] == most]
+        spans.append((at[0] + 1, at[-1] + 1))
+    return spans
+
+
+def symptom_route_steps(row: dict[str, Any], defect: str) -> tuple[str, list[int]]:
+    """Where the truth row shows one defect, as `(kind, route steps)`:
+
+      side      a side bug: its `visible_steps`
+      crash     the blocking bug of a case whose seeded build dies: the step at which
+                the death was recorded and the step before it. The route finds the app
+                dead when its NEXT step runs, so the action that killed it is one of
+                the two
+      blocking  any other blocking bug: every step whose clean/seeded screen diff
+                carries a text
+      ""        the row does not know this defect
+
+    An empty step list means the truth recorded no screen for the defect (a defect
+    seen only in stored data)."""
+    for side in row.get("side") or []:
+        if isinstance(side, dict) and side.get("bug") == defect:
+            return "side", sorted({s for s in side.get("visible_steps") or []
+                                   if isinstance(s, int) and not isinstance(s, bool)})
+    if row.get("blocking") != defect:
+        return "", []
+    seeded = (row.get("passes") or {}).get("seeded") or {}
+    if seeded.get("outcome") == "crashed":
+        said = _CRASH_STEP_RE.match(str(seeded.get("detail") or ""))
+        step = int(said.group(1)) if said else seeded.get("steps_run")
+        if not isinstance(step, int) or isinstance(step, bool):
+            return "crash", []
+        return "crash", [s for s in (step - 1, step) if s >= 1]
+    steps = {d.get("step") for d in row.get("unclaimed_diff") or []
+             if isinstance(d, dict) and any(
+                 _needle(t) for t in [*(d.get("added") or []), *(d.get("removed") or [])])}
+    return "blocking", sorted(s for s in steps if isinstance(s, int)
+                              and not isinstance(s, bool))
+
+
+def _acts(route_step: Any) -> bool:
+    """Does this route step act on the app? `launch` and `wait` do not."""
+    name = route_step if isinstance(route_step, str) else next(iter(route_step), "") \
+        if isinstance(route_step, dict) else ""
+    return name not in ("launch", "wait", "")
+
+
+@dataclass(frozen=True)
+class StepMap:
+    """How one case's brief steps and route steps line up."""
+    steps: int                              # how many brief steps
+    spans: tuple[tuple[int, int], ...]      # per route step: the brief steps it can be
+    sentences: tuple[str, ...]              # the brief steps, normalised
+    own_values: dict[int, tuple[str, ...]]  # route text only this brief step can own
+    reads_only: frozenset[int]              # brief steps no acting route step can be
+    restarts: tuple[int, ...] = ()          # brief steps a `relaunch` route step can be
+
+    def through(self, step: int) -> int:
+        """The last brief step on which the screen left by `step`'s action is still
+        up: the next brief step that may act, or the case's last step. A step that only
+        reads ("Read what the list shows") has no action of its own, so the screen it
+        reads is the one an earlier step left."""
+        nxt = step + 1
+        while nxt < self.steps and nxt in self.reads_only:
+            nxt += 1
+        return min(nxt, self.steps)
+
+    def fitting(self, target: str) -> list[int]:
+        """The brief steps an action aimed at `target` can be: the text is in the
+        step's sentence, or it contains route text that belongs to that step alone."""
+        target = _plain(target)
+        return [j + 1 for j, sentence in enumerate(self.sentences)
+                if _has_name(target, sentence)
+                or any(_has_name(v, target) for v in self.own_values.get(j + 1, ()))]
+
+    def acting(self, first: int, last: int) -> list[int]:
+        """The brief steps in `first..last` that an action can belong to."""
+        return [j for j in range(first, last + 1) if j not in self.reads_only]
+
+
+def step_map(case: CaseTruth) -> StepMap:
+    spans = _route_spans(case.brief, case.route)
+    own: dict[int, list[str]] = {}
+    may_act: set[int] = set()
+    restarts: set[int] = set()
+    sentences = tuple(_plain(_norm_text(s)) for s in case.brief)
+    for (first, last), step in zip(spans, case.route):
+        for value in map(_plain, _route_values(step)):
+            # The one brief step in the route step's span whose sentence has the text.
+            named = [j for j in range(first, last + 1) if _has_name(value, sentences[j - 1])]
+            if len(named) == 1 or first == last:
+                own.setdefault(named[0] if named else first, []).append(value)
+        if _acts(step):
+            may_act.update(range(first, last + 1))
+        if step == "relaunch":
+            restarts.update(range(first, last + 1))
+    n = len(case.brief)
+    return StepMap(n, tuple(spans), sentences, {k: tuple(v) for k, v in own.items()},
+                   frozenset(set(range(1, n + 1)) - may_act), tuple(sorted(restarts)))
+
+
+def _label_at(reply: str, point: tuple[int, int]) -> str:
+    """The text of the element a screen listing puts at `point`, or "". A screen read
+    answers with `{"elements": [{"text" | "label", "x", "y"}, ...]}`; an agent that taps
+    coordinates copies them from there."""
+    try:
+        # claude-code puts a line naming the screenshot's file before the listing.
+        screen, _ = json.JSONDecoder().raw_decode(reply, reply.index("{"))
+    except ValueError:
+        return ""
+    elements = screen.get("elements") if isinstance(screen, dict) else None
+    for el in elements if isinstance(elements, list) else []:
+        if isinstance(el, dict) and (el.get("x"), el.get("y")) == point:
+            label = _needle(el.get("text")) or _needle(el.get("label"))
+            if label:
+                return label
+    return ""
+
+
+def symptom_brief_steps(case: CaseTruth, route_steps: list[int]) -> list[int]:
+    """The brief steps on which a symptom recorded at these route steps is on screen.
+
+    The truth records the screen AFTER a route step. That screen stays up until the
+    next action, so it can be seen from the first brief step the route step can belong
+    to through `StepMap.through` of the last one."""
+    steps = step_map(case)
+    shown: set[int] = set()
+    for r in route_steps:
+        if 1 <= r <= len(steps.spans):
+            first, last = steps.spans[r - 1]
+            shown.update(range(first, steps.through(last) + 1))
+    return sorted(shown)
+
+
+# ── which step each device result belongs to ───────────────────────────────────
+
+@dataclass(frozen=True)
+class _Seen:
+    """One device result that may ground a quote, and the brief steps it belongs to:
+    surely `first..sure_last` (none when `sure_last` is below `first`), and possibly any
+    step up to `last`, where the transcript does not say."""
+    text: str
+    first: int
+    sure_last: int
+    last: int
+
+    def surely(self, step: int) -> bool:
+        return self.first <= step <= self.sure_last
+
+    def possibly(self, step: int) -> bool:
+        return self.first <= step <= self.last
+
+
+@dataclass
+class _Where:
+    """The brief steps one action can belong to: `first..last`, of which `first` is
+    sure when `sure`."""
+    first: int
+    last: int
+    sure: bool
+
+
+def attribute_steps(events: list[_Event], case: CaseTruth) -> list[_Seen]:
+    """Label every grounding device result with the brief steps it belongs to.
+
+    First each ACTION (a tap, a text entry) is given the step it was done on:
+
+      * it fits a step: its target text is in a brief step's sentence, or contains
+        route text that belongs to that step alone (`StepMap.fitting`). A tap on
+        coordinates aims at the element the last screen listing put there. When
+        several steps fit, the first one at or after the current step is taken, and
+        that step is now the current one;
+      * the agent announced it: its last message had exactly one "Step N:" in it. The
+        next action is step N's, and N is the current step;
+      * neither: it could be the current step or any later step that has an action, up
+        to the step of the next action that does fit or is announced. Not sure, unless
+        no such later step exists: then it was the current step's;
+      * it fits only steps before the current one: the agent went back. The action is
+        that earlier step's (the latest that fits), done again; whether the agent has
+        returned to that step or is still looking into the current one is not known,
+        so the steps after it up to the current one are possible, not sure.
+
+    Then each RESULT takes the steps of the last action before it. A result shows the
+    screen that action left, whether the action returned it or a later read did, and
+    that screen stays up through `StepMap.through`: a read made after the agent has
+    moved on to the next step, before it acts there, counts for both steps. Before any
+    action the screen is the one the case starts on, which is up until the first step
+    that has an action acts: step 1, in nearly every case.
+
+    Not actions: a call the server refused (nothing was done), and starting or stopping
+    the app in a case whose route never restarts it (that is recovery after a crash,
+    not a step; where the route does restart the app, it fits those steps)."""
+    steps = step_map(case)
+    current, announced = 1, False
+    start = last_action = _Where(1, 1, True)
+    acting = steps.acting(1, steps.steps)
+    start_last = acting[0] if acting else steps.steps
+    waiting: list[_Where] = []         # actions whose step the next mark will bound
+    screen = ""                        # the last screen listing, as the device sent it
+    results: list[tuple[str, _Where, int]] = []
+
+    def mark(step: int) -> None:
+        """A later action is known to be `step`: bound the actions that were not."""
+        for where in waiting:
+            later = steps.acting(where.first + 1, step if step >= where.first else steps.steps)
+            where.last, where.sure = (later[-1], False) if later else (where.first, True)
+        waiting.clear()
+
+    for event in events:
+        if event.said:
+            said = {int(n) for n in _STEP_SAID_RE.findall(event.said)}
+            said = {n for n in said if 1 <= n <= steps.steps}
+            if len(said) == 1:
+                current, announced = said.pop(), True
+                mark(current)
+            continue
+        if not event.device:
+            continue
+        if event.acts and not event.refused and (steps.restarts or not event.lifecycle):
+            targets = event.targets
+            if event.point is not None and screen:
+                targets = tuple(t for t in (_label_at(screen, event.point),) if t)
+            fits = sorted({j for t in targets for j in steps.fitting(t)}
+                          | (set(steps.restarts) if event.lifecycle else set()))
+            ahead = [j for j in fits if j >= current]
+            if ahead:
+                current = ahead[0]
+                mark(current)
+                last_action = _Where(current, current, True)
+            elif announced:
+                last_action = _Where(current, current, True)
+            elif fits:
+                last_action = _Where(fits[-1], current, True)
+            else:
+                last_action = _Where(current, steps.steps, False)
+                waiting.append(last_action)
+            announced = False
+        if event.grounds and event.result is not None:
+            results.append((event.result, last_action, current))
+        if '"elements"' in event.reply:
+            screen = event.reply
+    mark(steps.steps)
+    seen = []
+    for text, where, at in results:
+        first, last = min(where.first, at), steps.through(max(where.last, at))
+        if where is start:
+            last = max(start_last, at)
+        if not where.sure:
+            sure_last = first - 1
+        elif where.first == where.last:         # one step, and wherever the agent is now
+            sure_last = last
+        else:                                   # went back: the earlier step's screen
+            sure_last = steps.through(where.first)
+        seen.append(_Seen(text, first, sure_last, last))
+    return seen
+
+
+def _named_step(report: dict[str, Any], customer: CustomerReport) -> int | None:
+    """The step the report names: the first number in the customer-shaped report's
+    `failure_step`, else the saved report's own `step`."""
+    number = _NUMBER_RE.search(customer.failure_step or "")
+    if number:
+        return int(number.group(0))
+    step = report.get("step")
+    return step if isinstance(step, int) and not isinstance(step, bool) else None
+
+
+def _unknown(reason: str) -> GateResult:
+    return GateResult(None, reason, unknown=True)
+
+
+def _located_context(episode: Episode) -> tuple[CaseTruth | str, list[_Seen]]:
+    """The case, and the episode's device results labelled by step; once per episode."""
+    cached = episode._cache.get("located")
+    if cached is not None:
+        return cached
+    metrics = episode.metrics
+    case = load_case_truth(str(metrics.get("app_id") or ""), str(metrics.get("case_id") or ""))
+    seen: list[_Seen] = []
+    if isinstance(case, CaseTruth):
+        try:
+            brief_sent = (episode.dir / BRIEF_FILE).read_text(encoding="utf-8",
+                                                              errors="replace")
+        except OSError:
+            brief_sent = None
+        if brief_sent is not None and not all(
+                f"{i}. {s}" in brief_sent for i, s in enumerate(case.brief, 1)):
+            case = "the corpus's steps for this case are not the steps this episode was sent"
+    if isinstance(case, CaseTruth):
+        try:
+            transcript = (episode.dir / TRANSCRIPT_FILE).read_text(encoding="utf-8",
+                                                                   errors="replace")
+        except OSError:
+            transcript = ""
+        raw = str(episode.result.get("condition") or "") == "raw"
+        seen = attribute_steps(agent_events(transcript, raw), case)
+    episode._cache["located"] = (case, seen)
+    return case, seen
+
+
+def gate_located(episode: Episode, report: dict[str, Any], index: int) -> GateResult:
+    """G2, located: the report names a step, the truth shows the matched defect's
+    symptom at that step, and the device showed the report's `observed` text while the
+    agent was on it. Runs only on a report the scorer matched to a seeded defect.
+    Unknown (never a pass) when the truth has no step for the defect or the transcript
+    does not say which step the calls that showed the text belong to."""
+    defect = report.get("matched")
+    if not defect:
+        return GateResult(None, "not run: the report matched no seeded defect")
+    step = _named_step(report, customer_report(episode)[index])
+    if step is None:
+        return GateResult(False, "the report names no step")
+    case, seen = _located_context(episode)
+    if isinstance(case, str):
+        return _unknown(case)
+    if not 1 <= step <= len(case.brief):
+        return GateResult(False, f"the report names step {step}; the case has "
+                                 f"{len(case.brief)} steps")
+    kind, route_steps = symptom_route_steps(case.row, str(defect))
+    if not kind:
+        return _unknown(f"the truth row does not list {defect}")
+    shown = symptom_brief_steps(case, route_steps)
+    if not shown:
+        return _unknown(f"the truth records no screen step for {defect}")
+    where = "crashes" if kind == "crash" else "shows"
+    if step not in shown:
+        return GateResult(False, f"the report names step {step}; the truth {where} "
+                                 f"{defect} at step {_list(shown)}")
+    quote = _needle(report.get("observed"))
+    if not quote:
+        return GateResult(False, "the report quotes no observed text")
+    hits = [s for s in seen if quote in s.text]
+    if not hits:
+        return GateResult(False, "the observed text is in no device output")
+    if any(s.surely(step) for s in hits):
+        return GateResult(True, f"step {step}: the truth {where} {defect} there and the "
+                                "device showed the observed text on that step")
+    if any(s.possibly(step) for s in hits):
+        return _unknown("the device showed the observed text, but the transcript does not "
+                        f"say whether those calls were step {step}")
+    at = sorted({n for s in hits for n in range(s.first, s.last + 1)})
+    return GateResult(False, f"the device showed the observed text at step {_list(at)}, "
+                             f"not at step {step}")
+
+
+def _list(steps: list[int]) -> str:
+    return ", ".join(str(s) for s in steps)
+
+
 # ── G3, complete (QUA-3587) ────────────────────────────────────────────────────
 #
 # A developer needs three things from a bug: what happened, what should have happened,
@@ -633,6 +1384,7 @@ def _complete_totals(scored: list[dict[str, Any]]) -> dict[str, int]:
 #: Every gate, in the order it is evaluated and listed. Later tickets append here.
 GATES: tuple[Gate, ...] = (
     Gate("G1", "valid", gate_valid),
+    Gate("G2", "located", gate_located, reports_unknown=True),
     Gate("G3", "complete", gate_complete),
 )
 
@@ -678,6 +1430,9 @@ def _totals(reports: list[dict[str, Any]]) -> dict[str, Any]:
         gates[gate.id] = {"name": gate.name,
                           "evaluated": sum(1 for a in answers if a is not None),
                           "passed": sum(1 for a in answers if a is True)}
+        if gate.reports_unknown:
+            gates[gate.id]["unknown"] = sum(
+                1 for r in scored if r["gates"][gate.id].get("unknown"))
     return {
         "reports": len(reports),
         "neutral": len(reports) - len(scored),
