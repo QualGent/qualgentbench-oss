@@ -1,12 +1,14 @@
 {
-  "_about": "Shared mapping fixture for the customer-shaped bug report. Each case is one mobile_report_result call (args, plus the run's crash records where a case needs them) and the bug text the product stores for it: bug is null when no bug is filed. product_only fields are checked by the product's test alone. The same bytes are committed in the benchmark and in the product repository and tested in both. sha256 is the SHA-256 of this file's UTF-8 text with the sha256 line removed; each test also pins it. To change a case, edit both copies, recompute the hash and update the pin in both tests.",
-  "sha256": "f6c7f32ab4358c1c5560a83ccf240d12bacd3766050a1cbc19fff94526ff7e9d",
-  "version": 1,
+  "_about": "Shared mapping fixture for the customer-shaped bug report. Each case is one mobile_report_result call (args, plus the run's crash records where a case needs them) and the bug text the product stores for it: bug is null when no bug is filed. bug.steps is the bug's steps text (the code investigation, or the summary); bug.repro_steps is the agent's own step list as the product stores it beside that text and shows as the reproduction steps (an empty list when the call carried none). product_only fields are checked by the product's test alone. The same bytes are committed in the benchmark and in the product repository and tested in both. sha256 is the SHA-256 of this file's UTF-8 text with the sha256 line removed; each test also pins it. To change a case, edit both copies, recompute the hash and update the pin in both tests.",
+  "sha256": "59322cb15466c48072c77815d9412793759c01a6dc0ebb5411249ddc3774ab16",
+  "version": 2,
   "result_field_max": 250,
+  "repro_steps_max": 50,
+  "repro_step_max": 500,
   "cases": [
     {
       "id": "fail-with-investigation",
-      "note": "code_investigation becomes the bug's steps; the agent's step list is not on the bug",
+      "note": "code_investigation becomes the bug's steps text; the agent's step list becomes repro_steps (a step sent as an object gives its description)",
       "args": {
         "status": "FAIL",
         "flow": "Add a note",
@@ -38,7 +40,12 @@
         "steps": "NotesRepository.save() returns before the insert commits, so the list reloads from stale rows.",
         "expected": "The new note \"Groceries\" is listed first",
         "actual": "The list still shows 3 notes and no \"Groceries\"",
-        "failure_step": "Step 3: Save the note"
+        "failure_step": "Step 3: Save the note",
+        "repro_steps": [
+          "Open the notes list",
+          "Tap the add button",
+          "Save the note"
+        ]
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -48,7 +55,7 @@
     },
     {
       "id": "fail-without-investigation",
-      "note": "with no code_investigation the summary is repeated as the bug's steps",
+      "note": "with no code_investigation the summary is repeated as the bug's steps text; repro_steps still carries the agent's list",
       "args": {
         "status": "FAIL",
         "flow": "Add a note",
@@ -79,7 +86,12 @@
         "steps": "A saved note does not appear in the list",
         "expected": "The new note \"Groceries\" is listed first",
         "actual": "The list still shows 3 notes and no \"Groceries\"",
-        "failure_step": "Step 3: Save the note"
+        "failure_step": "Step 3: Save the note",
+        "repro_steps": [
+          "Open the notes list",
+          "Tap the add button",
+          "Save the note"
+        ]
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -104,7 +116,8 @@
         "steps": "A saved note does not appear in the list",
         "expected": "The new note \"Groceries\" is listed first",
         "actual": "The list still shows 3 notes and no \"Groceries\"",
-        "failure_step": "Step 3: Save the note"
+        "failure_step": "Step 3: Save the note",
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -128,7 +141,8 @@
         "steps": "A saved note does not appear in the list",
         "expected": "After the note is saved the list shows it first \ud83d\udcdd and the counter in the toolbar goes from three notes to four notes. After the note is saved the list shows it first \ud83d\udcdd and the counter in the toolbar goes from three notes to four notes. After the note",
         "actual": "Seen: The list still shows three notes, the new note is missing, and the toolbar counter did not change after saving twice in a row. The list still shows three notes, the new note is missing, and the toolbar counter did not change after saving twice",
-        "failure_step": "Step 3: Save the note"
+        "failure_step": "Step 3: Save the note",
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -152,7 +166,8 @@
         "steps": "A saved note does not appear in the list",
         "expected": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word!",
         "actual": "It did not.",
-        "failure_step": "Step 3: Save the note"
+        "failure_step": "Step 3: Save the note",
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -175,7 +190,8 @@
         "steps": "A saved note does not appear in the list",
         "expected": null,
         "actual": null,
-        "failure_step": "Step 3: Save the note"
+        "failure_step": "Step 3: Save the note",
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -199,7 +215,8 @@
         "steps": "A saved note does not appear in the list",
         "expected": null,
         "actual": null,
-        "failure_step": "Step 3: Save the note"
+        "failure_step": "Step 3: Save the note",
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -223,7 +240,8 @@
         "steps": "Saving a note loses it",
         "expected": "The note is listed",
         "actual": "The note is missing",
-        "failure_step": null
+        "failure_step": null,
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -244,7 +262,8 @@
         "steps": "Agent reported an app issue",
         "expected": "A",
         "actual": "B",
-        "failure_step": null
+        "failure_step": null,
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -254,7 +273,7 @@
     },
     {
       "id": "fail-non-string-fields",
-      "note": "an argument that is not a string counts as absent",
+      "note": "an argument that is not a string counts as absent; a steps value that is not a list gives no repro_steps",
       "args": {
         "status": "FAIL",
         "summary": 404,
@@ -273,7 +292,8 @@
         "steps": "Agent reported an app issue",
         "expected": null,
         "actual": null,
-        "failure_step": null
+        "failure_step": null,
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -297,7 +317,8 @@
         "steps": "A saved note does not appear in the list",
         "expected": "The new note \"Groceries\" is listed first",
         "actual": "The list still shows 3 notes and no \"Groceries\"",
-        "failure_step": "Step 3: Save the note"
+        "failure_step": "Step 3: Save the note",
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -373,7 +394,8 @@
         "steps": "The request sends Authorization=[REDACTED] [REDACTED] and the server answers 401.",
         "expected": "Signed in with pin=[REDACTED]",
         "actual": "Error shown; session_token=[REDACTED] was dropped",
-        "failure_step": "Step 3: Save the note"
+        "failure_step": "Step 3: Save the note",
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -398,7 +420,8 @@
         "steps": "A saved note does not appear in the list",
         "expected": "The new note \"Groceries\" is listed first",
         "actual": "The list still shows 3 notes and no \"Groceries\"",
-        "failure_step": "Step 3: Save the note"
+        "failure_step": "Step 3: Save the note",
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "setup_issue",
@@ -435,7 +458,8 @@
         "steps": "The app crashes when a note is saved",
         "expected": "The new note \"Groceries\" is listed first",
         "actual": "The app closed and the home screen appeared",
-        "failure_step": "Step 3: Save the note"
+        "failure_step": "Step 3: Save the note",
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "app_bug",
@@ -476,12 +500,329 @@
         "steps": "A saved note does not appear in the list",
         "expected": "The new note \"Groceries\" is listed first",
         "actual": "The list still shows 3 notes and no \"Groceries\"",
-        "failure_step": "Step 3: Save the note"
+        "failure_step": "Step 3: Save the note",
+        "repro_steps": []
       },
       "product_only": {
         "failure_classification": "setup_issue",
         "crash_signatures": [],
         "extra_crash_bugs": 1
+      }
+    },
+    {
+      "id": "fail-steps-as-strings",
+      "note": "steps sent as text keep the agent's words and its pass/fail marks; a closing outcome sentence is kept as the last entry, not rewritten",
+      "args": {
+        "status": "FAIL",
+        "flow": "Read the calendar",
+        "summary": "The events list is empty after a calendar is added",
+        "failure_step": "Step 4: Open the events list",
+        "expected": "The 2 events of the added calendar are listed",
+        "actual": "The list shows \"No events\"",
+        "steps": [
+          "\u2713 Open the app",
+          "  \u2713 Tap \"Add calendar\" and pick \"Work\"  ",
+          "\u2713 Go back to the events list",
+          "\u2717 Read the events",
+          "Could not read the events because the list stayed empty after the calendar was added."
+        ]
+      },
+      "bug": {
+        "summary": "The events list is empty after a calendar is added",
+        "steps": "The events list is empty after a calendar is added",
+        "expected": "The 2 events of the added calendar are listed",
+        "actual": "The list shows \"No events\"",
+        "failure_step": "Step 4: Open the events list",
+        "repro_steps": [
+          "\u2713 Open the app",
+          "\u2713 Tap \"Add calendar\" and pick \"Work\"",
+          "\u2713 Go back to the events list",
+          "\u2717 Read the events",
+          "Could not read the events because the list stayed empty after the calendar was added."
+        ]
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-steps-dropped-entries",
+      "note": "blank entries, entries that are not text and objects without a text field are dropped; an object gives its first text field",
+      "args": {
+        "status": "FAIL",
+        "flow": "Read the calendar",
+        "summary": "The events list is empty after a calendar is added",
+        "failure_step": "Step 4: Open the events list",
+        "expected": "The 2 events of the added calendar are listed",
+        "actual": "The list shows \"No events\"",
+        "steps": [
+          "",
+          "   ",
+          7,
+          null,
+          true,
+          [
+            "Tap Save"
+          ],
+          {
+            "step": 2,
+            "status": "passed"
+          },
+          {
+            "description": "   ",
+            "action": "Tap the add button",
+            "status": "passed"
+          },
+          {
+            "step": "Open the events list"
+          },
+          "\u2717 Read the events"
+        ]
+      },
+      "bug": {
+        "summary": "The events list is empty after a calendar is added",
+        "steps": "The events list is empty after a calendar is added",
+        "expected": "The 2 events of the added calendar are listed",
+        "actual": "The list shows \"No events\"",
+        "failure_step": "Step 4: Open the events list",
+        "repro_steps": [
+          "Tap the add button",
+          "Open the events list",
+          "\u2717 Read the events"
+        ]
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-steps-redacted",
+      "note": "a credential inside a step is redacted like the other text fields",
+      "args": {
+        "status": "FAIL",
+        "flow": "Read the calendar",
+        "summary": "The events list is empty after a calendar is added",
+        "failure_step": "Step 4: Open the events list",
+        "expected": "The 2 events of the added calendar are listed",
+        "actual": "The list shows \"No events\"",
+        "steps": [
+          "\u2713 Sign in with password: hunter2",
+          "\u2717 Call the API with Authorization: Bearer abc123.def",
+          "Open the events list"
+        ]
+      },
+      "bug": {
+        "summary": "The events list is empty after a calendar is added",
+        "steps": "The events list is empty after a calendar is added",
+        "expected": "The 2 events of the added calendar are listed",
+        "actual": "The list shows \"No events\"",
+        "failure_step": "Step 4: Open the events list",
+        "repro_steps": [
+          "\u2713 Sign in with password=[REDACTED]",
+          "\u2717 Call the API with Authorization=[REDACTED] [REDACTED]",
+          "Open the events list"
+        ]
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-steps-long-entry",
+      "note": "an entry longer than repro_step_max is cut at that many code points (an astral character before the cut, a space at the cut)",
+      "args": {
+        "status": "FAIL",
+        "flow": "Read the calendar",
+        "summary": "The events list is empty after a calendar is added",
+        "failure_step": "Step 4: Open the events list",
+        "expected": "The 2 events of the added calendar are listed",
+        "actual": "The list shows \"No events\"",
+        "steps": [
+          "Open the app",
+          "\ud83d\udcc5 tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; ok tail that is cut",
+          "tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; done.",
+          "tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; done.!"
+        ]
+      },
+      "bug": {
+        "summary": "The events list is empty after a calendar is added",
+        "steps": "The events list is empty after a calendar is added",
+        "expected": "The 2 events of the added calendar are listed",
+        "actual": "The list shows \"No events\"",
+        "failure_step": "Step 4: Open the events list",
+        "repro_steps": [
+          "Open the app",
+          "\ud83d\udcc5 tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; ok",
+          "tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; done.",
+          "tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; tap row; done."
+        ]
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-steps-too-many",
+      "note": "only the first repro_steps_max entries are kept",
+      "args": {
+        "status": "FAIL",
+        "flow": "Read the calendar",
+        "summary": "The events list is empty after a calendar is added",
+        "failure_step": "Step 4: Open the events list",
+        "expected": "The 2 events of the added calendar are listed",
+        "actual": "The list shows \"No events\"",
+        "steps": [
+          "Tap row 1",
+          "Tap row 2",
+          "Tap row 3",
+          "Tap row 4",
+          "Tap row 5",
+          "Tap row 6",
+          "Tap row 7",
+          "Tap row 8",
+          "Tap row 9",
+          "Tap row 10",
+          "Tap row 11",
+          "Tap row 12",
+          "Tap row 13",
+          "Tap row 14",
+          "Tap row 15",
+          "Tap row 16",
+          "Tap row 17",
+          "Tap row 18",
+          "Tap row 19",
+          "Tap row 20",
+          "Tap row 21",
+          "Tap row 22",
+          "Tap row 23",
+          "Tap row 24",
+          "Tap row 25",
+          "Tap row 26",
+          "Tap row 27",
+          "Tap row 28",
+          "Tap row 29",
+          "Tap row 30",
+          "Tap row 31",
+          "Tap row 32",
+          "Tap row 33",
+          "Tap row 34",
+          "Tap row 35",
+          "Tap row 36",
+          "Tap row 37",
+          "Tap row 38",
+          "Tap row 39",
+          "Tap row 40",
+          "Tap row 41",
+          "Tap row 42",
+          "Tap row 43",
+          "Tap row 44",
+          "Tap row 45",
+          "Tap row 46",
+          "Tap row 47",
+          "Tap row 48",
+          "Tap row 49",
+          "Tap row 50",
+          "Tap row 51",
+          "Tap row 52"
+        ]
+      },
+      "bug": {
+        "summary": "The events list is empty after a calendar is added",
+        "steps": "The events list is empty after a calendar is added",
+        "expected": "The 2 events of the added calendar are listed",
+        "actual": "The list shows \"No events\"",
+        "failure_step": "Step 4: Open the events list",
+        "repro_steps": [
+          "Tap row 1",
+          "Tap row 2",
+          "Tap row 3",
+          "Tap row 4",
+          "Tap row 5",
+          "Tap row 6",
+          "Tap row 7",
+          "Tap row 8",
+          "Tap row 9",
+          "Tap row 10",
+          "Tap row 11",
+          "Tap row 12",
+          "Tap row 13",
+          "Tap row 14",
+          "Tap row 15",
+          "Tap row 16",
+          "Tap row 17",
+          "Tap row 18",
+          "Tap row 19",
+          "Tap row 20",
+          "Tap row 21",
+          "Tap row 22",
+          "Tap row 23",
+          "Tap row 24",
+          "Tap row 25",
+          "Tap row 26",
+          "Tap row 27",
+          "Tap row 28",
+          "Tap row 29",
+          "Tap row 30",
+          "Tap row 31",
+          "Tap row 32",
+          "Tap row 33",
+          "Tap row 34",
+          "Tap row 35",
+          "Tap row 36",
+          "Tap row 37",
+          "Tap row 38",
+          "Tap row 39",
+          "Tap row 40",
+          "Tap row 41",
+          "Tap row 42",
+          "Tap row 43",
+          "Tap row 44",
+          "Tap row 45",
+          "Tap row 46",
+          "Tap row 47",
+          "Tap row 48",
+          "Tap row 49",
+          "Tap row 50"
+        ]
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-steps-empty-list",
+      "note": "an empty steps list gives no repro_steps",
+      "args": {
+        "status": "FAIL",
+        "flow": "Read the calendar",
+        "summary": "The events list is empty after a calendar is added",
+        "failure_step": "Step 4: Open the events list",
+        "expected": "The 2 events of the added calendar are listed",
+        "actual": "The list shows \"No events\"",
+        "steps": []
+      },
+      "bug": {
+        "summary": "The events list is empty after a calendar is added",
+        "steps": "The events list is empty after a calendar is added",
+        "expected": "The 2 events of the added calendar are listed",
+        "actual": "The list shows \"No events\"",
+        "failure_step": "Step 4: Open the events list",
+        "repro_steps": []
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
       }
     }
   ]
