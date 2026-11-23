@@ -61,7 +61,8 @@ def test_matched_false_known_and_consequence_reports(tmp_path):
     q = rq.score_episode(_episode(tmp_path, "ep1", metrics))
     assert q["quality_version"] == rq.QUALITY_VERSION == 1
     assert q["scorer_version"] == journey.SCORER_VERSION
-    assert q["report_source"] == metrics["report_source"] == "transcript_write"
+    assert q["scorer_report_source"] == metrics["report_source"] == "transcript_write"
+    assert "report_source" not in q     # that name is per report now (QUA-3585)
     matched, consequence, known, false = q["reports"]
 
     assert matched["gates"] == {"G1": {"pass": True,

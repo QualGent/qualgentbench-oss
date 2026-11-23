@@ -29,9 +29,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -40,11 +41,13 @@ from typing import Any
 #: scored: a gate's rule, a gate added or removed, a change to who is counted. A change
 #: that cannot alter any output (a refactor, a comment) keeps the version.
 #:
-#:   1  the frame, with gate G1 (valid).
+#:   1  the frame, with gate G1 (valid); the customer-shaped report of every report.
 QUALITY_VERSION = 1
 
 RESULT_FILE = "result.json"
 QUALITY_FILE = "quality.json"
+#: The saved agent transcript, relative to the episode directory.
+TRANSCRIPT_FILE = "agent/transcript.txt"
 
 #: The gates a report must ALL pass to be customer-ready. A gate named here that is not
 #: registered in `GATES` yet (or that did not run for a report) leaves `customer_ready`
@@ -73,6 +76,9 @@ class Episode:
     """What a gate may read: the episode directory and its saved `result.json`."""
     dir: Path
     result: dict[str, Any]
+    #: Per-episode memo (the customer-shaped reports), so a gate that asks for them once
+    #: per report does not read the transcript once per report.
+    _cache: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     @property
     def metrics(self) -> dict[str, Any]:
@@ -97,6 +103,287 @@ def is_neutral(report: dict[str, Any]) -> bool:
     and are in no total, the same way the scorer leaves them out of every rate."""
     return report.get("matched") is None and (
         report.get("known") is not None or report.get("consequence_of") is not None)
+
+
+# ── The customer-shaped report ─────────────────────────────────────────────────
+#
+# Quality is scored on the report as a customer would read it, not on the findings file.
+# The product files a bug from one accepted `mobile_report_result` call. Its mapping,
+# mirrored here field for field:
+#
+#   call argument                       bug field
+#   summary                             summary (the title)
+#   code_investigation, else summary    steps
+#   expected, actual                    expected / actual, kept only as a pair, each cut
+#                                       to RESULT_FIELD_MAX characters
+#   failure_step                        failure_step
+#   steps (the agent's step list)       not on the bug (kept here as `agent_steps`)
+#
+# Only a FAIL call files a bug; PASS and BLOCKED file none. The same fixture file,
+# tests/fixtures/report-mapping-fixture.json, is tested against this code and against
+# the product's own mapping, so the two cannot drift silently.
+
+REPORT_TOOL = "mobile_report_result"
+#: The longest `expected` / `actual` the product stores, in characters (code points).
+RESULT_FIELD_MAX = 250
+#: The title the product gives a FAIL report that has no usable `summary`.
+DEFAULT_SUMMARY = "Agent reported an app issue"
+REDACTED = "[REDACTED]"
+
+#: Where a customer-shaped report came from.
+SOURCE_REPORT_TOOL = "report_tool"      # the last accepted FAIL `mobile_report_result` call
+SOURCE_FINDINGS = "findings"            # a findings entry, rendered into the same fields
+#: The scorer read its one report from a `mobile_report_result` call that files no bug in
+#: the product (BLOCKED). The saved report is rendered like a findings entry.
+SOURCE_SCORER_REPORT = "scorer_report"
+
+# What JavaScript's `String.prototype.trim` removes; Python's `str.strip()` differs at the
+# edges (it keeps U+FEFF and removes U+001C..U+001F).
+_JS_SPACE = ("\t\n\v\f\r           "
+             "       　﻿")
+
+# The two redactions of the product's text sanitiser that a tester's sentence can
+# plausibly trigger, in the product's order. The product has more (signed and local URLs,
+# local file paths, image data, key-shaped tokens, values of sensitive arguments); a
+# report containing such text can differ from the product's stored bug. See
+# docs/report-quality.md, "Sanitising".
+_AUTH_SCHEME_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE)
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(api[_-]?key|access[_-]?token|authorization|client[_-]?secret"
+    r"|cookie|id[_-]?token|refresh[_-]?token|session[_-]?token|oob[_-]?code"
+    r"|[A-Za-z0-9_]+_token|token|password|passcode|pin|credential(?:[_-]?(?:id|uuid))?"
+    r"|secret)\s*[:=]\s*(?:\[REDACTED\]|\"[^\"]*\"|'[^']*'|[^\s,;}\]]+)", re.IGNORECASE)
+_WORD_RE = re.compile(r"[a-z0-9]{3,}")
+_NUMBER_RE = re.compile(r"\d+")
+
+
+def sanitize_text(value: str) -> str:
+    """The product's sanitiser, as far as this module mirrors it: an `Authorization`
+    scheme's credential and the value of a `password: ...`-style assignment become
+    `[REDACTED]`."""
+    value = _AUTH_SCHEME_RE.sub(lambda m: f"{m.group(1)} {REDACTED}", value)
+    return _SECRET_ASSIGNMENT_RE.sub(lambda m: f"{m.group(1)}={REDACTED}", value)
+
+
+def _pick(args: dict[str, Any], key: str) -> str | None:
+    """A string argument, trimmed; None when it is absent, not a string, or blank."""
+    value = args.get(key)
+    if not isinstance(value, str):
+        return None
+    return value.strip(_JS_SPACE) or None
+
+
+def _result_pair(expected: str | None, actual: str | None) -> tuple[str | None, str | None]:
+    """`expected` / `actual` as the bug stores them: both or neither, each cut to
+    RESULT_FIELD_MAX code points with trailing space removed."""
+    expected = (expected or "").strip(_JS_SPACE)
+    actual = (actual or "").strip(_JS_SPACE)
+    if not expected or not actual:
+        return None, None
+    return (expected[:RESULT_FIELD_MAX].rstrip(_JS_SPACE),
+            actual[:RESULT_FIELD_MAX].rstrip(_JS_SPACE))
+
+
+@dataclass(frozen=True)
+class CustomerReport:
+    """One report as the product would store it as a bug, plus where it came from."""
+    index: int                    # position in result.json's `metrics.reports`
+    summary: str                  # the bug's title
+    steps: str                    # the bug's "steps" text; "" when the source has none
+    expected: str | None          # both or neither, each at most RESULT_FIELD_MAX
+    actual: str | None
+    failure_step: str | None
+    #: The agent's own `steps` argument, unchanged (a list; the product drops it).
+    #: Empty for a findings entry. Not sanitised and not part of the bug.
+    agent_steps: tuple[Any, ...] = ()
+    report_source: str = SOURCE_FINDINGS
+    #: How the tool call was matched to this report when there were several:
+    #: "only_report", "step", "text" or "first". None for a rendered entry.
+    paired_by: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"summary": self.summary, "steps": self.steps, "expected": self.expected,
+                "actual": self.actual, "failure_step": self.failure_step,
+                "agent_steps": list(self.agent_steps),
+                "report_source": self.report_source, "paired_by": self.paired_by}
+
+
+def customer_report_from_tool(args: dict[str, Any], index: int = 0,
+                              paired_by: str | None = None) -> CustomerReport | None:
+    """The bug the product files from one accepted `mobile_report_result` call, or None
+    when it files none (any status but FAIL). Pure: the arguments in, the fields out."""
+    status = args.get("status")
+    if not isinstance(status, str) or status.upper() != "FAIL":
+        return None
+    summary = sanitize_text(_pick(args, "summary") or DEFAULT_SUMMARY)
+    steps = sanitize_text(_pick(args, "code_investigation") or summary)
+    failure_step = sanitize_text(_pick(args, "failure_step") or "") or None
+    expected, actual = (sanitize_text(v) if v else None
+                        for v in (_pick(args, "expected"), _pick(args, "actual")))
+    expected, actual = _result_pair(expected, actual)
+    agent_steps = args.get("steps")
+    return CustomerReport(
+        index=index, summary=summary, steps=steps, expected=expected, actual=actual,
+        failure_step=failure_step,
+        agent_steps=tuple(agent_steps) if isinstance(agent_steps, list) else (),
+        report_source=SOURCE_REPORT_TOOL, paired_by=paired_by)
+
+
+def customer_report_from_finding(report: dict[str, Any], index: int,
+                                 source: str = SOURCE_FINDINGS) -> CustomerReport:
+    """One saved report (a findings entry, as `result.json` lists it) rendered into the
+    bug's fields under the same rules: `description` is the summary, `observed` is
+    `actual`, `screen` and `step` give `failure_step`. A findings entry carries no
+    investigation and no step list, so `steps` is empty."""
+    step, screen = report.get("step"), _pick(report, "screen")
+    if isinstance(step, int) and not isinstance(step, bool):
+        where = f"Step {step}: {screen}" if screen else f"Step {step}"
+    else:
+        where = screen or ""
+    expected, actual = (sanitize_text(v) if v else None
+                        for v in (_pick(report, "expected"), _pick(report, "observed")))
+    expected, actual = _result_pair(expected, actual)
+    return CustomerReport(
+        index=index, summary=sanitize_text(_pick(report, "description") or DEFAULT_SUMMARY),
+        steps="", expected=expected, actual=actual,
+        failure_step=sanitize_text(where) or None, report_source=source)
+
+
+def _base_tool_name(name: Any) -> str:
+    name = name if isinstance(name, str) else ""
+    if name.startswith("mcp__"):
+        parts = name.split("__", 2)
+        if len(parts) == 3 and parts[2]:
+            return parts[2]
+    return name
+
+
+def _json_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return {}
+    return value if isinstance(value, dict) else {}
+
+
+def report_tool_calls(transcript: str) -> list[tuple[dict[str, Any], bool]]:
+    """Every `mobile_report_result` call in a saved transcript, in order, as
+    `(arguments, refused)`. Reads the two formats the harness records: claude-code
+    stream-json (`tool_use` / `tool_result`, refused = `is_error`) and codex
+    `exec --json` (`mcp_tool_call` items, refused = an `error` or status failed/error).
+    The same calls, and the same refusal rule, as the scorer's own transcript parser;
+    a test compares the two."""
+    calls: dict[str, list[Any]] = {}      # call id -> [arguments, refused]
+    anonymous = 0
+    for line in transcript.splitlines():
+        if REPORT_TOOL not in line and not any(cid in line for cid in calls):
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        message = event.get("message")
+        blocks = message.get("content") if isinstance(message, dict) else None
+        if event.get("type") == "assistant" and isinstance(blocks, list):
+            for block in blocks:
+                if (isinstance(block, dict) and block.get("type") == "tool_use"
+                        and isinstance(block.get("id"), str)
+                        and _base_tool_name(block.get("name")) == REPORT_TOOL):
+                    calls[block["id"]] = [_json_dict(block.get("input")), False]
+        elif event.get("type") == "user" and isinstance(blocks, list):
+            for block in blocks:
+                if (isinstance(block, dict) and block.get("type") == "tool_result"
+                        and block.get("tool_use_id") in calls):
+                    calls[block["tool_use_id"]][1] = bool(block.get("is_error"))
+        else:
+            item = event.get("item")
+            if not (isinstance(item, dict) and item.get("type") == "mcp_tool_call"
+                    and _base_tool_name(item.get("tool")) == REPORT_TOOL):
+                continue
+            cid = item.get("id")
+            if not isinstance(cid, str):
+                cid = f"anonymous-{anonymous}"
+                anonymous += 1
+            call = calls.setdefault(cid, [_json_dict(item.get("arguments")), False])
+            status = item.get("status")
+            status = status.lower() if isinstance(status, str) else ""
+            if status != "in_progress" and ("result" in item or item.get("error")):
+                call[1] = bool(item.get("error")) or status in {"failed", "error"}
+    return [(args, refused) for args, refused in calls.values()]
+
+
+def last_accepted_report_call(episode: Episode) -> dict[str, Any] | None:
+    """The arguments of the last `mobile_report_result` call the server accepted in the
+    episode's saved transcript, or None (no such call, or no transcript)."""
+    try:
+        transcript = (episode.dir / TRANSCRIPT_FILE).read_text(encoding="utf-8",
+                                                               errors="replace")
+    except OSError:
+        return None
+    accepted = [args for args, refused in report_tool_calls(transcript) if not refused]
+    return accepted[-1] if accepted else None
+
+
+def _words(*texts: Any) -> set[str]:
+    return set(_WORD_RE.findall(" ".join(t for t in texts if isinstance(t, str)).lower()))
+
+
+def _pair_tool_call(args: dict[str, Any],
+                    reports: list[dict[str, Any]]) -> tuple[int, str] | None:
+    """Which saved report the one tool call describes: `(index, how)`. One call carries
+    one bug, so exactly one report takes its fields. In order: the only report; the
+    report whose `step` is the first number in `failure_step`; the report sharing the
+    most words with the call; the first report. Ties go to the lower index."""
+    if not reports:
+        return None
+    if len(reports) == 1:
+        return 0, "only_report"
+    candidates, how = list(range(len(reports))), "first"
+    number = _NUMBER_RE.search(_pick(args, "failure_step") or "")
+    if number:
+        same_step = [i for i in candidates if reports[i].get("step") == int(number.group(0))]
+        if same_step:
+            candidates, how = same_step, "step"
+            if len(same_step) == 1:
+                return same_step[0], how
+    call_words = _words(*(args.get(k) for k in ("summary", "actual", "expected",
+                                                "failure_step")))
+    overlap = {i: len(call_words & _words(*(reports[i].get(k) for k in (
+        "description", "observed", "expected", "screen")))) for i in candidates}
+    best = max(candidates, key=lambda i: (overlap[i], -i))
+    if how == "first" and overlap[best] > 0:
+        how = "text"
+    return best, how
+
+
+def customer_report(episode: Episode) -> list[CustomerReport]:
+    """The customer-shaped report of every report in the episode, in the order of
+    `metrics.reports` (entry i belongs to report i).
+
+    Source, in order: the last accepted `mobile_report_result` call in the transcript,
+    when it is a FAIL (the only status that files a bug); else each saved report
+    rendered into the same fields. One call carries one bug, so when the episode has
+    more reports than that, the others use the rendering. Memoised on the episode."""
+    cached = episode._cache.get("customer_report")
+    if cached is not None:
+        return list(cached)
+    reports = episode.metrics.get("reports") or []
+    fallback = (SOURCE_SCORER_REPORT
+                if episode.metrics.get("report_source") == SOURCE_REPORT_TOOL
+                else SOURCE_FINDINGS)
+    out = [customer_report_from_finding(r, i, fallback) for i, r in enumerate(reports)]
+    args = last_accepted_report_call(episode)
+    paired = _pair_tool_call(args, reports) if args is not None else None
+    if paired is not None:
+        from_tool = customer_report_from_tool(args, paired[0], paired[1])
+        if from_tool is not None:
+            out[paired[0]] = from_tool
+    episode._cache["customer_report"] = tuple(out)
+    return out
 
 
 def gate_valid(episode: Episode, report: dict[str, Any], index: int) -> GateResult:
@@ -140,6 +427,8 @@ def _score_report(episode: Episode, report: dict[str, Any], index: int) -> dict[
         "neutral": neutral,
         "gates": gates,
         "customer_ready": None if neutral else _customer_ready(gates),
+        # What a customer would read for this report, and where it came from.
+        "customer_report": customer_report(episode)[index].as_dict(),
     }
 
 
@@ -193,7 +482,9 @@ def score_episode(episode_dir: Path | str) -> dict[str, Any]:
         # The scorer whose `matched` / neutral marks the gates read (None on a verdict
         # saved before the scorer stamped its version).
         "scorer_version": metrics.get("scorer_version"),
-        "report_source": metrics.get("report_source") or "",
+        # Where the SCORER read the episode's reports. Each report's own
+        # `customer_report.report_source` says where its customer-shaped text came from.
+        "scorer_report_source": metrics.get("report_source") or "",
         "reports": reports,
         "totals": _totals(reports),
     }

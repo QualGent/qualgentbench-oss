@@ -1,0 +1,488 @@
+{
+  "_about": "Shared mapping fixture for the customer-shaped bug report. Each case is one mobile_report_result call (args, plus the run's crash records where a case needs them) and the bug text the product stores for it: bug is null when no bug is filed. product_only fields are checked by the product's test alone. The same bytes are committed in the benchmark and in the product repository and tested in both. sha256 is the SHA-256 of this file's UTF-8 text with the sha256 line removed; each test also pins it. To change a case, edit both copies, recompute the hash and update the pin in both tests.",
+  "sha256": "f6c7f32ab4358c1c5560a83ccf240d12bacd3766050a1cbc19fff94526ff7e9d",
+  "version": 1,
+  "result_field_max": 250,
+  "cases": [
+    {
+      "id": "fail-with-investigation",
+      "note": "code_investigation becomes the bug's steps; the agent's step list is not on the bug",
+      "args": {
+        "status": "FAIL",
+        "flow": "Add a note",
+        "summary": "A saved note does not appear in the list",
+        "failure_step": "Step 3: Save the note",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\"",
+        "steps": [
+          {
+            "step": 1,
+            "description": "Open the notes list",
+            "status": "passed"
+          },
+          {
+            "step": 2,
+            "description": "Tap the add button",
+            "status": "passed"
+          },
+          {
+            "step": 3,
+            "description": "Save the note",
+            "status": "failed"
+          }
+        ],
+        "code_investigation": "NotesRepository.save() returns before the insert commits, so the list reloads from stale rows."
+      },
+      "bug": {
+        "summary": "A saved note does not appear in the list",
+        "steps": "NotesRepository.save() returns before the insert commits, so the list reloads from stale rows.",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\"",
+        "failure_step": "Step 3: Save the note"
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-without-investigation",
+      "note": "with no code_investigation the summary is repeated as the bug's steps",
+      "args": {
+        "status": "FAIL",
+        "flow": "Add a note",
+        "summary": "A saved note does not appear in the list",
+        "failure_step": "Step 3: Save the note",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\"",
+        "steps": [
+          {
+            "step": 1,
+            "description": "Open the notes list",
+            "status": "passed"
+          },
+          {
+            "step": 2,
+            "description": "Tap the add button",
+            "status": "passed"
+          },
+          {
+            "step": 3,
+            "description": "Save the note",
+            "status": "failed"
+          }
+        ]
+      },
+      "bug": {
+        "summary": "A saved note does not appear in the list",
+        "steps": "A saved note does not appear in the list",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\"",
+        "failure_step": "Step 3: Save the note"
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-blank-investigation",
+      "note": "a blank code_investigation counts as absent",
+      "args": {
+        "status": "FAIL",
+        "flow": "Add a note",
+        "summary": "A saved note does not appear in the list",
+        "failure_step": "Step 3: Save the note",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\"",
+        "code_investigation": "  \n\t "
+      },
+      "bug": {
+        "summary": "A saved note does not appear in the list",
+        "steps": "A saved note does not appear in the list",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\"",
+        "failure_step": "Step 3: Save the note"
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-long-expected-actual",
+      "note": "expected and actual are each cut to 250 characters (code points), then trailing space is removed",
+      "args": {
+        "status": "FAIL",
+        "flow": "Add a note",
+        "summary": "A saved note does not appear in the list",
+        "failure_step": "Step 3: Save the note",
+        "expected": "After the note is saved the list shows it first \ud83d\udcdd and the counter in the toolbar goes from three notes to four notes. After the note is saved the list shows it first \ud83d\udcdd and the counter in the toolbar goes from three notes to four notes. After the note is saved the list shows it first \ud83d\udcdd and the counter in the toolbar goes from three notes to four notes. ",
+        "actual": "Seen: The list still shows three notes, the new note is missing, and the toolbar counter did not change after saving twice in a row. The list still shows three notes, the new note is missing, and the toolbar counter did not change after saving twice in a row. The list still shows three notes, the new note is missing, and the toolbar counter did not change after saving twice in a row. "
+      },
+      "bug": {
+        "summary": "A saved note does not appear in the list",
+        "steps": "A saved note does not appear in the list",
+        "expected": "After the note is saved the list shows it first \ud83d\udcdd and the counter in the toolbar goes from three notes to four notes. After the note is saved the list shows it first \ud83d\udcdd and the counter in the toolbar goes from three notes to four notes. After the note",
+        "actual": "Seen: The list still shows three notes, the new note is missing, and the toolbar counter did not change after saving twice in a row. The list still shows three notes, the new note is missing, and the toolbar counter did not change after saving twice",
+        "failure_step": "Step 3: Save the note"
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-exactly-250",
+      "note": "a 250-character value is kept whole",
+      "args": {
+        "status": "FAIL",
+        "flow": "Add a note",
+        "summary": "A saved note does not appear in the list",
+        "failure_step": "Step 3: Save the note",
+        "expected": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word!",
+        "actual": "It did not."
+      },
+      "bug": {
+        "summary": "A saved note does not appear in the list",
+        "steps": "A saved note does not appear in the list",
+        "expected": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word!",
+        "actual": "It did not.",
+        "failure_step": "Step 3: Save the note"
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-expected-only",
+      "note": "expected without actual stores neither",
+      "args": {
+        "status": "FAIL",
+        "flow": "Add a note",
+        "summary": "A saved note does not appear in the list",
+        "failure_step": "Step 3: Save the note",
+        "expected": "The new note \"Groceries\" is listed first"
+      },
+      "bug": {
+        "summary": "A saved note does not appear in the list",
+        "steps": "A saved note does not appear in the list",
+        "expected": null,
+        "actual": null,
+        "failure_step": "Step 3: Save the note"
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-actual-blank",
+      "note": "a blank actual stores neither",
+      "args": {
+        "status": "FAIL",
+        "flow": "Add a note",
+        "summary": "A saved note does not appear in the list",
+        "failure_step": "Step 3: Save the note",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "   "
+      },
+      "bug": {
+        "summary": "A saved note does not appear in the list",
+        "steps": "A saved note does not appear in the list",
+        "expected": null,
+        "actual": null,
+        "failure_step": "Step 3: Save the note"
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-whitespace-trimmed",
+      "note": "every field is trimmed; a blank failure_step is no failure step",
+      "args": {
+        "status": "FAIL",
+        "flow": "Add a note",
+        "summary": "  \u00a0Saving a note loses it\n",
+        "failure_step": " \t ",
+        "expected": "\n The note is listed ",
+        "actual": " The note is missing\u2028"
+      },
+      "bug": {
+        "summary": "Saving a note loses it",
+        "steps": "Saving a note loses it",
+        "expected": "The note is listed",
+        "actual": "The note is missing",
+        "failure_step": null
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-no-summary",
+      "note": "a missing summary gets the default title, which is also the steps",
+      "args": {
+        "status": "FAIL",
+        "expected": "A",
+        "actual": "B"
+      },
+      "bug": {
+        "summary": "Agent reported an app issue",
+        "steps": "Agent reported an app issue",
+        "expected": "A",
+        "actual": "B",
+        "failure_step": null
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-non-string-fields",
+      "note": "an argument that is not a string counts as absent",
+      "args": {
+        "status": "FAIL",
+        "summary": 404,
+        "failure_step": 3,
+        "expected": [
+          "a"
+        ],
+        "actual": {
+          "text": "b"
+        },
+        "code_investigation": null,
+        "steps": "not a list"
+      },
+      "bug": {
+        "summary": "Agent reported an app issue",
+        "steps": "Agent reported an app issue",
+        "expected": null,
+        "actual": null,
+        "failure_step": null
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-lowercase-status",
+      "note": "status is compared without regard to case",
+      "args": {
+        "status": "fail",
+        "flow": "Add a note",
+        "summary": "A saved note does not appear in the list",
+        "failure_step": "Step 3: Save the note",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\""
+      },
+      "bug": {
+        "summary": "A saved note does not appear in the list",
+        "steps": "A saved note does not appear in the list",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\"",
+        "failure_step": "Step 3: Save the note"
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-status-with-space",
+      "note": "status is not trimmed: ' FAIL' files no bug",
+      "args": {
+        "status": " FAIL",
+        "flow": "Add a note",
+        "summary": "A saved note does not appear in the list",
+        "failure_step": "Step 3: Save the note",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\""
+      },
+      "bug": null,
+      "product_only": null
+    },
+    {
+      "id": "pass",
+      "note": "PASS files no bug",
+      "args": {
+        "status": "PASS",
+        "flow": "Add a note",
+        "summary": "The note was saved and listed",
+        "steps": [
+          {
+            "step": 1,
+            "description": "Open the notes list",
+            "status": "passed"
+          },
+          {
+            "step": 2,
+            "description": "Tap the add button",
+            "status": "passed"
+          }
+        ]
+      },
+      "bug": null,
+      "product_only": null
+    },
+    {
+      "id": "blocked",
+      "note": "BLOCKED files no bug",
+      "args": {
+        "status": "BLOCKED",
+        "summary": "Could not sign in, so the flow could not start",
+        "failure_step": "Step 1",
+        "expected": "Signed in",
+        "actual": "Sign-in spinner never ends",
+        "blocker_investigation": "The test account is locked."
+      },
+      "bug": null,
+      "product_only": null
+    },
+    {
+      "id": "fail-redacts-credentials",
+      "note": "an authorization credential and a password-style assignment are redacted in every text field",
+      "args": {
+        "status": "FAIL",
+        "flow": "Add a note",
+        "summary": "Login fails although password: hunter2 is correct",
+        "failure_step": "Step 3: Save the note",
+        "expected": "Signed in with pin=4321",
+        "actual": "Error shown; session_token: 'zz top' was dropped",
+        "code_investigation": "The request sends Authorization: Bearer abc123.def and the server answers 401."
+      },
+      "bug": {
+        "summary": "Login fails although password=[REDACTED] is correct",
+        "steps": "The request sends Authorization=[REDACTED] [REDACTED] and the server answers 401.",
+        "expected": "Signed in with pin=[REDACTED]",
+        "actual": "Error shown; session_token=[REDACTED] was dropped",
+        "failure_step": "Step 3: Save the note"
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-setup-issue",
+      "note": "a setup issue is still a bug with the same text fields",
+      "args": {
+        "status": "FAIL",
+        "flow": "Add a note",
+        "summary": "A saved note does not appear in the list",
+        "failure_step": "Step 3: Save the note",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\"",
+        "failure_classification": "setup_issue"
+      },
+      "bug": {
+        "summary": "A saved note does not appear in the list",
+        "steps": "A saved note does not appear in the list",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\"",
+        "failure_step": "Step 3: Save the note"
+      },
+      "product_only": {
+        "failure_classification": "setup_issue",
+        "crash_signatures": [],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-crash-claimed",
+      "note": "a crash the report claims changes no text field; the bug is marked as a crash bug",
+      "args": {
+        "status": "FAIL",
+        "flow": "Add a note",
+        "summary": "The app crashes when a note is saved",
+        "failure_step": "Step 3: Save the note",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The app closed and the home screen appeared",
+        "crash_ids": [
+          "c-3f9a1e"
+        ]
+      },
+      "crash_records": [
+        {
+          "id": "c-3f9a1e",
+          "kind": "crash",
+          "package": "com.example.notes",
+          "exception": "java.lang.IllegalStateException",
+          "at": "2026-10-21T17:04:55Z",
+          "claimed": true
+        }
+      ],
+      "bug": {
+        "summary": "The app crashes when a note is saved",
+        "steps": "The app crashes when a note is saved",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The app closed and the home screen appeared",
+        "failure_step": "Step 3: Save the note"
+      },
+      "product_only": {
+        "failure_classification": "app_bug",
+        "crash_signatures": [
+          {
+            "kind": "crash",
+            "package": "com.example.notes",
+            "exception": "java.lang.IllegalStateException"
+          }
+        ],
+        "extra_crash_bugs": 0
+      }
+    },
+    {
+      "id": "fail-crash-unclaimed",
+      "note": "a crash the report left out becomes a second bug of its own; the agent's bug is unchanged",
+      "args": {
+        "status": "FAIL",
+        "flow": "Add a note",
+        "summary": "A saved note does not appear in the list",
+        "failure_step": "Step 3: Save the note",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\"",
+        "failure_classification": "setup_issue"
+      },
+      "crash_records": [
+        {
+          "id": "c-3f9a1e",
+          "kind": "crash",
+          "package": "com.example.notes",
+          "exception": "java.lang.IllegalStateException",
+          "at": "2026-10-21T17:04:55Z",
+          "claimed": false
+        }
+      ],
+      "bug": {
+        "summary": "A saved note does not appear in the list",
+        "steps": "A saved note does not appear in the list",
+        "expected": "The new note \"Groceries\" is listed first",
+        "actual": "The list still shows 3 notes and no \"Groceries\"",
+        "failure_step": "Step 3: Save the note"
+      },
+      "product_only": {
+        "failure_classification": "setup_issue",
+        "crash_signatures": [],
+        "extra_crash_bugs": 1
+      }
+    }
+  ]
+}
