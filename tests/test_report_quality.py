@@ -93,7 +93,8 @@ def test_an_episode_with_no_report(tmp_path):
     totals = q["totals"]
     assert (totals["reports"], totals["neutral"], totals["scored"]) == (0, 0, 0)
     assert set(totals["gates"]) == {g.id for g in rq.GATES}
-    assert all(g == {"name": g["name"], "evaluated": 0, "passed": 0}
+    assert all(g == {"name": g["name"], "evaluated": 0, "passed": 0,
+                     **({"unknown": 0} if "unknown" in g else {})}
                for g in totals["gates"].values())
     assert (totals["customer_ready"], totals["customer_ready_unknown"]) == (0, 0)
 
