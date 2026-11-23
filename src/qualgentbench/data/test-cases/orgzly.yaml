@@ -238,6 +238,22 @@ test_cases:
         reference:
           kind: entered
           note: "Step 5 sets the priority to A itself; the new note's list row reads \"#B\"."
+        reference_report:
+          summary: A note saved with priority A is listed with priority B in the notebook
+          steps:
+            - Launch Orgzly Revived.
+            - Tap the "Getting Started with Orgzly" notebook.
+            - Tap the + button.
+            - Type "Book flights" into the Title field.
+            - Tap the State button.
+            - Tap TODO.
+            - Tap the Priority button.
+            - Tap A.
+            - Tap Done.
+            - Scroll to the bottom of the notebook.
+          expected: 'The new note is listed at the bottom of the notebook as "TODO #A Book flights", with the priority A that was set.'
+          actual: 'The new note is listed as "TODO #B Book flights": the list shows #B, not #A. The sample note "Note can have a priority" also shows #B.'
+          failure_step: 'Step 7: Scroll to the bottom of the notebook and find the new note'
 
   # De-leaked 2026-09-14: the brief no longer states what completing a repeating note
   # should do; the note's survival is the oracle and the DONE row is a display side bug.
@@ -272,6 +288,24 @@ test_cases:
         reference:
           kind: entered
           note: "Step 4 enables the repeater itself, and step 9 asks for the state and scheduled date: a repeating note that completes advances its date and stays open, so a row reading DONE contradicts the repeater the route set."
+        reference_report:
+          summary: Marking a repeating note done leaves it DONE on the same date; the next occurrence is not scheduled
+          steps:
+            - Launch Orgzly Revived.
+            - Tap the "Getting Started with Orgzly" notebook.
+            - Tap the + button.
+            - Type "Water the plants" into the Title field.
+            - Tap the Scheduled time button.
+            - Tap the today button in the dialog.
+            - Tap the repeater checkbox in the dialog.
+            - Tap Set.
+            - Tap Done.
+            - Scroll to the bottom of the notebook.
+            - Press and hold the note "Water the plants".
+            - Tap Done in the actions bar.
+          expected: The note stays open, listed as "Water the plants" with no DONE state, and its scheduled date moves one week on, to "Wed, Sep 23 .+1w".
+          actual: The row reads "DONE Water the plants" and its scheduled date is unchanged, "Wed, Sep 16 .+1w".
+          failure_step: 'Step 9: Read the note''s state and scheduled date in the list'
 
   - id: orgzly-create-and-search
     name: Create a note and find it by search
@@ -306,7 +340,16 @@ test_cases:
     # so completion here is not credited on the witness alone; the witness half is still
     # earnable without running the search. QUA-2767 / QUA-2768 remove this key.
     witness_before_action: QUA-2768
-    bugs: [notebook-count-off-by-one]
+    bugs:
+      - id: notebook-count-off-by-one
+        reference_report:
+          summary: The Notebooks screen shows one note fewer than the notebook holds
+          steps:
+            - Launch Orgzly Revived.
+            - Scroll to the "Getting Started with Orgzly" notebook on the Notebooks screen.
+          expected: The "Getting Started with Orgzly" notebook shows "Contains 33 notes", the number of notes it holds.
+          actual: The notebook shows "Contains 32 notes".
+          failure_step: 'Step 1: Open the notebook'
 
   # ── CRASH, NAVIGATION and LIFECYCLE cases (QUA-2729, epic QUA-2723) — seeded in place
   # of the two pruned persistence cases. Each keeps the polarity rule every case here
@@ -367,7 +410,26 @@ test_cases:
         # (getChildAt() past the four pre-inflated indent guides). Substring,
         # case-insensitive, matched against the normalised signature + exception + message.
         crash: NullPointerException
-    bugs: [deep-outline-indent-crash]
+    bugs:
+      - id: deep-outline-indent-crash
+        reference_report:
+          summary: The app crashes when a note is added two levels below the deepest sample note
+          steps:
+            - Launch Orgzly Revived.
+            - Tap the "Getting Started with Orgzly" notebook.
+            - Press and hold the note "Use this to better organize your notes".
+            - Tap New note.
+            - Tap New under.
+            - Type "Level five" into the Title field.
+            - Tap Done.
+            - Press and hold the note "Level five".
+            - Tap New note.
+            - Tap New under.
+            - Type "Level six" into the Title field.
+            - Tap Done.
+          expected: The notebook is shown again and lists "Level six" indented under "Level five".
+          actual: The app closes and the device's home screen is shown; the notebook is gone. The device log shows a NullPointerException.
+          failure_step: 'Step 7: Enter the title "Level six" and save the note with Done'
 
   # WRONG NAVIGATION — opening a note from its notebook, the sample notebook's own first
   # tip ("Click on the note to open it", the second row under "Notes", on the notebook's
@@ -408,7 +470,17 @@ test_cases:
     # Screen witness: the title on the editor the brief sends the agent to, and that
     # editor's breadcrumb — the one string on this route that only the opened note shows.
     evidence: ['Click on the note to open it', 'Getting Started with Orgzly  •  Notes']
-    bugs: [note-tap-opens-next-note]
+    bugs:
+      - id: note-tap-opens-next-note
+        reference_report:
+          summary: Tapping a note in the notebook opens the wrong note, the one below it
+          steps:
+            - Launch Orgzly Revived.
+            - Tap the "Getting Started with Orgzly" notebook.
+            - Tap the note "Click on the note to open it".
+          expected: The note editor opens under "Getting Started with Orgzly • Notes" with the title "Click on the note to open it" and an empty Content field.
+          actual: 'The editor opens a different note: its title is "Click and hold the note to select it" and its content is "You can select multiple notes."'
+          failure_step: 'Step 3: Read the title of the note that opens'
 
   # ── PERSISTENCE cases (QUA-2870) — positive-control DROP targets. Both oracles are
   # `db:` reads of the row the action writes; the CLEAN arm passes, the SEEDED arm fails
@@ -442,7 +514,20 @@ test_cases:
       steps: [launch, {tap: Getting Started with Orgzly}, {long_press: Click on the note to open it},
               {tap: More options}, {tap: Delete}, {tap: Delete}, wait]
       expect: {db: orgzly.db, equals: '0', query: select count(*) from notes where title='Click on the note to open it';}
-    bugs: [note-delete-ignored]
+    bugs:
+      - id: note-delete-ignored
+        reference_report:
+          summary: A note deleted from the notebook is still listed after confirming the deletion
+          steps:
+            - Launch Orgzly Revived.
+            - Tap the "Getting Started with Orgzly" notebook.
+            - Press and hold the note "Click on the note to open it".
+            - Tap More options.
+            - Tap Delete.
+            - Tap Delete in the confirmation dialog.
+          expected: 'The note is removed: the notebook list goes from "Notes" straight to "Click and hold the note to select it".'
+          actual: 'The selection closes but the note was not deleted: "Click on the note to open it" is still listed under "Notes".'
+          failure_step: 'Step 5: Read the notebook''s notes'
 
   # Create a note with a body. The editor's body field is `content_view` (hint
   # "Content"); tapping it switches it to an edit field. Done saves and closes to the
@@ -470,7 +555,23 @@ test_cases:
       steps: [launch, {tap: Getting Started with Orgzly}, {tap: fab}, {tap: title}, {type: Grocery list},
               {tap: content_view}, {type: Milk and eggs}, {tap: Done}, wait]
       expect: {db: orgzly.db, equals: '1', query: select count(*) from notes where title='Grocery list' and content='Milk and eggs';}
-    bugs: [note-body-dropped]
+    bugs:
+      - id: note-body-dropped
+        reference_report:
+          summary: The content typed into a new note is not saved
+          steps:
+            - Launch Orgzly Revived.
+            - Tap the "Getting Started with Orgzly" notebook.
+            - Tap the + button.
+            - Type "Grocery list" into the Title field.
+            - Tap the Content field.
+            - Type "Milk and eggs" into the Content field.
+            - Tap Done.
+            - Scroll to the bottom of the notebook.
+            - Tap the note "Grocery list".
+          expected: The note "Grocery list" opens with the content "Milk and eggs".
+          actual: 'The editor closes to the "Getting Started with Orgzly" notebook as if saved, but the note "Grocery list" opens with an empty Content field: "Milk and eggs" is gone.'
+          failure_step: 'Step 7: Read the note''s content'
 
   # LIFECYCLE — the canonical shape CLAUDE.md gives for a lifecycle case,
   # `{type: "draft"}, {rotate: landscape}, {present: "draft"}`: the steps that PRODUCE
@@ -540,4 +641,16 @@ test_cases:
     # order-aware; QUA-2768 gives this case a completion signal that is not screen text,
     # and removes this key.
     witness_before_action: QUA-2768
-    bugs: [new-note-title-lost-on-rotation]
+    bugs:
+      - id: new-note-title-lost-on-rotation
+        reference_report:
+          summary: The title typed into a new note is cleared when the phone is rotated to landscape
+          steps:
+            - Launch Orgzly Revived.
+            - Tap the "Getting Started with Orgzly" notebook.
+            - Tap the + button.
+            - Type "Pay the rent" into the Title field.
+            - Rotate the device to landscape.
+          expected: The note editor still shows the title "Pay the rent" after the rotation.
+          actual: 'The title field is empty after the rotation: it shows only its hint, "Title", and "Pay the rent" is gone.'
+          failure_step: 'Step 5: Read the title shown in the note editor'

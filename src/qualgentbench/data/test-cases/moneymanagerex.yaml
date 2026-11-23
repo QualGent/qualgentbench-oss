@@ -121,6 +121,24 @@ test_cases:
     bugs:
       - id: summary-income-label-typo
         reference: {kind: stated, note: "the last step names the summary's Income, the word the label misspells (on the home screen at launch and after the back)"}
+        reference_report:
+          summary: The Income label in the home screen summary is misspelled
+          steps:
+            - Launch Money Manager Ex.
+            - Tap Checking on the home screen.
+            - Tap the + button.
+            - Tap Payee.
+            - Tap Grocer.
+            - Tap Deposit.
+            - Tap the amount.
+            - Tap 4 on the keypad.
+            - Tap 0 on the keypad.
+            - Tap Save on the keypad to confirm the amount.
+            - Tap Save.
+            - Press the back button to return to the home screen.
+          expected: 'The summary "INCOME VS EXPENSES: CURRENT MONTH" labels the $ 40.00 row "Income".'
+          actual: The row is labelled "Incomme". The label is misspelled from launch on.
+          failure_step: 'Step 7: Go back to the home screen and read the Checking balance and the month''s Income in the summary'
 
   # Re-authored 2026-09-23 (QUA-2789). It recorded a withdrawal alone, so the month had
   # Income 0.00, the seeded Difference ($ 30.00) equalled the Expenses figure beside it,
@@ -165,6 +183,32 @@ test_cases:
       - id: difference-adds-expenses
         marker: "80.00"
         reference: {kind: cross-check, note: "the summary draws Income 50.00 and Expenses 30.00 directly above the Difference, and the last step asks for all three"}
+        reference_report:
+          summary: The home screen summary shows the wrong Difference between income and expenses
+          steps:
+            - Launch Money Manager Ex.
+            - Tap Checking on the home screen.
+            - Tap the + button.
+            - Tap Payee.
+            - Tap Grocer.
+            - Tap Deposit.
+            - Tap the amount.
+            - Tap 5 on the keypad.
+            - Tap 0 on the keypad.
+            - Tap Save on the keypad to confirm the amount.
+            - Tap Save.
+            - Tap the + button.
+            - Tap Payee.
+            - Tap Grocer.
+            - Tap the amount.
+            - Tap 3 on the keypad.
+            - Tap 0 on the keypad.
+            - Tap Save on the keypad to confirm the amount.
+            - Tap Save.
+            - Press the back button to return to the home screen.
+          expected: With Income $ 50.00 and Expenses $ 30.00 the summary shows a Difference of $ 20.00.
+          actual: 'The summary shows Income $ 50.00, Expenses $ 30.00 and Difference "$ 80.00": the expenses are added to the income.'
+          failure_step: 'Step 13: Read the Checking balance and the month''s Income, Expenses and Difference in the summary'
 
   - id: mmex-transfer-to-savings
     name: Move money from Checking to Savings
@@ -200,7 +244,27 @@ test_cases:
     # blocked and scored on the verdict + the blocking bug, never on this). '75.00' is
     # first on screen after the back.
     evidence: ['75.00', '25.00']
-    bugs: [transfer-credits-only-source]
+    bugs:
+      - id: transfer-credits-only-source
+        reference_report:
+          summary: A transfer from Checking to Savings is not credited to Savings
+          steps:
+            - Launch Money Manager Ex.
+            - Tap Savings on the home screen.
+            - Tap the + button.
+            - Tap Payee.
+            - Tap Grocer.
+            - Tap Transfer.
+            - Tap the swap accounts button, so the transfer goes from Checking to Savings.
+            - Tap the amount.
+            - Tap 2 on the keypad.
+            - Tap 5 on the keypad.
+            - Tap Save on the keypad to confirm the amount.
+            - Tap Save.
+            - Press the back button to return to the home screen.
+          expected: The home screen shows Checking at $ 75.00 and Savings at "$ 25.00".
+          actual: 'Checking drops to $ 75.00 but Savings still shows $ 0.00: the 25.00 taken from Checking is not received by Savings.'
+          failure_step: 'Step 10: Read the Savings balance'
 
   - id: mmex-void-withdrawal
     name: Void a mistaken withdrawal
@@ -231,7 +295,26 @@ test_cases:
       steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum2}, {tap: buttonKeyNum5}, {tap: Save}, {tap: spinnerStatus}, {tap: Void}, wait, {tap: Save}, wait, wait]
       expect: {absent: '75.00'}
     evidence: [$ 100.00, $ -25.00]
-    bugs: [void-still-counted]
+    bugs:
+      - id: void-still-counted
+        reference_report:
+          summary: A voided withdrawal is still deducted from the account balance
+          steps:
+            - Launch Money Manager Ex.
+            - Tap Checking on the home screen.
+            - Tap the + button.
+            - Tap Payee.
+            - Tap Grocer.
+            - Tap the amount.
+            - Tap 2 on the keypad.
+            - Tap 5 on the keypad.
+            - Tap Save on the keypad to confirm the amount.
+            - Tap the Status selector.
+            - Tap Void.
+            - Tap Save.
+          expected: The transaction is listed with the status Void and the Checking Account Balance stays at $ 100.00.
+          actual: The transaction is listed as Void with $ -25.00, but the Account Balance above the list shows "$ 75.00"; only the Reconciled Balance shows $ 100.00.
+          failure_step: 'Step 9: Read the Checking account balance shown above the list'
 
   - id: mmex-withdrawal-with-note
     name: Record a withdrawal with a note and check the summary
@@ -265,4 +348,23 @@ test_cases:
     # seeded Difference ($ 25.00) equals the Expenses figure beside it, so no string only
     # the seeded build shows exists on this route, and giving the month income would add a
     # second form to a 17-step blocked case. It stays on mmex-withdrawal-summary.
-    bugs: [withdrawal-notes-dropped]
+    bugs:
+      - id: withdrawal-notes-dropped
+        reference_report:
+          summary: The note entered for a withdrawal is not saved
+          steps:
+            - Launch Money Manager Ex.
+            - Tap Checking on the home screen.
+            - Tap the + button.
+            - Tap Payee.
+            - Tap Grocer.
+            - Tap the amount.
+            - Tap 2 on the keypad.
+            - Tap 5 on the keypad.
+            - Tap Save on the keypad to confirm the amount.
+            - Type "Weekly groceries" into the Notes field.
+            - Tap Save.
+            - Tap the Grocer transaction in the Checking list.
+          expected: The transaction's Notes field shows "Weekly groceries", and its row in the Checking list carries that note.
+          actual: 'The Notes field is empty; "Weekly groceries" is not in the Checking list either. The amount is kept: the home screen then shows Checking at $ 75.00, with chart labels 0.0 and 25.0.'
+          failure_step: 'Step 9: Check the Notes field'

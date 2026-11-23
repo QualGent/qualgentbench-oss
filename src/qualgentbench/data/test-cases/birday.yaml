@@ -202,7 +202,17 @@ test_cases:
         equals: "1"
         query: "select count(*) from Event where name='Clara' and surname='Novak' and notes='Call before noon';"
         crash: IndexOutOfBoundsException
-    bugs: [search-two-words-crash]
+    bugs:
+      - id: search-two-words-crash
+        reference_report:
+          summary: App crashes when a first and last name are typed into the search field
+          steps:
+            - Launch Birday.
+            - Tap the search field ("Search…") at the top of the event list.
+            - Type "Clara Novak" into the search field.
+          expected: The list is filtered to Clara Novak, whose event can then be opened from the results.
+          actual: 'The app crashed while the two-word name was being typed: the event list disappeared and Birday was no longer on screen, so no result could be opened. The device log shows IndexOutOfBoundsException.'
+          failure_step: 'Step 1: Type "Clara Novak" into the search field'
 
   # CRASH — filter the list to anniversaries and favourite the one shown. The seeded
   # chip dies before the list is filtered.
@@ -229,7 +239,17 @@ test_cases:
         equals: "1"
         query: "select count(*) from Event where name='Iris' and surname='Bauer' and favorite=1;"
         crash: IllegalArgumentException
-    bugs: [type-filter-anniversary-crash]
+    bugs:
+      - id: type-filter-anniversary-crash
+        reference_report:
+          summary: App crashes when the Anniversary type filter is chosen
+          steps:
+            - Launch Birday.
+            - Tap the arrow at the end of the search field to open the type filters.
+            - Tap Anniversary.
+          expected: The list is filtered to anniversaries and shows Iris Bauer's anniversary with its Add to favorites star.
+          actual: The list was never filtered. The app crashed and the device went back to the home screen; the device log shows IllegalArgumentException.
+          failure_step: 'Step 2: Choose Anniversary'
 
   # CRASH — a new birthday without a year. The seeded Insert event dies before the
   # event is made.
@@ -259,7 +279,24 @@ test_cases:
         equals: "1"
         query: "select count(*) from Event where name='Nora' and surname='Quinn' and yearMatter=0 and type='BIRTHDAY';"
         crash: DateTimeException
-    bugs: [no-year-save-crash]
+    bugs:
+      - id: no-year-save-crash
+        reference_report:
+          summary: App crashes when inserting a new birthday with Consider the year switched off
+          steps:
+            - Launch Birday.
+            - Tap New event.
+            - Type "Nora" into the first name field ("Insert First Name").
+            - Type "Quinn" into the last name field ("Insert Last Name").
+            - Tap the date field ("Select a date").
+            - Tap Switch to text input mode.
+            - Type "04/12/1995" into the date field.
+            - Tap OK.
+            - Tap the "Consider the year" switch to turn it off.
+            - Tap Insert event.
+          expected: The sheet closes and Nora Quinn is added to the event list as a birthday without a year ("April, 12").
+          actual: The event was not added. The app crashed on Insert event and the device went back to the home screen; the device log shows DateTimeException.
+          failure_step: 'Step 2: Switch off Consider the year and insert the event'
 
   # DISPLAY side bug (content-format). The case's own outcome is the favourite, which
   # holds on both arms; the seeded details screen names "capricorn" for a December 11
@@ -290,6 +327,14 @@ test_cases:
     bugs:
       - id: zodiac-sign-shifted
         reference: {kind: cross-check, note: "the same details screen shows the birth date Thursday, December 11, 1969, and December 11 is sagittarius, so a screen naming capricorn contradicts its own date"}
+        reference_report:
+          summary: Details screen shows the wrong zodiac sign for a December 11 birthday
+          steps:
+            - Launch Birday.
+            - Tap Felix Wagner in the event list.
+          expected: The details show "Zodiac sign:" sagittarius, the sign for the birth date shown, Thursday, December 11, 1969.
+          actual: The details show "Zodiac sign:" "capricorn" for the birth date Thursday, December 11, 1969.
+          failure_step: 'Step 1: Open Felix Wagner''s details and read them'
 
   # DISPLAY side bug (content-format). The case's own outcome is the note, which holds on
   # both arms; the seeded Favorites row reads "born in 1993" for a 1992 birthday.
@@ -320,6 +365,18 @@ test_cases:
     bugs:
       - id: favorite-born-year-off-by-one
         reference: {kind: cross-check, note: "the same row turns 34 to 35 at a next birthday in 2027, which is a 1992 birth, and her details and list row say May 30, 1992, so born in 1993 is visibly wrong"}
+        reference_report:
+          summary: Favorites screen shows the wrong birth year for Elena Rossi
+          steps:
+            - Launch Birday.
+            - Tap the search field ("Search…") at the top of the event list.
+            - Type "Rossi" into the search field.
+            - Press the back button to close the keyboard.
+            - Tap the Add to favorites star on Elena Rossi's row.
+            - Tap Favorites in the bottom bar.
+          expected: 'Elena Rossi''s row reads "Years: 34▶35, born in 1992": she was born on May 30, 1992 and turns 35 on Sunday, May 30, 2027.'
+          actual: 'Elena Rossi''s row on the Favorites screen reads "Years: 34▶35, born in 1993", one year off.'
+          failure_step: 'Step 2: Open the Favorites screen and read Elena Rossi''s row'
 
   # DISPLAY side bug (widget-inventory). The case's own outcome is the delete, which
   # holds on both arms; the seeded anniversary details keep a "Zodiac sign:" row that
@@ -355,6 +412,16 @@ test_cases:
     bugs:
       - id: astrology-on-anniversary
         reference: {kind: stated, note: "step 2 states zodiac and Chinese signs are shown for birthdays only, so a zodiac row on an anniversary's details is out of place"}
+        reference_report:
+          summary: An anniversary's details show a Zodiac sign row that only birthdays should have
+          steps:
+            - Launch Birday.
+            - Tap the search field ("Search…") at the top of the event list.
+            - Type "Iris" into the search field.
+            - Tap Iris Bauer in the results.
+          expected: The anniversary's details show the event type Anniversary, 12 years and the next date, with no zodiac or Chinese sign rows.
+          actual: The details of Iris Bauer's anniversary show an extra row "Zodiac sign:" with the value gemini.
+          failure_step: 'Step 2: Read its details'
 
   # PERSISTENCE — change a birthday's date from its edit sheet. The seeded sheet closes
   # as if saved and the row keeps January 21. No screen witness: the date picker's own
@@ -383,7 +450,24 @@ test_cases:
         db: BirdayDB
         equals: "1"
         query: "select count(*) from Event where name='David' and surname='Okafor' and originalDate='1975-01-23';"
-    bugs: [edit-not-saved]
+    bugs:
+      - id: edit-not-saved
+        reference_report:
+          summary: Changing a birthday's date with Update event is not saved
+          steps:
+            - Launch Birday.
+            - Tap the search field ("Search…") at the top of the event list.
+            - Type "Okafor" into the search field.
+            - Tap David Okafor in the results.
+            - Tap Edit event.
+            - Tap the date field.
+            - Tap Switch to text input mode.
+            - Type "01/23/1975" into the date field.
+            - Tap OK.
+            - Tap Update event.
+          expected: 'David Okafor''s row shows the new date: "Saturday, January 23, 2027. 129 days left" and "January 23, 1975 - 51▶52 years".'
+          actual: 'The sheet closed as if saved, but David Okafor''s row is unchanged: it still shows "Thursday, January 21, 2027. 127 days left" and "January 21, 1975 - 51▶52 years".'
+          failure_step: 'Step 4: Read David Okafor''s row in the list'
 
   # NAVIGATION — search, open the result, delete it. The seeded result opens the first
   # upcoming event instead, which the route then deletes; David Okafor stays.
@@ -409,7 +493,19 @@ test_cases:
         db: BirdayDB
         equals: "0"
         query: "select count(*) from Event where name='David' and surname='Okafor';"
-    bugs: [search-result-opens-unfiltered-row]
+    bugs:
+      - id: search-result-opens-unfiltered-row
+        reference_report:
+          summary: Tapping a search result opens a different event, so Delete event deletes the wrong one
+          steps:
+            - Launch Birday.
+            - Tap the search field ("Search…") at the top of the event list.
+            - Type "Okafor" into the search field.
+            - Tap David Okafor in the results.
+            - Tap Delete event.
+          expected: David Okafor's details open; after Delete event the search for Okafor shows "No results found".
+          actual: 'Tapping David Okafor opened the wrong event: the details of "QASEED", the first event of the full list. Delete event showed "Deleted!" but "David Okafor" is still listed.'
+          failure_step: 'Step 2: Open David Okafor from the results'
 
   # NAVIGATION — add a last name to a name day from its edit sheet. The seeded Edit
   # event opens an empty "Insert event" sheet whose button stays disabled.
@@ -436,7 +532,18 @@ test_cases:
         equals: "1"
         query: "select count(*) from Event where name='Laura' and surname='Weiss' and type='NAME_DAY';"
     evidence: ["Laura Weiss"]    # screen witness: the list row's name as the update rewrites it
-    bugs: [edit-opens-new-event-form]
+    bugs:
+      - id: edit-opens-new-event-form
+        reference_report:
+          summary: Edit event on a name day opens an empty Insert event form instead of the edit form
+          steps:
+            - Launch Birday.
+            - Tap Laura in the event list.
+            - Tap Edit event.
+            - Type "Weiss" into the last name field ("Insert Last Name").
+          expected: An "Edit event" sheet opens with the type Name day, the first name Laura and an "Update event" button.
+          actual: 'An empty "Insert event" sheet opens: type Birthday, a blank "Insert First Name" field and "Select a date". After typing Weiss its Insert event button is disabled, so the name day cannot be updated.'
+          failure_step: 'Step 1: Open Laura''s name day and use Edit event'
 
   # LIFECYCLE — add an anniversary, rotating the phone before inserting it. The seeded
   # form forgets the picked type across the `rotate` and inserts a birthday.
@@ -465,7 +572,30 @@ test_cases:
         db: BirdayDB
         equals: "1"
         query: "select count(*) from Event where name='Omar' and surname='Haddad' and type='ANNIVERSARY';"
-    bugs: [type-reset-on-rotation]
+    bugs:
+      - id: type-reset-on-rotation
+        reference_report:
+          summary: A new event's type Anniversary is lost after rotating the phone; it is saved as a birthday
+          steps:
+            - Launch Birday.
+            - Tap New event.
+            - Tap the event type dropdown, which reads Birthday.
+            - Tap Anniversary.
+            - Type "Omar" into the first name field ("Insert First Name").
+            - Type "Haddad" into the last name field ("Insert Last Name").
+            - Tap the date field ("Select a date").
+            - Tap Switch to text input mode.
+            - Type "05/09/2018" into the date field.
+            - Tap OK.
+            - Rotate the device to landscape.
+            - Rotate the device to portrait.
+            - Tap Insert event.
+            - Tap the search field ("Search…") at the top of the event list.
+            - Type "Omar" into the search field.
+            - Tap Omar Haddad in the results.
+          expected: Omar Haddad's details show the event type Anniversary and "9 years".
+          actual: 'Omar Haddad''s details are those of a birthday: "Birth date" Wednesday, May 9, 2018, "Next age:", "Zodiac sign:" taurus and "Chinese sign:" dog. The type Anniversary was lost.'
+          failure_step: 'Step 4: Search for Omar and open his event'
 
   # ORDERING — a note from the details screen. The seeded OK runs off the main thread
   # and dies on Android's thread check.
@@ -491,7 +621,19 @@ test_cases:
         equals: "1"
         query: "select count(*) from Event where name='Joseph' and surname='Kerr' and notes='Light a candle';"
         crash: CalledFromWrongThreadException
-    bugs: [notes-save-off-main-thread]
+    bugs:
+      - id: notes-save-off-main-thread
+        reference_report:
+          summary: App crashes when a note is confirmed with OK on an event's details screen
+          steps:
+            - Launch Birday.
+            - Tap Joseph Kerr in the event list.
+            - Tap Notes.
+            - Type "Light a candle" into the note field.
+            - Tap OK.
+          expected: The note dialog closes and Joseph Kerr's details screen stays open with the note saved.
+          actual: The app crashed on OK and the device went back to the home screen; the device log shows CalledFromWrongThreadException.
+          failure_step: 'Step 2: Use Notes, write "Light a candle" and confirm with OK'
 
   # ANR — Delete all events in the experimental settings. The seeded OK never returns;
   # the route's next input (a swipe, which needs no anchor: a frozen app's hierarchy
@@ -515,4 +657,19 @@ test_cases:
               wait, {tap: Experimental}, wait, {swipe: up}, {swipe: up}, {swipe: up}, wait,
               {tap: Delete all events}, wait, {tap: OK}, {swipe: down}, wait, wait]
       expect: {db: BirdayDB, equals: "0", query: "select count(*) from Event;", anr: true}
-    bugs: [clear-all-blocks-main-thread]
+    bugs:
+      - id: clear-all-blocks-main-thread
+        reference_report:
+          summary: App freezes after confirming Delete all events in the experimental settings
+          steps:
+            - Launch Birday.
+            - Tap Settings in the bottom bar.
+            - Scroll down to the bottom of the settings.
+            - Tap Experimental.
+            - Scroll down to "Delete all events".
+            - Tap Delete all events.
+            - Tap OK.
+            - Swipe down on the screen.
+          expected: The events are deleted and the settings screen keeps responding, so the tester can go back to an empty event list.
+          actual: After OK the app stopped responding to input, and Android showed "Birday isn't responding" with the buttons Close app and Wait.
+          failure_step: 'Step 2: Use Delete all events and confirm with OK'

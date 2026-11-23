@@ -202,7 +202,31 @@ test_cases:
               {long_press: Acme}, {tap: Globex}, {tap: Transfer}, {tap: Next}, wait]
       expect: {present: "2 / 2 QR codes", crash: IndexOutOfBoundsException}
     evidence: ["2 / 2 QR codes"]   # screen witness: only the second code's counter reads 2 / 2
-    bugs: [transfer-next-skips-code]
+    bugs:
+      - id: transfer-next-skips-code
+        reference_report:
+          summary: App crashes when tapping Next on the transfer screen with two entries selected
+          steps:
+            - Launch Aegis Authenticator.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Alpha" into the Name field.
+            - Type "Acme" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXP" into the Secret field.
+            - Tap SAVE.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Bravo" into the Name field.
+            - Type "Globex" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXQ" into the Secret field.
+            - Tap SAVE.
+            - Press and hold the Acme entry in the list.
+            - Tap the Globex entry.
+            - Tap Transfer in the toolbar.
+            - Tap Next.
+          expected: The Transfer entries screen shows the second code, for Globex (Bravo), and reads "2 / 2 QR codes".
+          actual: 'The app crashed: the Transfer entries screen disappeared and the entry list ("Showing 2 entries") was shown again, so the second code never appeared. The device log shows IndexOutOfBoundsException.'
+          failure_step: 'Step 5: Tap Next'
 
   # ── CRASH: deleting two entries at once ──────────────────────────────────────────
   # 9 screen states up to the confirmation. The seeded arm dies building the dialog, in
@@ -231,7 +255,31 @@ test_cases:
               {long_press: Acme}, {tap: Globex}, {tap: More options}, {tap: Delete}, wait]
       expect: {present: "Are you sure you want to delete 2 entries?", crash: IllegalFormatConversionException}
     evidence: ["Are you sure you want to delete 2 entries?"]   # screen witness: the dialog's own sentence
-    bugs: [delete-dialog-count-format-crash]
+    bugs:
+      - id: delete-dialog-count-format-crash
+        reference_report:
+          summary: App crashes when choosing Delete with two entries selected
+          steps:
+            - Launch Aegis Authenticator.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Alpha" into the Name field.
+            - Type "Acme" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXP" into the Secret field.
+            - Tap SAVE.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Bravo" into the Name field.
+            - Type "Globex" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXQ" into the Secret field.
+            - Tap SAVE.
+            - Press and hold the Acme entry in the list.
+            - Tap the Globex entry.
+            - Tap More options in the toolbar.
+            - Tap Delete.
+          expected: A "Delete entries" confirmation asks "Are you sure you want to delete 2 entries?" and lists Acme (Alpha) and Globex (Bravo).
+          actual: No confirmation appears. The app crashed and the device went back to the home screen; the device log shows IllegalFormatConversionException.
+          failure_step: 'Step 4: Open the toolbar''s overflow menu and choose Delete'
 
   # ── CRASH: removing the only group ───────────────────────────────────────────────
   # 10 screen states: list -> + menu -> editor -> group sheet -> name dialog -> sheet ->
@@ -263,7 +311,33 @@ test_cases:
               {swipe: up}, {tap: Edit groups}, {tap: Remove group}, {tap: OK}, wait]
       expect: {present: "No groups found", crash: IndexOutOfBoundsException}
     evidence: ["No groups found"]   # screen witness: the manager's empty state, only after the removal
-    bugs: [group-remove-wrong-index-crash]
+    bugs:
+      - id: group-remove-wrong-index-crash
+        reference_report:
+          summary: App crashes when confirming the removal of the only group in Edit groups
+          steps:
+            - Launch Aegis Authenticator.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Alpha" into the Name field.
+            - Type "Acme" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXP" into the Secret field.
+            - Tap the Group field, which reads "No group".
+            - Tap "New group…".
+            - Type "Work" into the group name field.
+            - Tap OK.
+            - Tap Save in the group sheet.
+            - Tap SAVE.
+            - Tap More options.
+            - Tap Settings.
+            - Tap Appearance.
+            - Swipe up until "Edit groups" is visible.
+            - Tap Edit groups.
+            - Tap the remove button next to Work.
+            - Tap OK.
+          expected: Work is removed and the Manage groups screen reads "No groups found".
+          actual: 'The app crashed: the Manage groups screen disappeared and the entry list was shown again, still with the "Work" group. The device log shows IndexOutOfBoundsException.'
+          failure_step: 'Step 5: Open Edit groups, tap the remove button next to Work and confirm'
 
   # ── CRASH: editing an entry that has been used ───────────────────────────────────
   # list -> + menu -> editor -> list (tap: the code is copied and the entry's usage
@@ -290,7 +364,24 @@ test_cases:
               {tap: Acme}, {long_press: Acme}, {tap: Edit}, wait]
       expect: {present: "Edit entry", crash: "Illegal pattern character"}
     evidence: ["Edit entry"]   # screen witness: the editor's title, first reached by the action
-    bugs: [last-used-date-format-crash]
+    bugs:
+      - id: last-used-date-format-crash
+        reference_report:
+          summary: App crashes when opening Edit for an entry whose code has been copied
+          steps:
+            - Launch Aegis Authenticator.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Alpha" into the Name field.
+            - Type "Acme" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXP" into the Secret field.
+            - Tap SAVE.
+            - Tap the Acme entry once to copy its code.
+            - Press and hold the Acme entry.
+            - Tap Edit in the toolbar.
+          expected: The "Edit entry" screen opens with Alpha and Acme in its fields.
+          actual: The edit screen never opened. The app crashed and the device went back to the home screen; the device log shows an exception with "Illegal pattern character".
+          failure_step: 'Step 3: Long-press the Acme entry and tap Edit in the toolbar'
 
   # ── DISPLAY (content-format): the audit log after a transfer ──────────────────────
   # 13 screen states: two entries, selection, Transfer (code 1, code 2), back to the list
@@ -327,6 +418,33 @@ test_cases:
         reference:
           kind: entered
           note: "Steps 1-2 enter Alpha and Bravo as the account names; the log names the entries \"Acme (Acme)\" and \"Globex (Globex)\"."
+        reference_report:
+          summary: Audit log names shared entries with the issuer twice instead of the account name
+          steps:
+            - Launch Aegis Authenticator.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Alpha" into the Name field.
+            - Type "Acme" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXP" into the Secret field.
+            - Tap SAVE.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Bravo" into the Name field.
+            - Type "Globex" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXQ" into the Secret field.
+            - Tap SAVE.
+            - Press and hold the Acme entry in the list.
+            - Tap the Globex entry.
+            - Tap Transfer in the toolbar.
+            - Tap Next.
+            - Tap Done.
+            - Tap More options.
+            - Tap Settings.
+            - Tap Audit log.
+          expected: The two "Entry shared" events name the entries "Acme (Alpha)" and "Globex (Bravo)", issuer followed by the account name.
+          actual: 'The two "Entry shared" events name the entries "Acme (Acme)" and "Globex (Globex)": the issuer twice, with the account name missing.'
+          failure_step: 'Step 6: Read the events listed and the entries they name'
 
   # ── DISPLAY (widget-inventory): transferring one entry ───────────────────────────
   # 8 screen states: two entries, selection of the second, Transfer. The seeded arm
@@ -359,6 +477,27 @@ test_cases:
         reference:
           kind: cross-check
           note: "The counter reads 1 / 1 QR code, so there is no second code; the screen still offers a Next control."
+        reference_report:
+          summary: Transfer screen for a single entry shows a Next button although there is only one code
+          steps:
+            - Launch Aegis Authenticator.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Alpha" into the Name field.
+            - Type "Acme" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXP" into the Secret field.
+            - Tap SAVE.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Bravo" into the Name field.
+            - Type "Globex" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXQ" into the Secret field.
+            - Tap SAVE.
+            - Press and hold the Globex entry in the list.
+            - Tap Transfer in the toolbar.
+          expected: The Transfer entries screen shows Globex (Bravo) with "1 / 1 QR code" and no control to step to another code.
+          actual: The screen reads "1 / 1 QR code" for Globex (Bravo) but also shows a "Next" button, although there is no second code to go to.
+          failure_step: 'Step 4: Read the transfer screen: the entry, the counter and the controls it offers'
 
   # ── DISPLAY (content-format): the single-entry delete confirmation ───────────────
   # 8 screen states up to the confirmation (not confirmed). Seeded passes: the dialog
@@ -392,6 +531,28 @@ test_cases:
         reference:
           kind: entered
           note: "Step 3 selects Globex (Bravo); the confirmation names Acme (Alpha)."
+        reference_report:
+          summary: Delete confirmation names Acme (Alpha) when Globex (Bravo) is the selected entry
+          steps:
+            - Launch Aegis Authenticator.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Alpha" into the Name field.
+            - Type "Acme" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXP" into the Secret field.
+            - Tap SAVE.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Bravo" into the Name field.
+            - Type "Globex" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXQ" into the Secret field.
+            - Tap SAVE.
+            - Press and hold the Globex entry in the list.
+            - Tap More options in the toolbar.
+            - Tap Delete.
+          expected: 'The "Delete entry" confirmation names the selected entry: "This action does not disable 2FA for: • Globex (Bravo)".'
+          actual: 'The "Delete entry" confirmation names the wrong entry: under "This action does not disable 2FA for:" it lists "Acme (Alpha)", not Globex (Bravo).'
+          failure_step: 'Step 5: Read the confirmation and the entry it names, without confirming it'
 
   # ── PERSISTENCE: renaming an entry (the hunt tier's edit defect, reused) ──────────
   # list -> + menu -> editor -> list -> selection -> editor -> list. The seeded arm's
@@ -418,7 +579,25 @@ test_cases:
               {long_press: Acme}, {tap: Edit}, {tap: text_name}, {type: Beta}, {tap: SAVE}, wait]
       expect: {present: "(Beta)"}
     evidence: ["(Beta)"]   # screen witness: the list row's account-name form, drawn only after the save
-    bugs: [edit-entry-not-saved]
+    bugs:
+      - id: edit-entry-not-saved
+        reference_report:
+          summary: Renaming an entry is not saved; the list keeps the old name after SAVE
+          steps:
+            - Launch Aegis Authenticator.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Alpha" into the Name field.
+            - Type "Acme" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXP" into the Secret field.
+            - Tap SAVE.
+            - Press and hold the Acme entry in the list.
+            - Tap Edit in the toolbar.
+            - Type "Beta" into the Name field, replacing "Alpha".
+            - Tap SAVE.
+          expected: The editor closes and the list shows the entry as Acme "(Beta)".
+          actual: The editor closes as if saved, but the list still shows the entry as Acme "(Alpha)". The name did not change.
+          failure_step: 'Step 5: Read how the list shows the entry'
 
   # ── NAVIGATION: the backup reminder ──────────────────────────────────────────────
   # list -> + menu -> editor -> list (the reminder card appears with the first change) ->
@@ -450,7 +629,23 @@ test_cases:
     # Screen witness: a setting only the backup settings list. Not "Automatic backups":
     # the reminder dialog's own message says "automatic backups" one step earlier.
     evidence: ["Backup reminder"]
-    bugs: [backup-reminder-opens-appearance]
+    bugs:
+      - id: backup-reminder-opens-appearance
+        reference_report:
+          summary: '"Set up backups" in the backup reminder opens the Appearance settings, not the backup settings'
+          steps:
+            - Launch Aegis Authenticator.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Alpha" into the Name field.
+            - Type "Acme" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXP" into the Secret field.
+            - Tap SAVE.
+            - Tap the "Changes are not backed up" card above the list.
+            - Tap Set up backups.
+          expected: The backup settings open, listing "Automatic backups", "Backup reminder" and "Android cloud backups".
+          actual: 'The wrong settings screen opens: its title is "Appearance" and it lists "Theme", "Dynamic colors", "View mode" and "Show icons". There is no "Backup reminder" option on it.'
+          failure_step: 'Step 4: Read the settings screen the app opens'
 
   # ── NAVIGATION: Edit on the second entry ────────────────────────────────────────
   # list -> + menu -> editor -> list -> + menu -> editor -> list -> selection -> editor.
@@ -477,7 +672,29 @@ test_cases:
               {long_press: Globex}, {tap: Edit}, wait]
       expect: {present: Bravo}
     evidence: ["Edit entry", "Bravo"]   # screen witness: the editor's title (only after the action) and the name field
-    bugs: [edit-opens-first-entry]
+    bugs:
+      - id: edit-opens-first-entry
+        reference_report:
+          summary: Edit on the second entry opens the editor for the first entry
+          steps:
+            - Launch Aegis Authenticator.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Alpha" into the Name field.
+            - Type "Acme" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXP" into the Secret field.
+            - Tap SAVE.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Bravo" into the Name field.
+            - Type "Globex" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXQ" into the Secret field.
+            - Tap SAVE.
+            - Press and hold the Globex entry in the list.
+            - Tap Edit in the toolbar.
+          expected: 'The "Edit entry" screen shows the selected entry: name Bravo and issuer Globex.'
+          actual: 'The "Edit entry" screen shows the wrong entry: the name field reads "Alpha" and the issuer field reads "Acme", the first entry in the list.'
+          failure_step: 'Step 4: Read the name and issuer the edit screen shows'
 
   # ── LIFECYCLE: a rename across a rotation ────────────────────────────────────────
   # list -> + menu -> editor -> list -> selection -> editor -> (rotate: recreated) ->
@@ -506,7 +723,26 @@ test_cases:
               {rotate: landscape}, {tap: SAVE}, wait]
       expect: {present: "(Delta)"}
     evidence: ["(Delta)"]   # screen witness: the list row's account-name form, drawn only after the save
-    bugs: [entry-name-lost-on-rotation]
+    bugs:
+      - id: entry-name-lost-on-rotation
+        reference_report:
+          summary: A new entry name typed in the editor is lost when the device is rotated before saving
+          steps:
+            - Launch Aegis Authenticator.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Alpha" into the Name field.
+            - Type "Acme" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXP" into the Secret field.
+            - Tap SAVE.
+            - Press and hold the Acme entry in the list.
+            - Tap Edit in the toolbar.
+            - Type "Delta" into the Name field, replacing "Alpha".
+            - Rotate the device to landscape.
+            - Tap SAVE.
+          expected: The Name field still reads Delta after the rotation, and after SAVE the list shows the entry as Acme "(Delta)".
+          actual: After the rotation the Name field reverted to "Alpha"; after SAVE the list still shows the entry as Acme "(Alpha)".
+          failure_step: 'Step 4: Turn the device to landscape'
 
   # ── ORDERING: transferring two entries ───────────────────────────────────────────
   # 9 screen states up to the Transfer screen. The seeded arm dies in MainActivity's
@@ -535,7 +771,30 @@ test_cases:
               {long_press: Acme}, {tap: Globex}, {tap: Transfer}, wait]
       expect: {present: "1 / 2 QR codes", crash: ConcurrentModificationException}
     evidence: ["1 / 2 QR codes"]   # screen witness: the two-code counter, only on the Transfer screen
-    bugs: [share-ends-selection-mid-loop]
+    bugs:
+      - id: share-ends-selection-mid-loop
+        reference_report:
+          summary: App crashes when tapping Transfer with two entries selected
+          steps:
+            - Launch Aegis Authenticator.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Alpha" into the Name field.
+            - Type "Acme" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXP" into the Secret field.
+            - Tap SAVE.
+            - Tap the + button (Add new entry).
+            - Tap Enter manually.
+            - Type "Bravo" into the Name field.
+            - Type "Globex" into the Issuer field.
+            - Type "JBSWY3DPEHPK3PXQ" into the Secret field.
+            - Tap SAVE.
+            - Press and hold the Acme entry in the list.
+            - Tap the Globex entry.
+            - Tap Transfer in the toolbar.
+          expected: The Transfer entries screen opens on Acme (Alpha) and reads "1 / 2 QR codes".
+          actual: The transfer screen never opened. The app crashed and the device went back to the home screen; the device log shows ConcurrentModificationException.
+          failure_step: 'Step 4: Tap Transfer in the toolbar'
 
 # ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
 # Benign UI changes compiled into the journey APK beside the defects (the patches are in

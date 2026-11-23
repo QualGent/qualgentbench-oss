@@ -172,6 +172,19 @@ test_cases:
         reference:
           kind: entered
           note: "Steps 3-4 choose Today as the due date itself; the list files the task under a \"Due tomorrow\" header."
+        reference_report:
+          summary: A task due today is listed under the header Due tomorrow
+          steps:
+            - Launch Tasks.org.
+            - Tap the + button (Create new task).
+            - Type "Groceries" into the Task name field.
+            - Tap the due date field, which shows "No due date".
+            - Tap Today.
+            - Tap OK.
+            - Tap Save.
+          expected: The My Tasks list shows "Groceries" under the header "Due today".
+          actual: The list shows "Groceries" and "Water plants" under the header "Due tomorrow"; there is no "Due today" section, although both tasks are due today.
+          failure_step: 'Step 6: Find the new task in the list'
 
   - id: tasks-complete-parent
     name: Complete a task that has subtasks
@@ -191,7 +204,16 @@ test_cases:
       steps: [launch, {tap: Search}, {type: Pack}, wait, {tap: completeBox}, wait]
       # The brief promises the parent AND both subtasks; the old query never checked the parent.
       expect: {db: database, equals: '3', query: 'select count(*) from tasks where title in (''Pack for trip'',''Passport'',''Chargers'') and completed>0;'}
-    bugs: [subtasks-left-open]          # subtask-chip-low retired (QUA-2783)
+    bugs:          # subtask-chip-low retired (QUA-2783)
+      - id: subtasks-left-open
+        reference_report:
+          summary: Completing a task does not complete its subtasks
+          steps:
+            - Launch Tasks.org.
+            - Tap the circle in front of "Pack for trip" in the My Tasks list.
+          expected: '"Pack for trip" and both of its subtasks, "Passport" and "Chargers", are completed.'
+          actual: Only "Pack for trip" is completed. Its subtasks "Passport" and "Chargers" are left open, not completed.
+          failure_step: 'Step 4: Look at "Passport" and "Chargers"'
 
   # SHRUNK 2026-09-18 (QUA-2730, docs/defect-classes.md §8): `due-date-edit-lost` was
   # pruned from the journey side, so this case keeps `due-section-shifted` alone. It is a
@@ -225,6 +247,18 @@ test_cases:
         reference:
           kind: stated
           note: "The expected outcome states the task is due today; the list files it under a \"Due tomorrow\" header."
+        reference_report:
+          summary: A task due today at 9 AM is listed under the header Due tomorrow
+          steps:
+            - Launch Tasks.org.
+            - Tap "Water plants".
+            - Tap its due date, which shows "Today".
+            - Tap the 9 AM time chip.
+            - Tap OK.
+            - Tap Save.
+          expected: The My Tasks list shows "Water plants", 9 AM, under the header "Due today".
+          actual: The list shows "Water plants", 9 AM, under the header "Due tomorrow". The header is already wrong at launch, before the time is changed.
+          failure_step: 'Step 5: Save the task'
 
   - id: tasks-complete-and-rename
     name: Rename one task and complete another
@@ -253,7 +287,7 @@ test_cases:
     # note above `defects:`) — unquotable, and with no reference in this brief. With no
     # `bugs:` the case has no seeded arm; its clean arm still scores completion and prices
     # a false report.
-    bugs: []
+    bugs:
 
   # ── CRASH on completing a repeating task (QUA-2730) ──────────────────────────────
   # Route: 6 steps, exactly the hunt's `repeating_done` check in
@@ -298,7 +332,18 @@ test_cases:
         # The gate: the death this case claims. Substring, case-insensitive, matched
         # against the normalised signature + exception + message.
         crash: DateTimeParseException
-    bugs: [repeat-complete-crash]
+    bugs:
+      - id: repeat-complete-crash
+        reference_report:
+          summary: The app crashes when a repeating task is completed
+          steps:
+            - Launch Tasks.org.
+            - Tap Search in the bottom bar.
+            - Type "Water" into the search field.
+            - Tap the circle in front of "Water plants".
+          expected: '"Water plants" stays open in the results and moves under the header "Due tomorrow".'
+          actual: The app closes when the circle is tapped. The device log shows a DateTimeParseException (Text '20260917' could not be parsed).
+          failure_step: 'Step 3: Tap the circle in front of "Water plants" to complete it'
 
   # ── FORCED ORDERING on adding a subtask (QUA-2730) ───────────────────────────────
   # Route: 7 steps over two screens, list -> Pack for trip's editor -> list. "Pack for
@@ -348,4 +393,16 @@ test_cases:
         # app switches to the bundled driver, which words it "Error code: 787, message:
         # FOREIGN KEY constraint failed"; the gate is the sentence both carry.
         crash: FOREIGN KEY constraint failed
-    bugs: [subtask-filed-before-written]
+    bugs:
+      - id: subtask-filed-before-written
+        reference_report:
+          summary: The app crashes when a task is saved with a new subtask
+          steps:
+            - Launch Tasks.org.
+            - Tap "Pack for trip".
+            - Tap Add subtask.
+            - Type "Tickets" into the new subtask field.
+            - Tap Save.
+          expected: The My Tasks list shows "Tickets" under "Pack for trip", together with "Passport" and "Chargers".
+          actual: The app closes when Save is tapped. The device log shows an SQLiteConstraintException, "FOREIGN KEY constraint failed".
+          failure_step: 'Step 4: Save the task'
