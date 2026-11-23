@@ -189,7 +189,10 @@ def test_ambiguous_attribution_is_unknown_never_a_pass(tmp_path, fmt):
     g = q["reports"][0]["gates"]["G2"]
     assert g["pass"] is None and g["unknown"] is True
     assert "does not say whether those calls were step 3" in g["reason"]
-    assert q["reports"][0]["customer_ready"] is None
+    # An unknown G2 never makes a report customer-ready, whatever the other gates say.
+    assert q["reports"][0]["customer_ready"] is not True
+    every = {gate: {"pass": True, "reason": ""} for gate in rq.HEADLINE_GATES}
+    assert rq._customer_ready({**every, "G2": g}) is None
     assert q["totals"]["gates"]["G2"] == {"name": "located", "evaluated": 0, "passed": 0,
                                           "unknown": 1}
 

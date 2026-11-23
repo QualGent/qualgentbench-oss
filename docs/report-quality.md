@@ -60,7 +60,7 @@ A gate tests one property of one report and answers pass or fail with a reason.
 |---|---|---|---|
 | G1 | valid | the scorer matched the report to a seeded defect | yes |
 | G2 | located | the report names the step where the defect shows, and its quote comes from that step | yes |
-| G3 | complete | the report has an observed result, an expected result and real reproduction steps | later |
+| G3 | complete | the report has an observed result, an expected result and real reproduction steps | yes |
 | G4 | reproducible | a fresh agent given only the report reproduces the defect | later |
 
 G1 decides nothing new. It reads the `matched` field the scorer saved.
@@ -82,7 +82,7 @@ nor a false report. In `quality.json` it is listed with `"neutral": true` and an
 `gates` map, and it is left out of every total, as it is left out of every rate on the
 board.
 
-## G2, located
+### G2, located
 
 The scorer's `grounded` says the report's quote appeared somewhere in the device output
 of the episode. It does not say where. A report can quote real screen text from one step
@@ -101,7 +101,7 @@ It reads the saved transcript (`agent/transcript.txt`), the brief the agent was 
 not read `evidence/steps.jsonl`: that file cuts every result to 1,500 characters, and a
 screen listing is longer.
 
-### Two step numberings
+#### Two step numberings
 
 A report names a step of the **brief**: the numbered `steps:` the agent was given. The
 truth file numbers the **route**: `check.steps`, one entry for each tap or text entry.
@@ -119,7 +119,7 @@ lines them up from the text:
 A brief step that no acting route step can belong to **only reads** ("Read what the list
 shows"). It has no action, so the screen it reads is the one an earlier step left.
 
-### Where the truth shows a defect
+#### Where the truth shows a defect
 
 | The matched defect is | Route steps |
 |---|---|
@@ -132,7 +132,7 @@ action. So a symptom at a route step can be seen from the first brief step in th
 step's span, through the next brief step that has an action (or the last step of the
 case). A report that names any of those steps satisfies rule 2.
 
-### Which step a device result belongs to
+#### Which step a device result belongs to
 
 This is the attribution rule. The transcript holds the agent's calls in order, but no
 call says which step it is.
@@ -163,7 +163,7 @@ The answer for rule 3:
 - **unknown**: no such result, but one that holds the quote is possibly on it;
 - **fail**: every result that holds the quote is on other steps, or none holds it.
 
-### What grounds a quote
+#### What grounds a quote
 
 The same device results as the scorer's `grounded`, under the same echo rules. The
 reply of a text-entry tool, or of any tool that hands its own argument back, grounds
@@ -172,7 +172,7 @@ The quote is matched as the scorer matches it: lower case, whitespace folded, at
 two characters. `tests/test_gate_located.py` compares this module's device text, tool
 lists and normalisers with the scorer's own.
 
-### When G2 answers unknown
+#### When G2 answers unknown
 
 - The truth has no step for the defect: a defect seen only in stored data has no screen
   diff.
@@ -181,7 +181,7 @@ lists and normalisers with the scorer's own.
 - The quote was on the device, but only in results that are not surely on the named
   step.
 
-### Limits
+#### Limits
 
 - **The bare-adb arm.** A tap there is `input tap X Y` with no text, and screen dumps
   are not used to look the point up. Only typed text and "Step N:" messages mark a step,
@@ -197,6 +197,96 @@ lists and normalisers with the scorer's own.
 - G2 reads the corpus of the checkout that scores, not the corpus the episode ran on.
   The brief check above catches a changed case; it does not catch a truth row
   re-derived for the same steps.
+### G3, complete
+
+A developer needs three things from a bug: what happened, what should have happened, and
+how to get there. G3 tests the [customer-shaped report](#the-customer-shaped-report) for
+each one with fixed rules. It uses no model. It runs on every report that is not neutral,
+valid or not, so the share of reports that are complete can be read on its own.
+
+| Sub-check | Passes when |
+|---|---|
+| `observed` | the bug's `actual` is not empty |
+| `expected` | the bug's `expected` is not empty |
+| `steps` | the bug's `steps` text is a list of reproduction steps (below) |
+
+G3 passes when all three pass. The bug keeps `expected` and `actual` only as a pair, so
+for a report that came from the report tool the first two sub-checks agree.
+
+**Steps that are steps.** The `steps` text is cut into entries and every rule must hold:
+
+1. There are at least two entries. Each line is an entry. A single line is cut at inline
+   numbers (`1. … 2. …`), else at arrows or semicolons, else at sentence ends. Bullets,
+   numbers, `Step 3:` and tick or cross marks before an entry are ignored, and so is a
+   heading line such as `Steps to reproduce:`.
+2. Every entry opens with a verb from one of two fixed lists in the code: a UI action
+   (`ACTION_VERBS`: tap, type, open, swipe, press, select, launch, go back, scroll and
+   others) or an observation (`OBSERVE_VERBS`: verify, observe, check, wait and others).
+   Any tense counts (`tap`, `taps`, `tapped`, `tapping`). Words such as "Then", "The
+   user", "Long-" or a place clause ("On the Cart screen, tap Pay") may come first.
+3. At least two entries are UI actions. Observations alone are not steps.
+4. No entry names a source file (`NotesRepository.kt`) or a function call (`save()`).
+   That is a code investigation, not a step a person can follow on a device.
+5. The text is not the summary repeated (letter case, spacing and punctuation ignored).
+
+The rule looks only at the first word of each entry and at these marks. It does not judge
+whether the steps are correct, complete or in the right order, and an entry whose first
+word happens to be a listed verb counts ("Opening hours are wrong"). The verb lists are
+part of the rule: changing them falls under the version rule below.
+
+**What this means for each report source.**
+
+- *Report tool.* The bug's `steps` is the call's `code_investigation`, or a copy of the
+  summary when there is none. Neither is a step list, so G3 fails on almost every such
+  report. This is the measured cost of the mapping, not noise.
+- *Findings entry.* A rendered findings entry has `observed` and `expected` but an empty
+  `steps` and no step list at all: the findings file has no field for them. G3 fails
+  with the reason `steps: no steps`, and `complete_if_steps_carried` is false as well.
+  The gate is not skipped for these reports, because a report with no steps is not
+  complete whatever its source. Read the G3 rate per `report_source` when comparing
+  agents that report in different ways.
+
+**`complete_if_steps_carried`.** The same steps rule is also run on `agent_steps`, the
+step list the agent sent with its report and the bug does not carry. Each list item is
+one entry (a string, or a mapping's `description`, `action`, `text`, `instruction`,
+`title`, `name` or `step` text). `complete_if_steps_carried` is true when `observed`,
+`expected` and this check pass: it is what G3 would be if the bug stored the agent's
+step list as its steps. It is a side figure. It is not a gate and never changes
+`customer_ready`.
+
+In `quality.json` every scored report has a `complete` block (`null` for a neutral one),
+and the totals count each sub-check:
+
+```json
+"complete": {
+  "agent_steps": true,
+  "agent_steps_reason": "3 entries, 3 UI actions",
+  "complete_if_steps_carried": true,
+  "expected": true,
+  "observed": true,
+  "steps": false,
+  "steps_reason": "the steps repeat the summary"
+}
+```
+
+```json
+"totals": {
+  "complete": {
+    "agent_steps": 1,
+    "complete": 0,
+    "complete_if_steps_carried": 1,
+    "evaluated": 1,
+    "expected": 1,
+    "observed": 1,
+    "steps": 0
+  }
+}
+```
+
+`totals.complete.evaluated` is the denominator of every figure in the block and equals
+`totals.gates.G3.evaluated`; `totals.complete.complete` equals `totals.gates.G3.passed`.
+A report's `gates.G3` entry sits beside `G1` in the same `{pass, reason}` form, and its
+reason names each part that is missing.
 
 ## The customer-shaped report
 
@@ -345,9 +435,11 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
 | `reports[].neutral` | true for a neutral report (see above) |
 | `reports[].gates` | gate id → `{pass, reason}`. `pass` is `true`, `false`, or `null` when the gate did not run for this report or answered unknown. An unknown answer also carries `"unknown": true` |
 | `reports[].customer_report` | the customer-shaped report of this report, neutral ones included: `summary`, `steps`, `expected`, `actual`, `failure_step`, `agent_steps`, `report_source`, `paired_by` (see above) |
+| `reports[].complete` | G3's sub-checks for this report: `observed`, `expected`, `steps` and `steps_reason`; the same steps rule on the agent's own list as `agent_steps` and `agent_steps_reason`; and `complete_if_steps_carried`. `null` for a neutral report (see G3, complete) |
 | `reports[].customer_ready` | `false` when a headline gate failed, `true` when all passed, `null` otherwise and for neutral reports |
 | `totals.reports` / `neutral` / `scored` | all reports, neutral ones, and the rest (`scored` is the denominator) |
 | `totals.gates.<id>` | `evaluated`: scored reports the gate answered pass or fail for; `passed`: how many passed; `unknown` (only on a gate that can answer unknown): how many it could not decide |
+| `totals.complete` | scored reports passing each G3 sub-check: `evaluated`, `observed`, `expected`, `steps`, `complete`, `agent_steps`, `complete_if_steps_carried` |
 | `totals.customer_ready` / `customer_ready_unknown` | scored reports that are ready, and those not yet decidable |
 
 An episode with no report has an empty `reports` list and zero totals.

@@ -186,6 +186,15 @@ test_cases:
         reference:
           kind: stated
           note: "The expected outcome names three cards (uno, dos, tres), and the browser lists all three rows under a subtitle that counts 2."
+        reference_report:
+          summary: Card browser subtitle counts one card fewer than the cards it lists
+          steps:
+            - Launch AnkiDroid.
+            - Tap Open drawer (the menu button at the top left).
+            - Tap Card browser.
+          expected: The subtitle under the deck name Spanish reads "3 cards shown", matching the three cards listed (dos, tres, uno).
+          actual: 'The subtitle under Spanish reads "2 cards shown" while the browser lists three cards: dos, tres and uno.'
+          failure_step: 'Step 3: Read the list of cards'
 
   - id: anki-create-deck
     name: Create a deck
@@ -210,7 +219,7 @@ test_cases:
     # header against Spanish's new count — but the count is a one-character node no report
     # can quote. With no `bugs:` the case has no seeded arm; its clean arm still scores
     # completion and prices a false report.
-    bugs: []
+    bugs:
 
   # PERSISTENCE (QUA-2870): the pruned anki-add-note, re-admitted with its 2026-09 route
   # unchanged (+ -> Add, Front "quatro", Back "four", Save; the editor's deck is Spanish).
@@ -238,7 +247,24 @@ test_cases:
     check:
       steps: [launch, {tap: Add}, {tap: Add}, {tap: Front}, {type: quatro}, {tap: Back}, {type: four}, {tap: Save}, wait]
       expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "1", query: "select count(*) from notes where flds like 'quatro%four';"}
-    bugs: [note-back-field-dropped]
+    bugs:
+      - id: note-back-field-dropped
+        reference_report:
+          summary: A new note is saved with only the front; the back field is empty
+          steps:
+            - Launch AnkiDroid.
+            - Tap the + button (Add).
+            - Tap Add.
+            - Type "quatro" into the Front field.
+            - Type "four" into the Back field.
+            - Tap Save.
+            - Tap Navigate up to leave the Add screen.
+            - Tap Open drawer (the menu button at the top left).
+            - Tap Card browser.
+            - Tap the card "quatro".
+          expected: The new card has the front "quatro" and the back "four".
+          actual: 'The Add screen cleared its "Front" and "Back" fields as after a normal save, but the stored card "quatro" has only its front: its Back field is empty, the answer "four" was dropped.'
+          failure_step: 'Step 6: Find the new card and read its front and back'
 
   # ── CRASH x2 and NAVIGATION cases (QUA-2725, epic QUA-2723) — seeded in place of the
   # three pruned persistence cases. Each keeps the polarity rule every case here obeys:
@@ -301,7 +327,23 @@ test_cases:
         # against the normalised signature + exception + message.
         crash: IndexOutOfBoundsException
     evidence: ["0 cards shown"]     # screen witness: the browser's subtitle for the empty deck
-    bugs: [browser-empty-deck-crash]
+    bugs:
+      - id: browser-empty-deck-crash
+        reference_report:
+          summary: App crashes when a new, empty deck is chosen in the Card browser
+          steps:
+            - Launch AnkiDroid.
+            - Tap the + button (Add).
+            - Tap Create deck.
+            - Type "French" into the Name field.
+            - Tap Create.
+            - Tap Open drawer (the menu button at the top left).
+            - Tap Card browser.
+            - Tap the deck name at the top of the Card browser, above "3 cards shown".
+            - Tap French.
+          expected: The Card browser shows the French deck and reads "0 cards shown".
+          actual: 'The app crashed when French was chosen: the Card browser disappeared and the app was back to the deck list (French, Spanish, "3 cards due"). The device log shows IndexOutOfBoundsException.'
+          failure_step: 'Step 4: Tap the deck name at the top of the Card browser and choose French'
 
   # CRASH — studying, the app's core loop. The route is the hunt feature `study_rating`'s
   # (Spanish -> Show answer -> Good), whose clean arm derives HOLDS with the Good answer
@@ -344,7 +386,17 @@ test_cases:
         query: "select count(*) from revlog r join cards c on c.id = r.cid join notes n on n.id = c.nid where n.flds like 'uno%' and r.ease = 3;"
         # The gate: java.lang.NullPointerException out of the Show answer click.
         crash: NullPointerException
-    bugs: [reviewer-show-answer-crash]
+    bugs:
+      - id: reviewer-show-answer-crash
+        reference_report:
+          summary: App crashes when Show answer is tapped on the first card of a review
+          steps:
+            - Launch AnkiDroid.
+            - Tap the Spanish deck.
+            - Tap Show answer.
+          expected: The answer "one" appears under the question "uno", with the buttons Again, Hard, Good and Easy.
+          actual: 'The app crashed on Show answer: the reviewer disappeared without showing the answer and the app was back to the deck list ("3 cards due"). The device log shows NullPointerException.'
+          failure_step: 'Step 2: Read the card''s question, then tap Show answer'
 
   # WRONG NAVIGATION — opening a card from the card browser. The first three steps are
   # anki-browse-cards' route, which derives against this same artifact, so a failure in
@@ -385,4 +437,15 @@ test_cases:
       steps: [launch, {tap: Open drawer}, {tap: Card browser}, wait, {tap: tres}, wait]
       expect: {present: three}
     evidence: [three]           # screen witness: the tapped card's Back field in its editor
-    bugs: [browser-card-opens-add-note]
+    bugs:
+      - id: browser-card-opens-add-note
+        reference_report:
+          summary: Tapping a card in the Card browser opens a blank Add note screen instead of the card
+          steps:
+            - Launch AnkiDroid.
+            - Tap Open drawer (the menu button at the top left).
+            - Tap Card browser.
+            - Tap the card "tres".
+          expected: The "Edit note" screen opens for the card, with "tres" in its Front field and "three" in its Back field.
+          actual: 'The wrong screen opens: its title is "Add", the Front and Back fields are empty, and it offers "Make field Front sticky" and "Make field Back sticky". It did not open the card.'
+          failure_step: 'Step 3: Read its Front and Back fields'

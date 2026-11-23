@@ -1146,10 +1146,246 @@ def _list(steps: list[int]) -> str:
     return ", ".join(str(s) for s in steps)
 
 
+# ── G3, complete (QUA-3587) ────────────────────────────────────────────────────
+#
+# A developer needs three things from a bug: what happened, what should have happened,
+# and how to get there. G3 tests the customer-shaped report for each, with fixed rules
+# and no model:
+#
+#   observed   `actual` is not empty
+#   expected   `expected` is not empty
+#   steps      the bug's `steps` text is a list of reproduction steps (below)
+#
+# The same steps rule is also run on `agent_steps`, the step list the agent sent and
+# the bug does not carry, to give `complete_if_steps_carried`: what G3 would be if the
+# product stored that list as the bug's steps. It is a side figure, never a gate.
+#
+# "Steps that are steps": at least two entries; every entry opens with a verb from the
+# fixed lists below (a UI action, or an observation such as "verify"); at least two
+# entries are UI actions; no entry names a source file or a function call; and the text
+# is not the summary repeated. Whether the steps are the RIGHT steps is not judged here.
+
+#: Base forms of the verbs that open a UI action. Inflected forms are derived
+#: (`tap`, `taps`, `tapped`, `tapping`). Changing either list changes G3: see the
+#: version rule.
+ACTION_VERBS = (
+    "tap", "click", "press", "touch", "type", "enter", "input", "fill", "write", "clear",
+    "paste", "copy", "open", "launch", "start", "relaunch", "restart", "reopen", "close",
+    "kill", "force", "exit", "leave", "swipe", "scroll", "drag", "drop", "pull", "pinch",
+    "zoom", "fling", "flick", "hold", "release", "move", "select", "choose", "pick",
+    "toggle", "switch", "enable", "disable", "turn", "set", "tick", "untick", "uncheck",
+    "mark", "unmark", "go", "navigate", "return", "visit", "dismiss", "confirm", "cancel",
+    "accept", "allow", "deny", "grant", "save", "add", "create", "delete", "remove",
+    "edit", "rename", "change", "update", "duplicate", "search", "filter", "sort",
+    "submit", "send", "share", "sign", "log", "rotate", "install", "uninstall", "expand",
+    "collapse", "focus", "refresh", "reload", "repeat", "complete", "lock", "unlock",
+    "undo", "redo", "import", "export", "pin", "unpin", "archive", "restore", "skip",
+)
+#: Verbs that open an observation. An observation is a fair entry in a step list ("Verify
+#: the total"), but it is not an action: a list needs two actions besides.
+OBSERVE_VERBS = (
+    "observe", "verify", "check", "see", "notice", "note", "wait", "look", "read", "view",
+    "inspect", "compare", "expect", "assert", "ensure", "validate", "find", "watch",
+)
+#: The fewest entries, and the fewest UI-action entries, a step list may have.
+MIN_STEP_ENTRIES = 2
+
+_IRREGULAR_FORMS = {
+    "go": ("goes", "went", "going"), "choose": ("chooses", "chose", "choosing"),
+    "write": ("writes", "wrote", "writing"), "hold": ("holds", "held", "holding"),
+    "set": ("sets", "setting"), "send": ("sends", "sent", "sending"),
+    "leave": ("leaves", "left", "leaving"), "see": ("sees", "saw", "seeing"),
+    "read": ("reads", "reading"), "find": ("finds", "found", "finding"),
+    "input": ("inputs", "inputting"), "undo": ("undoes", "undid", "undoing"),
+    "redo": ("redoes", "redid", "redoing"),
+}
+#: Verbs that double their last letter before -ed / -ing.
+_DOUBLING = frozenset({"tap", "drag", "drop", "flip", "pin", "unpin", "log", "skip"})
+
+
+def _verb_forms(verbs: tuple[str, ...]) -> frozenset[str]:
+    forms: set[str] = set()
+    for verb in verbs:
+        forms.add(verb)
+        if verb in _IRREGULAR_FORMS:
+            forms.update(_IRREGULAR_FORMS[verb])
+            continue
+        forms.add(verb + ("es" if verb.endswith(("s", "sh", "ch", "x")) else "s"))
+        if verb.endswith("e"):
+            forms.update((verb + "d", verb[:-1] + "ing"))
+        else:
+            stem = verb + verb[-1] if verb in _DOUBLING else verb
+            forms.update((stem + "ed", stem + "ing"))
+    return frozenset(forms)
+
+
+_ACTION_FORMS = _verb_forms(ACTION_VERBS)
+_OBSERVE_FORMS = _verb_forms(OBSERVE_VERBS)
+
+# What may stand before an entry's text: a bullet, a number, "Step 3:", a tick or cross.
+_STEP_MARKER_RE = re.compile(
+    r"^(?:[-*•·–—>]+|\(?\d+[.):]\)?|step\s*\d+\s*[:.)-]?|\[[ xX✓✗]?\]"
+    r"|[✓✗✔✘☑☐✅❌])\s*", re.IGNORECASE)
+_STEP_HEADING_RE = re.compile(
+    r"^(?:steps?|repro\w*|reproduction|how)\b[^:]*:$", re.IGNORECASE)
+_INLINE_NUMBER_RE = re.compile(r"(?:^|\s)\(?\d{1,2}[.)]\s+")
+_INLINE_ARROW_RE = re.compile(r"\s*(?:->|=>|→|;)\s*")
+_SENTENCE_END_RE = re.compile(r"(?<=[.!?])\s+")
+# Words that may stand before the verb: "Then tap", "The user opens", "Please select".
+_LEAD_IN_RE = re.compile(
+    r"^(?:then|next|now|and|finally|first|second|third|lastly|again|also|please"
+    r"|after\s+that|the\s+user|the\s+tester|the\s+agent|user|tester|agent|i|we|you)\b"
+    r"[\s,:]*", re.IGNORECASE)
+_GESTURE_PREFIX_RE = re.compile(r"^(?:long|double|triple)[\s-]+", re.IGNORECASE)
+# "On the Cart screen, tap Pay": the verb is after the comma.
+_PLACE_CLAUSE_RE = re.compile(
+    r"^(?:on|in|from|at|with|under|inside|within|once|when|while|after|before)\b[^,]*,\s*",
+    re.IGNORECASE)
+_FIRST_WORD_RE = re.compile(r"[A-Za-z]+")
+# A source file name or a function call: the mark of a code investigation.
+_CODE_RE = re.compile(
+    r"\b[\w/-]+\.(?:kt|kts|java|swift|m|mm|dart|ts|tsx|js|jsx|py|rb|go|rs|cs|cpp|xml"
+    r"|gradle|json|ya?ml)\b|\b\w+\(\)|\b\w+\.\w+\(")
+_NOT_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+#: The text keys of one `agent_steps` item, in the order they are tried.
+_STEP_TEXT_KEYS = ("description", "action", "text", "instruction", "title", "name", "step")
+
+
+def _strip_step_markers(text: str) -> str:
+    text = text.strip(_JS_SPACE)
+    while True:
+        stripped = _STEP_MARKER_RE.sub("", text, count=1)
+        if stripped == text:
+            return text
+        text = stripped
+
+
+def step_entries(steps: Any) -> list[str]:
+    """The entries of a steps value, markers removed. A list gives one entry per item
+    (a string, or a mapping's first text field; anything else is an empty entry). A
+    string gives one entry per line; a single line is split at inline numbers
+    (`1. … 2. …`), else at arrows or semicolons, else at sentence ends."""
+    if isinstance(steps, (list, tuple)):
+        out = []
+        for item in steps:
+            if isinstance(item, dict):
+                item = next((item[k] for k in _STEP_TEXT_KEYS
+                             if isinstance(item.get(k), str) and item[k].strip(_JS_SPACE)),
+                            "")
+            out.append(_strip_step_markers(item) if isinstance(item, str) else "")
+        return out
+    if not isinstance(steps, str):
+        return []
+    lines = [line.strip(_JS_SPACE) for line in steps.splitlines()]
+    lines = [line for line in lines if line]
+    if len(lines) > 1:
+        lines = [line for line in lines if not _STEP_HEADING_RE.match(line)]
+    elif lines:
+        for splitter in (_INLINE_NUMBER_RE, _INLINE_ARROW_RE, _SENTENCE_END_RE):
+            parts = [p for p in splitter.split(lines[0]) if p.strip(_JS_SPACE)]
+            if len(parts) > 1:
+                lines = parts
+                break
+    return [entry for entry in map(_strip_step_markers, lines) if entry]
+
+
+def step_kind(entry: str) -> str | None:
+    """What one entry is: "action" (it opens with a UI-action verb), "observation" (it
+    opens with an observation verb), or None (neither, or it names code)."""
+    if _CODE_RE.search(entry):
+        return None
+    text = _strip_step_markers(entry)
+    text = _PLACE_CLAUSE_RE.sub("", text, count=1)
+    while True:
+        stripped = _LEAD_IN_RE.sub("", text, count=1)
+        if stripped == text:
+            break
+        text = stripped
+    text = _GESTURE_PREFIX_RE.sub("", text, count=1)
+    word = _FIRST_WORD_RE.match(text)
+    if not word:
+        return None
+    verb = word.group(0).lower()
+    if verb in _ACTION_FORMS:
+        return "action"
+    return "observation" if verb in _OBSERVE_FORMS else None
+
+
+def _fold(text: str) -> str:
+    return _NOT_ALNUM_RE.sub(" ", text.lower()).strip()
+
+
+def steps_are_steps(steps: Any, summary: str = "") -> tuple[bool, str]:
+    """Whether a steps value (the bug's text, or the agent's list) is a list of
+    reproduction steps, and why. Says nothing about whether the steps are correct."""
+    entries = step_entries(steps)
+    if not entries:
+        return False, "no steps"
+    if summary and _fold(" ".join(entries)) == _fold(summary):
+        return False, "the steps repeat the summary"
+    if len(entries) < MIN_STEP_ENTRIES:
+        return False, f"1 entry; needs at least {MIN_STEP_ENTRIES}"
+    kinds = [step_kind(entry) for entry in entries]
+    if None in kinds:
+        at = kinds.index(None)
+        return False, (f"entry {at + 1} of {len(entries)} is not a UI action: "
+                       f"{entries[at][:60]!r}")
+    actions = kinds.count("action")
+    if actions < MIN_STEP_ENTRIES:
+        return False, (f"{actions} of {len(entries)} entries are UI actions; needs at "
+                       f"least {MIN_STEP_ENTRIES}")
+    return True, f"{len(entries)} entries, {actions} UI actions"
+
+
+def complete_checks(report: CustomerReport) -> dict[str, Any]:
+    """G3's sub-checks for one customer-shaped report, as `quality.json` stores them
+    under `complete`. `steps` judges the bug's own steps text; `agent_steps` judges the
+    step list the agent sent and the bug does not carry."""
+    steps, steps_reason = steps_are_steps(report.steps, report.summary)
+    carried, carried_reason = steps_are_steps(report.agent_steps, report.summary)
+    observed, expected = bool(report.actual), bool(report.expected)
+    return {
+        "observed": observed,
+        "expected": expected,
+        "steps": steps,
+        "steps_reason": steps_reason,
+        "agent_steps": carried,
+        "agent_steps_reason": carried_reason,
+        "complete_if_steps_carried": observed and expected and carried,
+    }
+
+
+def gate_complete(episode: Episode, report: dict[str, Any], index: int) -> GateResult:
+    """G3, complete: the customer-shaped report has an observed result, an expected
+    result and reproduction steps that are steps. Runs on every non-neutral report,
+    whether or not it is valid."""
+    checks = complete_checks(customer_report(episode)[index])
+    if checks["observed"] and checks["expected"] and checks["steps"]:
+        return GateResult(True, f"observed, expected and steps ({checks['steps_reason']})")
+    missing = [name for key, name in (("observed", "no observed result"),
+                                      ("expected", "no expected result")) if not checks[key]]
+    if not checks["steps"]:
+        missing.append(f"steps: {checks['steps_reason']}")
+    return GateResult(False, "; ".join(missing))
+
+
+def _complete_totals(scored: list[dict[str, Any]]) -> dict[str, int]:
+    """How many scored reports passed each G3 sub-check. `complete` equals G3's
+    `passed`; `evaluated` is the denominator of every figure here."""
+    blocks = [r["complete"] for r in scored]
+    counts = {key: sum(1 for b in blocks if b[key]) for key in (
+        "observed", "expected", "steps", "agent_steps", "complete_if_steps_carried")}
+    counts["evaluated"] = len(blocks)
+    counts["complete"] = sum(1 for b in blocks
+                             if b["observed"] and b["expected"] and b["steps"])
+    return counts
+
+
 #: Every gate, in the order it is evaluated and listed. Later tickets append here.
 GATES: tuple[Gate, ...] = (
     Gate("G1", "valid", gate_valid),
     Gate("G2", "located", gate_located, reports_unknown=True),
+    Gate("G3", "complete", gate_complete),
 )
 
 
@@ -1179,6 +1415,8 @@ def _score_report(episode: Episode, report: dict[str, Any], index: int) -> dict[
         "neutral": neutral,
         "gates": gates,
         "customer_ready": None if neutral else _customer_ready(gates),
+        # G3's sub-checks, and the same on the agent's own step list (QUA-3587).
+        "complete": None if neutral else complete_checks(customer_report(episode)[index]),
         # What a customer would read for this report, and where it came from.
         "customer_report": customer_report(episode)[index].as_dict(),
     }
@@ -1200,6 +1438,7 @@ def _totals(reports: list[dict[str, Any]]) -> dict[str, Any]:
         "neutral": len(reports) - len(scored),
         "scored": len(scored),
         "gates": gates,
+        "complete": _complete_totals(scored),
         "customer_ready": sum(1 for r in scored if r["customer_ready"] is True),
         "customer_ready_unknown": sum(1 for r in scored if r["customer_ready"] is None),
     }
