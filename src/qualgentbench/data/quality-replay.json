@@ -1,0 +1,17 @@
+{
+  "_about": "The replay-from-report pin (report quality gate G4). One replayer for every arm. agent/model stay null until the pilot picks them; see docs/report-quality.md.",
+  "agent": null,
+  "model": null,
+  "provider": null,
+  "tooling": "mcp",
+  "give_test_case": false,
+  "attempts": 1,
+  "ceiling_attempts": 3,
+  "ceiling_min": 2,
+  "ceiling_early_stop": true,
+  "control_attempts": 1,
+  "budget_factor": 2.0,
+  "budget_floor": 0,
+  "textless": "canary_only",
+  "max_retries": 1
+}

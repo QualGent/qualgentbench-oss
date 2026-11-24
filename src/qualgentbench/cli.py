@@ -1774,6 +1774,29 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="Journey only: drift flag ids (QUA-3490) to switch on in every episode "
                    "of an app that declares them, both versions of each case. Used by "
                    "`memory sequence` for a stage's drift. Default: no drift.")
+@click.option("--quality-replay", "quality_replay", default=None, metavar="RUN_DIR",
+              type=click.Path(exists=True, file_okay=False, path_type=Path),
+              help="Journey only: replay the valid bug reports saved under RUN_DIR from "
+                   "the report alone (report quality gate G4). --agent/--models name the "
+                   "replayer; no journey episode is run. Writes quality_replay.json "
+                   "beside each episode. See docs/report-quality.md.")
+@click.option("--quality-replay-dir", "quality_replay_dir", default=None,
+              type=click.Path(file_okay=False, path_type=Path),
+              help="Where replay episodes are saved. Default: RUN_DIR/quality-replay.")
+@click.option("--quality-replay-plan", "quality_replay_plan", is_flag=True,
+              help="Print what --quality-replay would run and the most episodes it can "
+                   "take, then exit. No device, no agent.")
+@click.option("--quality-replay-unit", "quality_replay_units", multiple=True, metavar="KEY",
+              help="Run only this replay unit (a `key` from --quality-replay-plan "
+                   "--quality-replay-json). Repeatable.")
+@click.option("--quality-replay-max", "quality_replay_max", default=None,
+              type=click.IntRange(min=1), metavar="N",
+              help="Start at most N replay episodes, then stop.")
+@click.option("--quality-replay-config", "quality_replay_config", default=None,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Replay config JSON. Default: the packaged pin.")
+@click.option("--quality-replay-json", "quality_replay_json", is_flag=True,
+              help="With --quality-replay-plan: print the plan as JSON.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -1816,6 +1839,13 @@ def run_benchmark(
     memory_org: str | None,
     memory_config: Path | None,
     drift: str | None,
+    quality_replay: Path | None,
+    quality_replay_dir: Path | None,
+    quality_replay_plan: bool,
+    quality_replay_units: tuple[str, ...],
+    quality_replay_max: int | None,
+    quality_replay_config: Path | None,
+    quality_replay_json: bool,
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
@@ -1831,6 +1861,20 @@ def run_benchmark(
     agent runs bare and drives the device through adb itself.
     """
     _setup_logging(verbose)
+    if quality_replay is None and (quality_replay_dir or quality_replay_plan
+                                   or quality_replay_units or quality_replay_max
+                                   or quality_replay_config or quality_replay_json):
+        raise click.UsageError("the --quality-replay-* options need --quality-replay RUN_DIR")
+    if quality_replay is not None:
+        _quality_replay_cmd(
+            quality_replay, mode=mode, agent=agent, models=models, provider=provider,
+            mcp_server=mcp_server, device=device, yes=yes, config_path=config_path,
+            allow_codex_login=allow_codex_login, allow_runs_in_repo=allow_runs_in_repo,
+            resume=bool(resume_run_id), replay_dir=quality_replay_dir,
+            plan_only=quality_replay_plan, units=quality_replay_units,
+            max_episodes=quality_replay_max, replay_config=quality_replay_config,
+            as_json=quality_replay_json)
+        return
     if resume_run_id:
         _reject_scope_flags_on_resume(click.get_current_context())
     device_list = [d.strip() for d in (devices or "").split(",") if d.strip()] or None
@@ -1963,6 +2007,102 @@ def run_benchmark(
         if hook_cmd and _SEGMENT_STARTED and not interrupted:
             _run_segment_hook(hook_cmd, hook_timeout or _segment_hook.DEFAULT_TIMEOUT_SEC,
                               runs_path, rc)
+
+
+def _quality_replay_cmd(run_dir: Path, *, mode: str, agent: str, models: str | None,
+                        provider: str | None, mcp_server: str | None, device: str | None,
+                        yes: bool, config_path: Path | None, allow_codex_login: bool,
+                        allow_runs_in_repo: bool, resume: bool, replay_dir: Path | None,
+                        plan_only: bool, units: tuple[str, ...], max_episodes: int | None,
+                        replay_config: Path | None, as_json: bool) -> None:
+    """`run --mode journey --quality-replay RUN_DIR`: replay saved reports from the
+    report alone (QUA-3591). Planning and folding need no device; only this command,
+    confirmed like any other run, starts a replayer."""
+    from . import quality_replay as qr
+
+    if mode != "journey":
+        raise click.UsageError("--quality-replay needs --mode journey")
+    if resume:
+        raise click.UsageError("--quality-replay does not take --resume: run it again "
+                               "and it continues from the replay episodes already saved")
+    if config_path is not None:
+        cfg = _load_config_or_exit(config_path)
+        _load_env_file(cfg, config_path.parent)
+        _apply_heldout_dir(cfg, config_path.parent)
+        mcp_server = mcp_server or cfg.mcp_server
+        provider = provider or cfg.provider
+        allow_codex_login = allow_codex_login or cfg.allow_codex_login
+    model_list = [m.strip() for m in (models or "").split(",") if m.strip()]
+    if len(model_list) > 1:
+        raise click.UsageError("--quality-replay takes one replayer model, got "
+                               f"{len(model_list)}: every arm is replayed by the same one")
+    ctx = click.get_current_context()
+    agent_given = ctx.get_parameter_source("agent") == click.core.ParameterSource.COMMANDLINE
+    replay_dir = replay_dir or run_dir / qr.REPLAY_DIR
+    try:
+        config = qr.with_replayer(
+            qr.load_config(replay_config), agent=agent if agent_given else None,
+            model=model_list[0] if model_list else None, provider=provider,
+            tooling=("mcp" if mcp_server else "raw") if not plan_only else None)
+        state = qr.ReplayState(config, qr.valid_reports(run_dir), qr.collect(replay_dir))
+    except qr.ReplayError as exc:
+        raise click.ClickException(str(exc)) from exc
+    doc = qr.plan_document(state)
+    if plan_only and as_json:
+        click.echo(json.dumps(doc, indent=2, sort_keys=True))
+        return
+    console.print(qr.plan_text(doc), markup=False, highlight=False)
+    if plan_only:
+        return
+    if not config.pinned:
+        raise click.ClickException(
+            "no replayer: pass --agent and --models (the packaged replay config pins "
+            "none yet), or a --quality-replay-config that names one")
+    if not doc["runnable_now"]:
+        summary = qr.fold(run_dir, config, replay_dir=replay_dir, state=state)
+        console.print(f"Nothing to replay. Folded {summary['episodes']} episode(s).",
+                      markup=False)
+        return
+    _gate_runs_dir(replay_dir, allow_runs_in_repo)
+    _apply_provider(config.provider)
+    _gate_agent_auth(str(config.agent), allow_codex_login, config.model)
+    _gate_clock_tolerance()
+    _gate_device_class()
+    _confirm_start(yes)
+
+    async def _go() -> int:
+        from .scheduler import new_run_id
+        from .session import DeviceSession
+
+        session = DeviceSession(mcp_server or "")
+        identity = await _preflight(session, mcp_server or "", str(config.agent), device,
+                                    [str(config.model)])
+        serial = device or await session.first_available_device()
+        if not serial:
+            raise click.ClickException("No device found. Boot an Android emulator first.")
+        replay_dir.mkdir(parents=True, exist_ok=True)
+        execute = qr.DeviceExecutor(config, replay_dir, mcp_server=mcp_server,
+                                    device=serial, run_id=new_run_id(),
+                                    mcp_identity=identity)
+
+        def _line(unit, attempt) -> None:
+            answer = "not saved" if attempt is None else (
+                attempt.invalid or f"reproduced={attempt.reproduced} ({attempt.reason})")
+            console.print(f"replay {unit.key}: {answer}", markup=False, highlight=False)
+            # Fold after every episode, so a stopped run leaves files that are current.
+            qr.fold(run_dir, config, replay_dir=replay_dir, state=state, rescore=False)
+
+        return await qr.run(state, execute, only=units or None,
+                            max_episodes=max_episodes, on_attempt=_line)
+
+    started = _run_async(_go())
+    summary = qr.fold(run_dir, config, replay_dir=replay_dir, state=state)
+    console.print(f"Started {started} replay episode(s). Reports: {summary['reports']}. "
+                  f"Excluded defects: {len(summary['excluded'])}. Still to run, at most: "
+                  f"{summary['remaining']['total']}.", markup=False, highlight=False)
+    for e in summary["excluded"]:
+        console.print(f"  excluded {e['defect']}  [{e['excluded']}] {e['reason']}",
+                      markup=False, highlight=False)
 
 
 def _gate_segment_hook(command: str | None, runs_dir: Path) -> str | None:
