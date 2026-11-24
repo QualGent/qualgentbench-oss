@@ -16,7 +16,10 @@ Every number names its denominator (docs/report-quality.md, "The Report quality 
                         answer (ready, or failed a gate). Not measured while a headline
                         gate has not run.
   customer_ready_yield  seeded defects with at least one customer-ready report / seeded
-                        defects present (`bugs_present` of `result.json`, per episode).
+                        defects with a decided answer (`bugs_present` of `result.json`,
+                        per episode, less the defects whose reports are left unknown:
+                        the same rule as the rate). `coverable` beside it is the
+                        ceiling: the defects that could be covered at all.
   reports_per_defect    matched reports / defects found (a ratio, not a rate).
   funnel                reports -> valid -> located -> complete -> reproducible: each
                         stage keeps the reports that passed every gate so far.
@@ -61,7 +64,10 @@ LEGEND = (
     "gate rate = passed / reports the gate answered pass or fail for (unknown answers are "
     "counted beside it, in neither side) · customer-ready rate = reports passing every "
     "headline gate / reports with a decided answer · yield = seeded defects with a "
-    "customer-ready report / seeded defects present · reports per defect = matched "
+    "customer-ready report / seeded defects with a decided answer (a defect whose "
+    "reports are left unknown is in neither side, as an unknown report is in neither "
+    "side of the rate; the defects that could be covered at all are printed beside it) "
+    "· reports per defect = matched "
     "reports / defects found · neutral reports are in no number · a rate is comparable "
     "only between rows with the same gates available")
 
@@ -116,6 +122,9 @@ def episode_record(result: Mapping[str, Any],
         "heldout": bool(metrics.get("heldout")),
         "excluded": is_excluded(metrics),
         "bugs_present": [str(b) for b in metrics.get("bugs_present") or []],
+        # Which case the defects are seeded on: an exclusion from replay is a fact
+        # about (case, defect), whichever arm's report brought it to light.
+        "case": f"{metrics.get('app_id') or ''}/{metrics.get('case_id') or ''}",
         "quality": quality,
     }
 
@@ -177,6 +186,59 @@ def _counts(reports: list[Mapping[str, Any]], names: Mapping[str, str],
             "funnel": _funnel(reports, names, missing)}
 
 
+def _defect_yield(defects: list[tuple[int, str]],
+                  by_episode: Mapping[int, list[Mapping[str, Any]]],
+                  gates: Iterable[str]) -> dict[str, Any]:
+    """The yield over `gates`, under the same rule for unknown as the rate.
+
+    Each seeded defect present is one of three things: COVERED (a report of it passes
+    every gate), UNKNOWN (none does, and one or more of its reports failed nothing and
+    is left undecided by an unknown answer) or MISSED (no report matched it, or every
+    report of it failed a gate). An unknown defect is in neither side, exactly as an
+    unknown report is in neither side of the rate: `n` counts the decided defects, and
+    `present` all of them. `{k, n, rate, ci, present, unknown}`."""
+    gates = list(gates)
+    covered = unknown = 0
+    for ep, defect in defects:
+        states = [_state(r, gates)[0] for r in by_episode.get(ep, ())
+                  if r.get("matched") == defect]
+        if READY in states:
+            covered += 1
+        elif UNKNOWN in states or WAITING in states:
+            unknown += 1
+    return {**_rate(covered, len(defects) - unknown),
+            "present": len(defects), "unknown": unknown}
+
+
+def _coverable(counted: list[Mapping[str, Any]],
+               defects: list[tuple[int, str]]) -> dict[str, Any]:
+    """The yield's ceiling: how many of the seeded defects present could be covered at
+    all. A defect cannot when G2 can never locate it (the truth holds no screen for
+    it) or when replay excluded it from G4; `quality.json` says which
+    (`defects.<id>`). An exclusion from replay is a fact about the (case, defect), so
+    it counts for every counted episode of that case, whichever one's report brought it
+    to light. `coverable` is None when a counted episode's file has no `defects` map
+    (written before the map existed): the ceiling is then not known."""
+    maps = [rec["quality"].get("defects") for rec in counted]
+    if not all(isinstance(m, Mapping) for m in maps):
+        return {"coverable": None, "not_coverable": None, "not_coverable_by": {}}
+    excluded = {(rec.get("case"), defect): str(entry["replay_excluded"])
+                for rec, m in zip(counted, maps) for defect, entry in m.items()
+                if isinstance(entry, Mapping) and entry.get("replay_excluded")}
+    by: dict[str, int] = {}
+    for ep, defect in defects:
+        entry = maps[ep].get(defect)
+        entry = entry if isinstance(entry, Mapping) else {}
+        why = entry.get("located_never") or (
+            "replay:" + excluded[(counted[ep].get("case"), defect)]
+            if (counted[ep].get("case"), defect) in excluded else None)
+        if why:
+            by[str(why)] = by.get(str(why), 0) + 1
+    lost = sum(by.values())
+    return {"coverable": len(defects) - lost, "not_coverable": lost,
+            "not_coverable_by": dict(sorted(by.items()))}
+
+
 def _available_block(reports: list[Mapping[str, Any]], available: list[str],
                      defects: list[tuple[int, str]],
                      by_episode: Mapping[int, list[Mapping[str, Any]]]) -> dict[str, Any]:
@@ -185,12 +247,9 @@ def _available_block(reports: list[Mapping[str, Any]], available: list[str],
     when every headline gate is available; an upper bound on them otherwise."""
     states = [_state(r, available)[0] for r in reports]
     ready, not_ready = states.count(READY), states.count(NOT_READY)
-    covered = sum(1 for ep, defect in defects if any(
-        r.get("matched") == defect and _state(r, available)[0] == READY
-        for r in by_episode.get(ep, ())))
     return {"gates": list(available), **_rate(ready, ready + not_ready),
             "unknown": states.count(UNKNOWN),
-            "yield": _rate(covered, len(defects))}
+            "yield": _defect_yield(defects, by_episode, available)}
 
 
 def _precision_coverage(reports: list[Mapping[str, Any]], measured: bool) -> dict[str, Any]:
@@ -258,14 +317,12 @@ def _row(key: tuple, records: list[Mapping[str, Any]]) -> dict[str, Any]:
     }
     row.update(_counts(scored, names, missing))
     measured = not missing
-    covered = sum(1 for ep, defect in defects if any(
-        r.get("matched") == defect and _state(r, rq.HEADLINE_GATES)[0] == READY
-        for r in by_episode.get(ep, ())))
-    in_yield = _rate(covered, len(defects))
+    in_yield = _defect_yield(defects, by_episode, rq.HEADLINE_GATES)
     row["customer_ready_yield"] = {
-        "measured": measured, "k": covered, "n": len(defects),
+        **in_yield, "measured": measured,
         "rate": in_yield["rate"] if measured else None,
-        "ci": in_yield["ci"] if measured else None}
+        "ci": in_yield["ci"] if measured else None,
+        **_coverable(counted, defects)}
     row["ready_on_available"] = _available_block(scored, available, defects, by_episode)
     matched = sum(1 for r in scored if r.get("matched"))
     found = len({(ep, r["matched"]) for ep, reports in by_episode.items()
@@ -371,6 +428,20 @@ def _ready_cell(row: Mapping[str, Any], cr: Mapping[str, Any]) -> str:
     return cell
 
 
+def _yield_note(cry: Mapping[str, Any]) -> str:
+    """What stands beside the yield: the defects present, the ones left unknown, and
+    the ceiling (how many could be covered at all)."""
+    note = f" · seeded defects present: {cry.get('present', cry.get('n'))}"
+    if cry.get("unknown"):
+        note += f", {cry['unknown']} unknown (in neither side)"
+    if cry.get("coverable") is not None:
+        note += f" · could be covered at all: {cry['coverable']}"
+        if cry.get("not_coverable_by"):
+            note += " (not: " + ", ".join(
+                f"{n} {why}" for why, n in cry["not_coverable_by"].items()) + ")"
+    return note
+
+
 def _funnel_text(scored: int, funnel: list[Mapping[str, Any]]) -> str:
     parts = [f"{scored} report{'' if scored == 1 else 's'}"]
     for stage in funnel:
@@ -407,14 +478,16 @@ def lines(block: Mapping[str, Any]) -> list[str]:
         out.append(f"    customer-ready rate   {_ready_cell(row, row['customer_ready'])}")
         cry = row["customer_ready_yield"]
         out.append("    customer-ready yield  "
-                   + (_fmt(cry) if cry["measured"]
-                      else f"not measured · seeded defects present: {cry['n']}"))
+                   + (_fmt(cry) if cry["measured"] else "not measured")
+                   + _yield_note(cry))
         if row["gates_missing"] and row["gates_available"]:
             roa = row["ready_on_available"]
             name = "+".join(roa["gates"])
             out.append(f"    passing {name} only    {_fmt(roa)}"
                        + (f" · {roa['unknown']} unknown" if roa["unknown"] else "")
-                       + f" · defects with such a report {_fmt(roa['yield'])}")
+                       + f" · defects with such a report {_fmt(roa['yield'])}"
+                       + (f" ({roa['yield']['unknown']} unknown)"
+                          if roa["yield"].get("unknown") else ""))
         for gate in block["headline_gates"]:
             g = row["gates"][gate]
             out.append(f"    {gate} {g['name']:<13} {_gate_cell(g)}")

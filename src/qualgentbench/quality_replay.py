@@ -38,7 +38,8 @@ into one replay directory and folded once.
 
     qualgent-bench run --mode journey --quality-replay <run dir> --agent A --models M ...
     python -m qualgentbench.quality_replay plan <run dir>     # no device, no agent
-    python -m qualgentbench.quality_replay fold <run dir>     # no device, no agent
+    python -m qualgentbench.quality_replay fold <run dir> --agent A --model M \\
+        [--provider P] [--tooling mcp|raw]                    # no device, no agent
 
 See docs/report-quality.md, "G4: replay from the report".
 """
@@ -69,7 +70,11 @@ from .transcript import TranscriptParser
 #: folded together.
 #:
 #:   1  canary AND truth text; canary alone for a defect with no text to look for.
-REPLAY_VERSION = 1
+#:   2  the brief of an agent's report gives the reproduction steps the customer sees
+#:      (`repro_steps`) when the report has them, not the bug's `steps` text, which is
+#:      the summary repeated for a report with no code investigation (QUA-3607). No
+#:      replay was run under version 1.
+REPLAY_VERSION = 2
 
 #: `result.json`'s `task_type` for a replay episode. Not `journey.TASK_TYPE`, which is
 #: the one value every board, rescore and rate filters on.
@@ -218,8 +223,9 @@ class ReplayUnit:
     case_id: str
     defect_id: str
     attempt: int                           # 1-based, among valid attempts of this unit
-    #: The five customer-shaped fields. `steps` is a string for an agent's report (the
-    #: bug's steps text) and a list for a reference report.
+    #: The five customer-shaped fields. `steps` is a list for a reference report and for
+    #: an agent's report that carries reproduction steps (`replay_fields`), else the
+    #: bug's steps text.
     report: dict[str, Any] = field(compare=False, hash=False, default_factory=dict)
     #: For REPORT: the journey episode (relative to the run dir) and the report's index.
     source_episode: str | None = None
@@ -264,12 +270,33 @@ def report_fields(report: dict[str, Any]) -> dict[str, Any]:
     return {k: report.get(k) for k in _REPORT_FIELDS}
 
 
+def replay_fields(report: dict[str, Any]) -> dict[str, Any]:
+    """An agent's customer-shaped report as it is replayed: what the customer sees.
+
+    The reproduction steps are the bug's `repro_steps` (the agent's own step list, as
+    the bug stores it) when the report has them. Only a report without them falls back
+    to the bug's `steps` text, which for a report-tool bug with no code investigation
+    is the summary repeated: replaying that text for a report that DID list its steps
+    would be the evidence-removed control, and G4 would fail every arm (QUA-3607)."""
+    fields = report_fields(report)
+    repro = [str(s) for s in report.get("repro_steps") or [] if str(s).strip()]
+    if repro:
+        fields["steps"] = repro
+    return fields
+
+
+#: A step that already carries its own number ("2. Tap Save", "Step 2: Tap Save").
+_NUMBERED_STEP_RE = re.compile(r"^\s*(?:step\s+)?\d{1,2}\s*[.):]", re.IGNORECASE)
+
+
 def render_report(report: dict[str, Any]) -> str:
     """The report as the replayer reads it: the bug's fields, in the order a tracker
-    shows them. Deleted steps are shown as deleted, not hidden."""
+    shows them. Deleted steps are shown as deleted, not hidden. A listed step keeps the
+    agent's words; it is numbered here unless it is numbered already."""
     steps = report.get("steps")
     if isinstance(steps, (list, tuple)):
-        body = "\n".join(f"  {i}. {s}" for i, s in enumerate(steps, 1))
+        body = "\n".join(f"  {s}" if _NUMBERED_STEP_RE.match(str(s)) else f"  {i}. {s}"
+                         for i, s in enumerate(steps, 1))
     else:
         body = "\n".join(f"  {line}" for line in str(steps or "").splitlines() if line.strip())
     lines = [f"Title: {report.get('summary') or '(none)'}",
@@ -715,7 +742,7 @@ def valid_reports(run_dir: Path | str) -> list[ReportRef]:
             if report.get("matched") and not rq.is_neutral(report):
                 out.append(ReportRef(episode=rel, index=i, app_id=app_id, case_id=case_id,
                                      defect_id=str(report["matched"]),
-                                     report=report_fields(shaped[i].as_dict())))
+                                     report=replay_fields(shaped[i].as_dict())))
     return out
 
 
@@ -801,6 +828,8 @@ class ReplayState:
                     app_id, case_id, defect_id, names.get(app_id, ""))
         self.attempts: list[Attempt] = []
         self.other_replayer = 0
+        #: The distinct fingerprints of the episodes counted in `other_replayer`.
+        self.other_fingerprints: list[dict[str, Any]] = []
         for a in attempts:
             self.add(a)
 
@@ -809,8 +838,20 @@ class ReplayState:
         counted and otherwise ignored: it measured something else."""
         if attempt.replayer != self.config.fingerprint():
             self.other_replayer += 1
+            if attempt.replayer not in self.other_fingerprints:
+                self.other_fingerprints.append(attempt.replayer)
             return
         self.attempts.append(attempt)
+
+    def other_replayer_text(self) -> str:
+        """How the ignored episodes' replayer differs from this one, in words."""
+        mine = self.config.fingerprint()
+        parts = []
+        for theirs in self.other_fingerprints:
+            keys = sorted(k for k in {*mine, *theirs} if mine.get(k) != theirs.get(k))
+            parts.append(", ".join(f"{k}={theirs.get(k)!r} (here {mine.get(k)!r})"
+                                   for k in keys) or "an unreadable fingerprint")
+        return "; ".join(parts)
 
     def _of(self, target: str) -> list[Attempt]:
         return [a for a in self.attempts if a.unit.get("target") == target]
@@ -838,7 +879,12 @@ class ReplayState:
         if base["excluded"]:
             return {**entry, "status": "excluded", "reason": base["reason"]}
         if not base["decided"]:
-            return {**entry, "status": "pending", "reason": base["reason"]}
+            # No replay left to wait for (`need` is None): the ceiling or the control
+            # was given up after failing to run. That is "could not be run", not "not
+            # run yet": read as pending, one such report kept its whole arm not
+            # measured for ever (QUA-3607).
+            return {**entry, "status": "pending" if base["need"] else "unavailable",
+                    "reason": base["reason"]}
         if any(a.reproduced for a in valid):
             hit = next(a for a in valid if a.reproduced)
             return {**entry, "status": "replayed", "reproduced": True, "reason": hit.reason}
@@ -927,16 +973,44 @@ def baseline_document(state: ReplayState) -> dict[str, Any]:
                         for key in sorted(state.facts)}}
 
 
+def _had_judge_column(episode_dir: Path) -> bool:
+    """Was this episode's saved `quality.json` written with the G5 side column
+    (`--quality-judge`)? A fold that rewrites the file must write that column again."""
+    try:
+        saved = json.loads((episode_dir / rq.QUALITY_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    totals = saved.get("totals") if isinstance(saved, dict) else None
+    return isinstance(totals, dict) and "steps_accuracy" in totals
+
+
 def fold(run_dir: Path | str, config: ReplayConfig, *, replay_dir: Path | str | None = None,
-         rescore: bool = True, state: ReplayState | None = None) -> dict[str, Any]:
+         rescore: bool = True, state: ReplayState | None = None,
+         allow_other_replayer: bool = False) -> dict[str, Any]:
     """Rebuild `baseline.json` and every `quality_replay.json` of `run_dir` from the
     replay episodes saved under `replay_dir`, then (with `rescore`) rewrite the
     `quality.json` of each episode touched, so G4 shows there. Runs no replay and needs
-    no device. Returns a summary: files written, the excluded defects, what is left."""
+    no device. Returns a summary: files written, the excluded defects, what is left.
+
+    The rewrite keeps every column of `quality.json` that this fold does not compute:
+    an episode scored with the G5 side column is scored with it again.
+
+    Saved replay episodes of ANOTHER replayer (a different agent, model, provider,
+    tooling, rule or replay version) are never folded in. When there are any, the fold
+    is refused with `ReplayError` unless `allow_other_replayer`: a fold under the wrong
+    replayer finds no episode of its own and would rewrite every saved G4 answer to
+    "not measured" (QUA-3607)."""
     run_dir = Path(run_dir)
     replay_dir = Path(replay_dir) if replay_dir else run_dir / REPLAY_DIR
     if state is None:
         state = ReplayState(config, valid_reports(run_dir), collect(replay_dir))
+    if state.other_replayer and not allow_other_replayer:
+        raise ReplayError(
+            f"{state.other_replayer} saved replay episode(s) under {replay_dir} were run "
+            f"by another replayer: {state.other_replayer_text()}. Nothing was written. "
+            "Name the replayer the episodes were run under (--agent, --model, --provider, "
+            "--tooling, or --config), or pass --allow-other-replayer to fold only this "
+            f"replayer's {len(state.attempts)} episode(s) and leave the others out.")
     if replay_dir.is_dir():
         _write_json(replay_dir / BASELINE_FILE, baseline_document(state))
     by_episode: dict[str, list[dict[str, Any]]] = {}
@@ -950,13 +1024,14 @@ def fold(run_dir: Path | str, config: ReplayConfig, *, replay_dir: Path | str | 
             "reports": sorted(entries, key=lambda e: e["index"])})
         written += 1
         if rescore:
-            rq.write_quality(ep)
+            rq.write_quality(ep, judge=_had_judge_column(ep))
     counts: dict[str, int] = {}
     for entries in by_episode.values():
         for e in entries:
             counts[e["status"]] = counts.get(e["status"], 0) + 1
     return {"episodes": written, "reports": counts, "excluded": state.excluded(),
-            "remaining": state.worst_case(), "other_replayer": state.other_replayer}
+            "remaining": state.worst_case(), "other_replayer": state.other_replayer,
+            "other_replayer_differs": state.other_replayer_text()}
 
 
 # ── running ────────────────────────────────────────────────────────────────────
@@ -1069,6 +1144,8 @@ def plan_document(state: ReplayState) -> dict[str, Any]:
                for u in units}
     return {"replay_version": REPLAY_VERSION, "replayer": state.config.stamp(),
             "valid_reports": len(state.reports), "defects": len(state.facts),
+            # Saved episodes of another replayer: counted, never folded in.
+            "other_replayer": state.other_replayer,
             "runnable_now": [{**u.identity(), "step_budget": budgets[u.key]} for u in units],
             "worst_case_episodes": state.worst_case(),
             "excluded": state.excluded(),
@@ -1093,6 +1170,9 @@ def plan_text(doc: dict[str, Any]) -> str:
         if doc[key]:
             lines.append(f"{label}: {len(doc[key])}")
             lines += [f"  {k}" for k in doc[key]]
+    if doc.get("other_replayer"):
+        lines.append(f"saved replay episodes of another replayer (left out): "
+                     f"{doc['other_replayer']}")
     if doc["excluded"]:
         lines.append(f"excluded from G4: {len(doc['excluded'])}")
         lines += [f"  {e['defect']}  [{e['excluded']}] {e['reason']}" for e in doc["excluded"]]
@@ -1175,11 +1255,18 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--agent", default=None)
         p.add_argument("--model", default=None)
         p.add_argument("--provider", default=None)
+        p.add_argument("--tooling", default=None, choices=("mcp", "raw"),
+                       help="how the replayer drove the device (default: the config's)")
         p.add_argument("--json", action="store_true", help="print JSON")
+        if name == "fold":
+            p.add_argument("--allow-other-replayer", action="store_true",
+                           help="fold this replayer's episodes even when the replay "
+                                "directory also holds another replayer's (they are left "
+                                "out and counted). Without it such a fold is refused")
     args = ap.parse_args(argv)
     try:
         config = with_replayer(load_config(args.config), agent=args.agent, model=args.model,
-                               provider=args.provider)
+                               provider=args.provider, tooling=args.tooling)
         if not args.run_dir.is_dir():
             raise ReplayError(f"{args.run_dir} is not a directory")
         replay_dir = args.replay_dir or args.run_dir / REPLAY_DIR
@@ -1188,7 +1275,8 @@ def main(argv: list[str] | None = None) -> int:
             doc = plan_document(state)
             print(json.dumps(doc, indent=2, sort_keys=True) if args.json else plan_text(doc))
             return 0
-        summary = fold(args.run_dir, config, replay_dir=replay_dir, state=state)
+        summary = fold(args.run_dir, config, replay_dir=replay_dir, state=state,
+                       allow_other_replayer=args.allow_other_replayer)
     except ReplayError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -1198,6 +1286,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wrote {summary['episodes']} {REPLAY_FILE}; reports: {summary['reports']}; "
               f"excluded defects: {len(summary['excluded'])}; "
               f"episodes still to run, at most: {summary['remaining']['total']}")
+        if summary["other_replayer"]:
+            print(f"  left out: {summary['other_replayer']} saved replay episode(s) of "
+                  f"another replayer ({summary['other_replayer_differs']})")
         for e in summary["excluded"]:
             print(f"  excluded {e['defect']}  [{e['excluded']}] {e['reason']}")
     return 0
