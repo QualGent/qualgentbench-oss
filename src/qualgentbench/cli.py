@@ -2815,6 +2815,7 @@ def leaderboard_show(
 
     _print_bug_summary(results)
     _print_imported_note(runs_dir, results)
+    _print_report_quality(runs_dir, results)
     if push_sheet:
         k_values = (1, trials) if trials > 1 else (1,)
         rows = _lb.aggregate_by_model(results, k_values=k_values)
@@ -3023,6 +3024,23 @@ _LEADERBOARD_METRICS = [
     ("avg_device_tool_calls", "Avg tool calls", True),
     # Cost + tokens intentionally excluded from the sheet.
 ]
+
+
+def _print_report_quality(runs_dir: Path, results: list[RunResult]) -> None:
+    """The Report quality block (QUA-3588), under the journey board and its Rates block:
+    printed only when an episode on the board has a saved `quality.json`
+    (`python -m qualgentbench.report_quality <runs dir>` writes them), so a board
+    without one prints what it always did. Never a ranking key: it is added after the
+    tables and changes nothing above it."""
+    from . import quality_rates
+
+    journeys = [r for r in results if r.task_type == "journey_case"]
+    records = quality_rates.saved_records(runs_dir, journeys)
+    if not quality_rates.has_quality(records):
+        return
+    console.print()
+    for line in quality_rates.lines(quality_rates.block(records)):
+        console.print(line, markup=False, highlight=False, soft_wrap=True)
 
 
 def _print_imported_note(runs_dir: Path, results: list[RunResult]) -> None:
