@@ -134,7 +134,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.request import pathname2url
 
-from . import corpus, glossary, journey, tooltip, viz
+from . import corpus, glossary, journey, quality_rates, report_quality, tooltip, viz
 from .checkpoint import read_episode_marker, run_meta_dir, scan_for_secrets
 from .evidence_manifest import steps_chain_of
 from .failures import exclusion_reason, is_excluded
@@ -282,6 +282,12 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #: wording of the run page's "How to read this page" box and its tooltips — so a page
 #: built from the manifest can explain itself in the same words.
 #:
+#: QUA-3588 adds `report_quality` to a `runs[]` entry, only when an episode summary of
+#: the run carries a `quality` block: `quality_rates.block` of the run's journey
+#: episodes (`{"format", "headline_gates", "signal_gates", "rows": [one per arm]}`,
+#: docs/report-quality.md, "The Report quality block"). It is never a ranking key, its
+#: rows are in name order, and it reads the RECORDED `result.json` of each episode.
+#:
 #: Every one of them is a pure function of the summaries and `run.json` (no clock, host,
 #: package version or current-corpus fact beyond the top-level `generated_at` and
 #: `qualgentbench_version`), so `build_index` reproduces them byte for byte. Blocker recall
@@ -296,6 +302,8 @@ MANIFEST_FORMAT = 2
 #: key (QUA-2917): `rescored_with` = `{"corpus_version", "heldout_version"}`, present only
 #: when `rescored_result` is and the build rescored against the default corpus; it also
 #: carries `"scorer_version"` (a string) when the rescored verdict names one (QUA-2927).
+#: Another optional key (QUA-3588): `quality`, the episode's report quality block as
+#: `quality.json` holds it (docs/report-quality.md), scored in memory at build time.
 SUMMARY_FORMAT = 1
 #: `<out>/<RUN_STATE>` — the run state `build_index` reads beside the summaries:
 #: `{"format", "title", "portable", "runs": {run_id: <state block, as in the manifest>}}`.
@@ -709,6 +717,7 @@ class _Episode:
     images: int = 0
     calls: int = 0
     exp: dict | None = None           # its experiment cell (`_exp_of` of an `ab.experiment_episodes` entry)
+    quality: dict | None = None       # its report quality block (`_quality_of`, QUA-3588)
 
 
 def _app_id(r: RunResult) -> str:
@@ -1317,7 +1326,7 @@ trial {r.trial} · started {E(r.started_at)}{" · blinded episode dir" if d and 
 {_verdict_table(ep)}
 <h2>Reports (scored)</h2>
 {_reports_html(ep.recorded, ep.rescored)}
-<details><summary><b>Brief sent to the agent</b> (instruction_sent.md)</summary>
+{quality_rates.episode_html(ep.quality)}<details><summary><b>Brief sent to the agent</b> (instruction_sent.md)</summary>
 <pre>{E(brief) if brief is not None else "(no instruction_sent.md)"}</pre></details>
 {authored_html}<details open><summary><b>{E(journey.FILENAME)}</b></summary>
 <pre>{E(findings) if findings is not None else "(no findings file)"}</pre></details>
@@ -1660,6 +1669,19 @@ def _summary_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) 
                       for head, term in _BOARD_HEADS)
             + "</tr>" + "".join(lines) + "</table></div>" + "".join(notes))
     return "\n".join(blocks)
+
+
+def _quality_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) -> str:
+    """Per run: the Report quality section (QUA-3588), under the boards and never part
+    of them. "" when no episode carries a quality block."""
+    out = []
+    for run_id in by_run:
+        block = measures[run_id].get("report_quality")
+        section = (quality_rates.block_html(
+            block, (run_id or "(no run id)") if len(by_run) > 1 else "") if block else "")
+        if section:
+            out.append(section)
+    return ("\n" + "\n".join(out)) if out else ""
 
 
 def _board_notes(run_id: str, measures: dict[str, dict]) -> list[str]:
@@ -2290,6 +2312,11 @@ class _Summary:
     #: DEFAULT corpus, None otherwise (an explicit corpus, no rescore, or a summary
     #: written before the stamp existed). Set only beside a `rescored_result`.
     rescored_with: dict | None = None
+    #: The episode's report quality block (QUA-3588): what `report_quality.
+    #: score_episode` gives for the saved episode, a pure function of it and the corpus.
+    #: None for an episode that has none (not a journey episode, no artifacts here, or a
+    #: summary written before the key existed); the key is then left out.
+    quality: dict | None = None
 
     @property
     def verdict(self) -> Any:
@@ -2308,6 +2335,8 @@ class _Summary:
             doc["exp"] = self.exp
         if self.rescored_with:
             doc["rescored_with"] = self.rescored_with
+        if self.quality is not None:
+            doc["quality"] = self.quality
         return doc
 
     def dumps(self) -> str:
@@ -2331,7 +2360,8 @@ class _Summary:
                                         if rescored is not None else None),
                        withheld=_hit_list(doc.get("withheld")),
                        exp=_exp_of(doc["exp"]) if doc.get("exp") is not None else None,
-                       rescored_with=_stamp_of(doc.get("rescored_with")))
+                       rescored_with=_stamp_of(doc.get("rescored_with")),
+                       quality=_quality_block(doc.get("quality")))
         except (KeyError, TypeError, ValueError) as exc:
             raise ViewError(f"unreadable episode summary {where}: {exc}") from exc
 
@@ -2365,6 +2395,35 @@ def _summary_stamp(stamp: dict | None, rescored: RunResult | None) -> dict | Non
     if sv is not None:
         out["scorer_version"] = str(sv)
     return out
+
+
+def _quality_block(v: Any) -> dict | None:
+    """A summary's `quality`, read back: a JSON object, or None."""
+    if v is None:
+        return None
+    if not isinstance(v, dict):
+        raise TypeError("quality is not a JSON object")
+    return v
+
+
+def _quality_of(ep_dir: Path | None, r: RunResult) -> dict | None:
+    """The report quality block of one saved journey episode, scored in memory
+    (`report_quality.score_episode` reads only). None when the episode cannot be scored;
+    the view is built anyway."""
+    if ep_dir is None or r.task_type != journey.TASK_TYPE:
+        return None
+    try:
+        return report_quality.score_episode(ep_dir)
+    except report_quality.QualityError:
+        return None
+    except Exception:  # noqa: BLE001 - a view is best effort; the page says nothing
+        logger.warning("view: report quality failed for %s", r.task_id, exc_info=True)
+        return None
+
+
+def _quality_records(eps: list[_Summary]) -> list[dict]:
+    return [quality_rates.result_record(e.result, e.quality) for e in eps
+            if e.result.task_type == journey.TASK_TYPE]
 
 
 def _stamp_of(v: Any) -> dict | None:
@@ -2757,7 +2816,12 @@ def _measurement(eps: list[_Summary]) -> dict:
     """The additive keys of one `runs[]` entry (`MANIFEST` docstring)."""
     js = [e for e in eps if e.result.task_type == journey.TASK_TYPE]
     v = _versions(eps)
+    records = _quality_records(eps)
     return {
+        # QUA-3588: the Report quality block, only when an episode carries one, so a
+        # view of older summaries writes the manifest it always did. Never a ranking key.
+        **({"report_quality": quality_rates.block(records)}
+           if quality_rates.has_quality(records) else {}),
         "versions": v, "set_key": v["set_key"],
         "rescored_with": _rescored_with_block(eps),
         "moved": sum(1 for e in js if _moved(e.result.metrics or {},
@@ -2943,7 +3007,7 @@ def _write_index_body(out_dir: Path, summaries: list[_Summary], title: str, port
     else:
         measures = {r: _measurement(eps) for r, eps in by_run.items()}
         boards = _summary_html(by_run, measures)
-        page = _index_html(rows, boards, f"{title} — episode view",
+        page = _index_html(rows, boards + _quality_html(by_run, measures), f"{title} — episode view",
                            any(s.held for s in summaries), not_rescored, portable,
                            _state_html({r: states.get(r) or {} for r in by_run})
                            + "\n" + _versions_html(by_run, measures),
@@ -3042,7 +3106,13 @@ def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gat
         ep = _Episode(eid=key, result=r, dir=d, recorded=dict(r.metrics or {}), rescored=m1,
                       rescored_reason=reason1, rescore_status=status,
                       rescored_result=rescored_result, held=_is_heldout(r), arm=_arm(r),
-                      exp=exp)
+                      exp=exp,
+                      # Local view only (QUA-3588): a portable view is what gets
+                      # published, and it carries no report quality yet.
+                      # TODO(QUA-3600): score portable views too once the hosted viewer
+                      # shows the block; summaries and the manifest then carry it as
+                      # they do here, with no other change.
+                      quality=None if portable else _quality_of(d, r))
         tr_path = d / "agent" / "transcript.txt" if d else None
         has_transcript = bool(tr_path and tr_path.is_file())
         first_hit = len(gate.hits)
@@ -3070,7 +3140,8 @@ def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gat
                            rescored_result=rescored_result,
                            withheld=[{"file": h["file"], "marker": h["marker"]}
                                      for h in gate.hits[first_hit:]], exp=exp,
-                           rescored_with=_summary_stamp(rescored_with, rescored_result))
+                           rescored_with=_summary_stamp(rescored_with, rescored_result),
+                           quality=ep.quality)
         if gate.write(summary_path, _scrub_local(summary.dumps(), runs_dir), key) is None:
             summaries.append(summary)
         else:
