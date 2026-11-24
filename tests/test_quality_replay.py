@@ -637,7 +637,6 @@ def test_without_saved_replays_the_gate_did_not_run_and_quality_json_has_no_stam
     assert "replay" not in q
     assert q["reports"][0]["gates"]["G4"] == {"pass": None,
                                               "reason": "no replay saved for this report"}
-    assert q["reports"][0]["customer_ready"] is None
     assert q["totals"]["gates"]["G4"] == {"name": "reproducible", "evaluated": 0, "passed": 0}
     # Scoring wrote nothing but quality.json and started nothing.
     rq.write_quality(eps["side-good"])

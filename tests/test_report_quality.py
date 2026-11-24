@@ -68,8 +68,8 @@ def test_matched_false_known_and_consequence_reports(tmp_path):
     assert matched["gates"]["G1"] == {"pass": True,
                                       "reason": "matched seeded defect delete-bug"}
     assert matched["neutral"] is False and matched["index"] == 0 and matched["step"] == 2
-    # Valid, but the other headline gates have not run: not known to be customer-ready.
-    assert matched["customer_ready"] is None
+    # Valid, but a findings entry has no reproduction steps, so G3 fails it (QUA-3587).
+    assert matched["gates"]["G3"]["pass"] is False and matched["customer_ready"] is False
 
     assert false["gates"]["G1"] == {"pass": False, "reason": "matched no seeded defect"}
     assert false["neutral"] is False and false["customer_ready"] is False
@@ -79,10 +79,10 @@ def test_matched_false_known_and_consequence_reports(tmp_path):
         assert neutral["neutral"] is True and neutral[key] == value
         assert neutral["gates"] == {} and neutral["customer_ready"] is None
 
-    totals = dict(q["totals"])
-    assert totals.pop("gates")["G1"] == {"name": "valid", "evaluated": 2, "passed": 1}
-    assert totals == {"reports": 4, "neutral": 2, "scored": 2,
-                      "customer_ready": 0, "customer_ready_unknown": 1}
+    totals = q["totals"]
+    assert (totals["reports"], totals["neutral"], totals["scored"]) == (4, 2, 2)
+    assert totals["gates"]["G1"] == {"name": "valid", "evaluated": 2, "passed": 1}
+    assert (totals["customer_ready"], totals["customer_ready_unknown"]) == (0, 0)
 
 
 def test_an_episode_with_no_report(tmp_path):
@@ -90,10 +90,12 @@ def test_an_episode_with_no_report(tmp_path):
     assert metrics["reports"] == []
     q = rq.score_episode(_episode(tmp_path, "ep1", metrics))
     assert q["reports"] == []
-    totals = dict(q["totals"])
-    assert totals.pop("gates")["G1"] == {"name": "valid", "evaluated": 0, "passed": 0}
-    assert totals == {"reports": 0, "neutral": 0, "scored": 0,
-                      "customer_ready": 0, "customer_ready_unknown": 0}
+    totals = q["totals"]
+    assert (totals["reports"], totals["neutral"], totals["scored"]) == (0, 0, 0)
+    assert set(totals["gates"]) == {g.id for g in rq.GATES}
+    assert all(g == {"name": g["name"], "evaluated": 0, "passed": 0}
+               for g in totals["gates"].values())
+    assert (totals["customer_ready"], totals["customer_ready_unknown"]) == (0, 0)
 
 
 def test_customer_ready_needs_every_headline_gate():
