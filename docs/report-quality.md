@@ -404,7 +404,11 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
         "failure_step": "Step 4",
         "paired_by": "only_report",
         "report_source": "report_tool",
-        "repro_steps": [],
+        "repro_steps": [
+          "<the agent's first step>",
+          "<its second step>",
+          "<its third step>"
+        ],
         "steps": "<the call's code_investigation>",
         "summary": "<the bug's title>"
       },
