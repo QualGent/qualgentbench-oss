@@ -63,7 +63,7 @@ A gate tests one property of one report and answers pass or fail with a reason.
 | Gate | Name | Passes when | In this version |
 |---|---|---|---|
 | G1 | valid | the scorer matched the report to a seeded defect | yes |
-| G2 | located | the report names the step where the defect shows, and its quote comes from that step | yes |
+| G2 | located | the report names the step where the defect shows, and the device shows the defect's symptom on that step | yes |
 | G3 | complete | the report has an observed result, an expected result and real reproduction steps | yes |
 | G4 | reproducible | a fresh agent given only the report reproduces the defect | yes, from saved replays (see "G4: replay from the report") |
 
@@ -98,7 +98,9 @@ G2 runs on a report that passed G1. It passes when all three hold:
    `failure_step`, else the saved report's `step`. No step, or a step the case does not
    have, fails.
 2. **The truth file shows the matched defect at that step.**
-3. **The device showed the report's `observed` text while the agent was on that step.**
+3. **The device shows the defect's symptom on that step**, in a result that the agent's
+   own actions on the device tie to the step. What that asks depends on what the defect
+   leaves on the screen ("What the quote has to be", below).
 
 It reads the saved transcript (`agent/transcript.txt`), the brief the agent was sent
 (`instruction_sent.md`), and the corpus's case file and truth file for the case. It does
@@ -146,7 +148,7 @@ First each **action** (a tap, a text entry, a swipe) is given a step:
 | The action | Its step |
 |---|---|
 | fits a brief step: its target text is in that step's sentence, or contains route text that only that step can own | that step. When several fit, the first one at or after the current step. It becomes the current step |
-| follows a message with exactly one "Step N:" in it | step N, the current step from that message on |
+| follows a message with exactly one "Step N:" in it | step N, the current step from that action on |
 | neither | the current step, or any later step that has an action, up to the step of the next action that fits or is announced. **Not sure.** When no such later step exists, it is the current step |
 | fits only steps before the current one (the agent went back) | the latest step that fits. Whether the agent returned to it or is still looking into the current step is not known, so the steps after it up to the current one are possible, **not sure** |
 
@@ -155,17 +157,67 @@ coordinates. A call the server refused is not an action. Starting or stopping th
 an action only in a case whose route restarts the app; elsewhere it is recovery after a
 crash, and the agent is still on the step that crashed.
 
+**Saying a step is not being on it.** A "Step N:" message marks the agent's next action.
+Until the agent acts, it moves no screen: a read made after the message still shows what
+the last action left. That read is possibly step N's, and not surely. (Before this rule
+an agent could say "Step 9:", read the start screen once, and have that screen counted
+for every step up to 9.) The message does bound the actions before it that no step could
+be given to: they were done by step N.
+
 Then each **result** takes the steps of the last action before it. A result shows the
 screen that action left, whether the action returned it or a later read did. The screen
 stays up through the next step that has an action, so a read made after the agent moved
 on, before it acts there, counts for both steps. Before any action, the screen is the
 one the case starts on.
 
-The answer for rule 3:
+#### What the quote has to be
 
-- **pass**: a result that holds the quote is surely on the named step;
-- **unknown**: no such result, but one that holds the quote is possibly on it;
-- **fail**: every result that holds the quote is on other steps, or none holds it.
+The truth file measured texts for each defect (`symptom_texts`):
+
+| The matched defect is | Texts the seeded build **shows** | Texts it **lost** |
+|---|---|---|
+| a side bug | its marker and measured texts | none |
+| a blocking bug that does not kill the app | every string the screen diff says the seeded build added | every string the diff says it removed |
+| a crash or a hang | the exception the case names (`check.expect.crash` / `anr`) and Android's own dialog wording ("keeps stopping", "isn't responding", and the other forms) | none |
+
+A truth text is matched on token boundaries, as the scorer matches a quote (`2h` is not
+in `12h`). Where the deriver left `<date>` in a text, any date matches.
+
+Rule 3 is then one of three checks.
+
+**A text.** The report's `observed` holds one or more of the texts the seeded build
+shows. The whole `observed` sentence does not have to be on the device: a report filed
+through the report tool writes a sentence around its quote. Each truth text in it that
+the device showed anywhere is looked for:
+
+- **pass**: each is in a result that is surely on the named step;
+- **unknown**: one is surely on the step and another only on other steps, or none is
+  surely on the step and one is possibly on it;
+- **fail**: the device showed them on other steps only, or showed none of them.
+
+**A death.** Most crashes put up no dialog: the app is gone and the agent sees the home
+screen. A report then has no truth text to quote. It passes when the device showed its
+`observed` text on the named step, on a screen that an action of the agent's left. The
+screen the case starts on, read by an agent that has not acted, is not such a screen:
+unknown.
+
+**An absence.** A defect can remove text and add none. The report cannot quote what is
+not there; it names the text in `expected`. When `expected` holds a text the seeded build
+lost, or the defect shows no text at all, G2 looks for a screen listing that the agent
+read on the named step, left by an action of its own, that lacks the text:
+
+- **pass**: there is one;
+- **unknown**: there is none (every screen on the step still shows the text, or the
+  agent read no screen there). Never a fail.
+
+Where the defect also shows text, a quote that the device showed only on other steps, or
+never, is still judged as a quote and fails.
+
+**A quote that is no truth text.** When the device did show `observed` on the named
+step, but it is none of the defect's texts and nothing above applies, G2 answers
+unknown. The truth file records only the strings that differ between the two builds. A
+string that is on both builds' screens can be a true observation ("the Notes field is
+empty") or the start screen's title, and the truth cannot tell which.
 
 #### What grounds a quote
 
@@ -183,7 +235,11 @@ lists and normalisers with the scorer's own.
 - The corpus has no case or truth row for the episode, or the brief the episode was sent
   does not hold the corpus's steps (the case changed after the run).
 - The quote was on the device, but only in results that are not surely on the named
-  step.
+  step. This includes a screen read after the agent only said "Step N:".
+- The device showed the quote on the named step, but it is no truth text of the defect.
+- Part of the quote was on the named step and the rest only on other steps.
+- A crash report's quote is on the screen the case starts on and the agent had not acted.
+- A report on missing text has no screen on the step that lacks the text.
 
 #### Limits
 
@@ -198,6 +254,12 @@ lists and normalisers with the scorer's own.
 - **A quote the agent read later.** A crash can leave no dialog until the agent opens
   the app again. A report that quotes that dialog and names the step that crashed passes
   only when the agent was still on that step when the dialog came up.
+- **A crash step reached by one blind action.** For a crash with no dialog, rule 3 asks
+  for the agent's own action, not for the right action. An agent that says "Step N:",
+  taps anything once and reads the screen satisfies it at step N. Rules 1 and 2 still
+  have to hold, and so does G1.
+- **A true observation the truth did not measure.** A report that quotes text which is
+  the same on both builds is unknown, although a person would call it located.
 - G2 reads the corpus of the checkout that scores, not the corpus the episode ran on.
   The brief check above catches a changed case; it does not catch a truth row
   re-derived for the same steps.

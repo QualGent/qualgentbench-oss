@@ -1,6 +1,8 @@
-"""Report quality gate G2, located (QUA-3586): a valid report names a step, the truth
-shows the matched defect's symptom at that step, and the device showed the report's
-quote while the agent was on it.
+"""Report quality gate G2, located (QUA-3586, hardened by QUA-3604): a valid report
+names a step, the truth shows the matched defect's symptom at that step, and the device
+shows that symptom on it: a truth text of the defect that the report quotes, or for a
+crash the quote on a screen the agent's own action left, or for a defect that removes
+text a screen that lacks it.
 
 The cases here are a small made-up app served from a temporary held-out directory, so
 the tests pin the RULE and do not move when the corpus does. The copies this module
@@ -227,8 +229,221 @@ def test_an_echo_and_a_refusal_ground_nothing(tmp_path):
 
 
 def test_no_quote_fails(tmp_path):
-    g = _g2(tmp_path, SAVE_RUN, _report(3, ""))
+    """Nothing observed and nothing named as missing: there is no symptom to look for."""
+    g = _g2(tmp_path, SAVE_RUN, _report(3, "", expected="the note is in the list"))
     assert g == {"pass": False, "reason": "the report quotes no observed text"}
+
+
+# ── QUA-3604: what the quote has to be, and what ties a screen to a step ───────
+
+@pytest.mark.parametrize("fmt", sorted(FORMATS))
+def test_the_truth_text_is_looked_for_inside_the_sentence(tmp_path, fmt):
+    """Through the report tool `observed` is a sentence around the quote. No device
+    result holds the sentence; the truth text in it was on the device at step 3."""
+    sentence = 'After Save the list is empty: it shows "No notes" and no row for the note.'
+    g = _g2(tmp_path, SAVE_RUN, _report(3, sentence), fmt=fmt)
+    assert g["pass"] is True and "step 3" in g["reason"]
+    # The same sentence about a text the device never showed is in no device output.
+    g = _g2(tmp_path, SAVE_RUN[:3], _report(3, sentence), fmt=fmt, name="ep2")
+    assert g == {"pass": False, "reason": "the observed text is in no device output"}
+    # And the truth text shown on another step only does not locate it.
+    early = [Call("mobile_observe_screen", {}, _screen("Notes", "No notes", "New note")),
+             _tap("New note", *EDITOR), _tap("Save", "Notes", "New note")]
+    g = _g2(tmp_path, early, _report(3, sentence), fmt=fmt, name="ep3")
+    assert g == {"pass": False,
+                 "reason": "the device showed the observed text at step 1, not at step 3"}
+
+
+def test_a_quote_that_is_no_truth_text_of_the_defect_is_unknown(tmp_path):
+    """`Notes` (the screen's title) really was on the device at step 3. It is on the
+    clean build's screen too: quoting it shows nothing about this defect."""
+    g = _g2(tmp_path, SAVE_RUN, _report(3, "Notes", expected="the note is in the list"))
+    assert g == {"pass": None, "unknown": True,
+                 "reason": "the device showed the observed text on step 3, but it is none "
+                           "of the texts the truth measured for save-drops-note"}
+    # A side bug's truth texts are its own: the blocking bug's text does not locate it.
+    g = _g2(tmp_path, SAVE_RUN, _report(2, "Save", matched="editor-title-typo"), name="ep2")
+    assert g["pass"] is None and g["unknown"] is True
+    assert "none of the texts the truth measured for editor-title-typo" in g["reason"]
+
+
+def test_every_truth_text_the_report_quotes_must_be_on_the_step(tmp_path, corpus):
+    """Two truth texts in one quote, one of them on every screen: the one that is on
+    the named step does not carry the other."""
+    truth = json.loads(json.dumps(TRUTH))
+    truth["notes-save"]["unclaimed_diff"][0]["added"] = ["No notes", "Notes"]
+    (corpus / "truth" / f"journey-{APP}.json").write_text(json.dumps(truth))
+    run = [Call("mobile_observe_screen", {}, _screen("Notes", "No notes", "New note")),
+           _tap("New note", *EDITOR), _tap("Save", "Notes", "New note")]
+    g = _g2(tmp_path, run, _report(3, "Notes / No notes"))
+    assert g == {"pass": None, "unknown": True,
+                 "reason": "the device showed part of the observed text on step 3 and the "
+                           "rest only on other steps"}
+    assert _g2(tmp_path, SAVE_RUN, _report(3, "Notes / No notes"), name="ep2")["pass"] is True
+
+
+@pytest.mark.parametrize("fmt", sorted(FORMATS))
+def test_saying_a_step_without_acting_locates_nothing(tmp_path, fmt):
+    """The guesser: it says it is on step 3, reads the screen once and never touches
+    the app. Even a truth text on that screen is not tied to step 3 by the say-so."""
+    run = [Say("Step 3: saving the note."),
+           Call("mobile_observe_screen", {}, _screen("Notes", "No notes", "New note"))]
+    assert _labels(run) == [(1, 1, 4)]      # surely the start screen; possibly step 3's
+    g = _g2(tmp_path, run, _report(3, "No notes"), fmt=fmt)
+    assert g["pass"] is None and g["unknown"] is True
+    assert "does not say whether those calls were step 3" in g["reason"]
+    # The start screen's own text, which is what such an agent has to quote: unknown
+    # at best, and a fail once the report says more than the device showed.
+    g = _g2(tmp_path, run, _report(3, "New note", expected=""), fmt=fmt, name="ep2")
+    assert g["pass"] is None and g["unknown"] is True
+    # With one action after the announcement the screen is step 3's (the announced
+    # step marks the next action, as before).
+    acted = [run[0], Call("mobile_tap", {"x": 1, "y": 2}, "Tapped (1, 2)"), run[1]]
+    assert _g2(tmp_path, acted, _report(3, "No notes"), fmt=fmt, name="ep3")["pass"] is True
+
+
+def test_a_crash_with_no_dialog_needs_the_agents_own_action_on_the_step(tmp_path):
+    """Most crashes put up no dialog: the agent sees the launcher. Its quote is no
+    truth text, so what locates the report is that it acted on the step."""
+    run = [Call("mobile_observe_screen", {}, _screen(*HOME)),
+           _tap("Settings", "Settings", "About"),
+           _tap("About", "Wed, Sep 16", "Chrome")]
+    report = _report(2, "Wed, Sep 16", matched="about-crash", expected="the version")
+    g = _g2(tmp_path, run, report, case="notes-about")
+    assert g == {"pass": True, "reason": "step 2: the truth crashes about-crash there, the "
+                                         "agent acted on that step and the device showed "
+                                         "the observed text on it"}
+    # The same quote read off the screen the case starts on, by an agent that only said
+    # it was on step 1 and did nothing: not located. (Step 1 is where the truth would
+    # crash a case whose first tap kills the app.)
+    truth_step_1 = {**report, "step": 1}
+    idle = [Say("Step 1: open Settings."),
+            Call("mobile_observe_screen", {}, _screen("Wed, Sep 16", "Chrome"))]
+    case = rq.load_case_truth(APP, "notes-about")
+    assert not any(s.acted for s in rq.attribute_steps(rq.agent_events(_claude(idle), False),
+                                                       case))
+    g = _g2(tmp_path, idle, truth_step_1, case="notes-about", name="ep2")
+    assert g["pass"] is False        # step 1 is not where this case crashes
+    g = _g2(tmp_path, idle[1:], {**report, "step": 2}, case="notes-about", name="ep3")
+    assert g["pass"] is not True
+
+
+def test_a_crash_quote_on_the_start_screen_is_unknown(tmp_path, corpus):
+    """A case whose FIRST tap kills the app: the truth crashes it at step 1, and the
+    start screen is step 1's too. Reading it without acting locates nothing."""
+    truth = json.loads(json.dumps(TRUTH))
+    truth["notes-about"]["passes"]["seeded"] = {
+        "outcome": "crashed", "steps_run": 2, "detail": "step 2: demo.notes crashed"}
+    (corpus / "truth" / f"journey-{APP}.json").write_text(json.dumps(truth))
+    report = _report(1, "Settings", matched="about-crash", expected="the version")
+    idle = [Call("mobile_observe_screen", {}, _screen(*HOME))]
+    g = _g2(tmp_path, idle, report, case="notes-about")
+    assert g == {"pass": None, "unknown": True,
+                 "reason": "the device showed the observed text on step 1, but no device "
+                           "action of the agent's is tied to that step"}
+    acted = [*idle, _tap("Settings", "Settings", "Wed, Sep 16")]
+    assert _g2(tmp_path, acted, report, case="notes-about", name="ep2")["pass"] is True
+
+
+def test_the_crash_wording_and_the_named_exception_are_truth_texts(tmp_path, corpus):
+    cases = json.loads(json.dumps(CASES))
+    cases["test_cases"][1]["check"]["expect"] = {"crash": "NullPointerException"}
+    (corpus / "test-cases" / f"{APP}.yaml").write_text(yaml.safe_dump(cases))
+    case = rq.load_case_truth(APP, "notes-about")
+    assert rq.symptom_texts(case, "about-crash").shown == (
+        "NullPointerException", "closed unexpectedly", "has stopped", "keeps stopping",
+        "stopped working")
+    run = [_tap("Settings", "Settings", "About"),
+           _tap("About", "Launcher", "crash: java.lang.NullPointerException at About.kt")]
+    report = _report(2, "The app closed; the screen reported java.lang.NullPointerException "
+                        "at About.kt", matched="about-crash")
+    assert _g2(tmp_path, run, report, case="notes-about")["pass"] is True
+    # A hang's wording is not a crash's.
+    assert rq._text_re("isn't responding").search("demo notes isn't responding")
+    assert not any(rq._text_re(t).search("demo notes isn't responding")
+                   for t in rq.symptom_texts(case, "about-crash").shown)
+
+
+def test_a_defect_that_removes_text_is_located_by_a_screen_without_it(tmp_path, corpus):
+    """The truth has nothing the seeded build SHOWS for this defect, only `Milk`, which
+    the clean build shows. The report cannot quote an absence; the screen the agent read
+    on the step, after its own action there, lacks the text."""
+    truth = json.loads(json.dumps(TRUTH))
+    truth["notes-save"]["unclaimed_diff"] = [{"step": 5, "added": [], "removed": ["Milk"]}]
+    (corpus / "truth" / f"journey-{APP}.json").write_text(json.dumps(truth))
+    case = rq.load_case_truth(APP, "notes-save")
+    assert rq.symptom_texts(case, "save-drops-note") == rq.SymptomTexts((), ("Milk",))
+    passed = {"pass": True, "reason": "step 3: the truth shows save-drops-note there as "
+                                      "missing text, and a screen the agent read on that "
+                                      "step lacks it"}
+    # Whatever it wrote under observed: nothing, a sentence, text from another step.
+    for i, observed in enumerate(("", "The list has no row for the note", "New ntoe")):
+        g = _g2(tmp_path, SAVE_RUN, _report(3, observed), name=f"ep{i}")
+        assert g == passed, observed
+    # The screen on that step still shows the text: nothing is missing there. Unknown,
+    # never a fail, and never a pass.
+    kept = [*SAVE_RUN[:3], _tap("Save", "Notes", "Milk", "New note")]
+    g = _g2(tmp_path, kept, _report(3, ""), name="kept")
+    assert g["pass"] is None and g["unknown"] is True and "missing text" in g["reason"]
+    # A tap's bare acknowledgement is not a screen, and the start screen is not a
+    # screen the agent's action left.
+    bare = [*SAVE_RUN[:3], Call("mobile_tap", {"element_text": "Save"}, "Tapped Save")]
+    assert _g2(tmp_path, bare, _report(3, ""), name="bare")["unknown"] is True
+    idle = [Say("Step 3: saving."), Call("mobile_observe_screen", {}, _screen(*HOME))]
+    assert _g2(tmp_path, idle, _report(3, ""), name="idle")["unknown"] is True
+
+
+def test_missing_text_named_in_expected_counts_where_the_defect_also_shows_text(tmp_path):
+    """`save-drops-note` shows `No notes` and removes `Milk`. A report that quotes
+    nothing and names `Milk` as expected is located by the screen without it."""
+    g = _g2(tmp_path, SAVE_RUN, _report(3, ""))
+    assert g["pass"] is True and "missing text" in g["reason"]
+    # A quote the device showed only on another step is still judged as a quote.
+    g = _g2(tmp_path, SAVE_RUN, _report(3, "New ntoe"), name="ep2")
+    assert g["pass"] is False and "not at step 3" in g["reason"]
+
+
+def test_a_date_slot_in_a_truth_text_matches_the_date_on_the_screen():
+    slot = rq._text_re("Thursday, <date>. 127 days left")
+    assert slot.search("it still shows thursday, january 21, 2027. 127 days left")
+    assert not slot.search("saturday, january 23, 2027. 129 days left")
+    assert rq._text_re("<date>") is None and rq._text_re("A") is None
+    assert rq._text_re("2h").search("reads 2h") and not rq._text_re("2h").search("12h")
+
+
+def test_the_truth_texts_are_the_reference_reports(monkeypatch):
+    """`symptom_texts` against `reference_reports.truth_texts`, which reads the same
+    truth through the scorer's own evidence builder, over the public corpus. The scorer
+    splits what a blocking bug shows into texts only the seeded build has and texts the
+    brief also hands the agent; G2 asks the device for either, so it takes both."""
+    from qualgentbench import corpus as corpus_mod
+    from qualgentbench import reference_reports
+
+    monkeypatch.delenv(rq.HELDOUT_ENV, raising=False)
+    assert rq._CRASH_DIALOG_TEXTS == journey._CRASH_DIALOG_TEXTS
+    assert rq._ANR_DIALOG_TEXTS == journey._ANR_DIALOG_TEXTS
+    assert rq._LIVENESS_KEYS == journey._LIVENESS_KEYS
+    checked = 0
+    for app_id in corpus_mod.public_apps():
+        doc = journey.load_cases(app_id) or {}
+        defects, truth = journey.load_defects(doc), journey.load_truth(app_id)
+        for case in doc.get("test_cases") or []:
+            mine = rq.load_case_truth(app_id, str(case["id"]))
+            for bug in journey.case_bugs(case):
+                theirs = reference_reports.truth_texts(case, defects, truth.get(case["id"]),
+                                                       bug["id"])
+                texts = rq.symptom_texts(mine, bug["id"])
+                where = (case["id"], bug["id"], theirs["kind"])
+                if theirs["kind"] in ("side", "screen", "death"):
+                    assert set(theirs["actual"]) <= set(texts.shown), where
+                    checked += 1
+                if theirs["kind"] in ("screen", "absence"):
+                    # A bare `<date>` slot is no text to look for.
+                    assert {t for t in theirs["expected"] if rq._text_re(t)} <= set(
+                        texts.lost), where
+                if theirs["kind"] == "side":
+                    assert set(texts.shown) == set(theirs["actual"]), where
+    assert checked > 100
 
 
 @pytest.mark.parametrize("version", ["clean", "seeded"])
@@ -301,7 +516,8 @@ def test_results_follow_the_action_that_left_the_screen():
 
 def test_an_announced_step_marks_the_next_action():
     """ "Step 3:" before a tap on coordinates makes that tap step 3's. A read made after
-    announcing the next step, before acting there, counts for both steps."""
+    announcing a step, before acting there, is surely the screen the last action left
+    and only possibly the announced step's."""
     run = [Say("Step 1: start a new note."),
            Call("mobile_tap", {"x": 1, "y": 2}, "Tapped (1, 2)"),
            Call("mobile_observe_screen", {}, _screen(*EDITOR)),
@@ -309,7 +525,7 @@ def test_an_announced_step_marks_the_next_action():
            Call("mobile_observe_screen", {}, _screen(*EDITOR)),
            Call("mobile_tap", {"x": 5, "y": 6}, "Tapped (5, 6)"),
            Call("mobile_observe_screen", {}, _screen("Notes", "No notes"))]
-    assert _labels(run) == [(1, 2, 2), (1, 2, 2), (1, 4, 4), (3, 4, 4), (3, 4, 4)]
+    assert _labels(run) == [(1, 2, 2), (1, 2, 2), (1, 2, 4), (3, 4, 4), (3, 4, 4)]
     # A message naming two steps, or a step the case does not have, announces nothing.
     run[3] = Say("Steps 1 and 2 worked. Step 3: save. Step 4: read.")
     assert _labels(run)[2:] == [(1, 2, 2), (1, 0, 4), (1, 0, 4)]
@@ -346,8 +562,9 @@ def test_going_back_is_sure_only_of_the_step_redone(tmp_path):
     still be looking into step 3."""
     run = [*SAVE_RUN, _tap("New note", "New ntoe", "Draft kept")]
     assert _labels(run)[-1] == (1, 2, 4)
-    assert _g2(tmp_path, run, _report(3, "Draft kept"))["unknown"] is True
-    g = _g2(tmp_path, run, _report(1, "Draft kept", matched="editor-title-typo"), name="ep2")
+    assert _g2(tmp_path, run, _report(3, "Draft kept", expected=""))["unknown"] is True
+    g = _g2(tmp_path, run, _report(1, "New ntoe / Draft kept", matched="editor-title-typo"),
+            name="ep2")
     assert g["pass"] is True
 
 

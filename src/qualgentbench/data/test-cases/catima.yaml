@@ -649,7 +649,7 @@ test_cases:
     bugs:
       - id: note-lost-on-rotation
         reference_report:
-          summary: A note typed for a new card is cleared when the device is rotated before saving
+          summary: The note was cleared after rotating a new card before saving it
           steps:
             - Launch Catima.
             - Tap the + button (Add).

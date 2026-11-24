@@ -9,8 +9,10 @@ What is asserted is written against G1 (valid) and G2 (located) as well as again
 and one of them (G4, replay) may not be registered: an assertion on `customer_ready`
 alone would hold for any report at all until it is.
 
-Three tests are expected failures. Each documents a defect outside this check, with the
-measured numbers in its reason; each is strict, so the fix shows up here.
+One test is an expected failure. It documents a scorer defect outside this check, with
+the measured numbers in its reason; it is strict, so the fix shows up here. The two G2
+defects this file first documented the same way are fixed (QUA-3604) and their tests are
+ordinary tests now.
 """
 
 from __future__ import annotations
@@ -141,12 +143,22 @@ def test_the_words_of_the_case_id_are_not_evidence_until_a_screenshot_is_taken(t
     "includes the harness-written `[Image: source: <path>]` line of a screenshot. The "
     "path holds the case id, the agent and the model, so a quote equal to one of those "
     "words is `grounded`. Where that word is an echoable truth text the scorer credits "
-    "the catch (G1), and G2 then finds the quote on the step the agent says it is on. "
-    "Measured on the public corpus: G1 on 16 reports of 4 cases, G1 and G2 together on "
-    "11 (findings) and 1 (report tool)."))
-def test_a_word_of_the_screenshot_path_is_not_valid_and_located(tallies):
+    "the catch (G1). Measured on the public corpus: G1 on 16 reports of 4 cases "
+    "(findings) and 1 (report tool)."))
+def test_a_word_of_the_screenshot_path_is_not_valid(tallies):
     for channel, t in _every("path-echo", tallies):
-        assert t.both == [], f"path-echo ({channel}): {t.both[:4]}"
+        assert t.passed["G1"] == 0, f"path-echo ({channel}): G1 {t.cell('G1')}"
+
+
+def test_a_word_of_the_screenshot_path_is_not_located(tallies):
+    """The scorer still credits the word (above). G2 does not locate it: the screenshot
+    was read after the agent SAID "Step N:" and before it did anything on the device,
+    and an announcement alone ties no screen to a step (QUA-3604). Unknown, not a pass.
+    The same agent with one tap after its announcement would be located, which is why
+    the scorer defect stays a known defect."""
+    for channel, t in _every("path-echo", tallies):
+        assert t.both == [] and t.passed["G2"] == 0, f"path-echo ({channel}): {t.both[:4]}"
+        assert t.available == 0
 
 
 def test_the_screenshot_path_guesser_is_still_never_customer_ready(tallies):
@@ -159,30 +171,53 @@ def test_the_screenshot_path_guesser_is_still_never_customer_ready(tallies):
 def test_the_honest_reference_agent_stays_near_one(tallies):
     """It quotes the measured screen string at the step the reference report names and
     files the reference report as its bug. Measured on the public corpus (findings
-    channel, 150 reports): G1 150, G2 138, G3 149. The G2 misses are 6 defects with no
-    recorded screen step (unknown), 5 that only remove text and so have nothing to put
-    under `observed`, and 1 reference report that names a step the truth does not show
-    the defect on."""
-    t = tallies[0][("honest", "findings")]
-    assert t.reports > 100
-    for g in ("G1", "G2", "G3"):
-        assert t.rate(g) >= qadv.HONEST_FLOOR, (g, t.cell(g))
-    # An unknown is not a pass, and the rate above counts it against the agent.
-    assert t.passed["G2"] + t.unknown <= t.ran["G2"] + t.unknown == t.passed["G1"]
-    tool = tallies[0][("honest", "report_tool")]
-    for g in ("G1", "G3"):
-        assert tool.rate(g) >= qadv.HONEST_FLOOR, (g, tool.cell(g))
+    channel, 150 reports): G1 150, G2 144, G3 149. The G2 misses are the 6 defects with
+    no recorded screen step, and every one is unknown: none fails."""
+    for channel, t in _every("honest", tallies):
+        assert t.reports > 100
+        for g in ("G1", "G2", "G3"):
+            assert t.rate(g) >= qadv.HONEST_FLOOR, (channel, g, t.cell(g))
+        # An unknown is not a pass, and the rate above counts it against the agent.
+        assert t.passed["G2"] + t.unknown == t.ran["G2"] + t.unknown == t.passed["G1"]
+        assert all(why.startswith("unknown: the truth records no screen step")
+                   for why in t.reasons), t.reasons
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "G2 design gap, outside this check: rule 3 looks for the WHOLE `observed` text in "
-    "one device result. Through the report tool alone `observed` is the call's `actual`, "
-    "and every reference report writes `actual` as a sentence around its quote, so no "
-    "device output holds it. Measured: 0 of 148 valid reference reports located, 141 of "
-    "them 'the observed text is in no device output'."))
 def test_a_reference_report_filed_through_the_report_tool_is_located(tallies):
+    """Through the report tool alone `observed` is the call's `actual`, a sentence around
+    the quote. G2 looks for the truth text inside it (QUA-3604; it used to look for the
+    whole sentence in one device result and located 0 of 148)."""
     t = tallies[0][("honest", "report_tool")]
     assert t.rate("G2") >= qadv.HONEST_FLOOR, t.cell("G2")
+    assert qadv.KNOWN_CONTROL_GAPS == {}
+
+
+@pytest.mark.parametrize("case_id", [
+    "birday-edit-date", "cal-repeat-survives-rotation", "gallery-favorite-in-viewer",
+    "medtimer-edit-reminder-dosage", "mmex-transfer-to-savings"])
+def test_a_defect_that_only_removes_text_can_be_located(tmp_path, case_id):
+    """The five public defects QUA-3589 found no honest report could be located on: the
+    truth has little or nothing the seeded build SHOWS for them. The honest agent acts
+    on the step and reads a screen without the text the clean build shows."""
+    task = next(t for t in qadv._tasks("seeded") if t.bug_spec["case_id"] == case_id)
+    for channel in qadv.CHANNELS:
+        _, quality = qadv.run(task, "honest", tmp_path, channel)
+        blocking = [r for r in quality["reports"]
+                    if r["matched"] == task.bug_spec["blocking"]]
+        assert blocking and all(r["gates"]["G2"]["pass"] is True for r in blocking), (
+            channel, [r["gates"]["G2"] for r in blocking])
+
+
+@pytest.mark.parametrize("case_id", ["stt-session-goal", "catima-note-after-rotation"])
+def test_the_two_reference_reports_the_adversary_check_flagged_are_sound(tmp_path, case_id):
+    """One named a step the truth does not show its defect on; the other was not
+    credited by the scorer through the report tool alone."""
+    task = next(t for t in qadv._tasks("seeded") if t.bug_spec["case_id"] == case_id)
+    for channel in qadv.CHANNELS:
+        _, quality = qadv.run(task, "honest", tmp_path, channel)
+        scored = [r for r in quality["reports"] if not r["neutral"]]
+        assert scored and all(r["gates"][g]["pass"] is True for r in scored
+                              for g in ("G1", "G2")), (channel, [r["gates"] for r in scored])
 
 
 # ── the priced adversary ───────────────────────────────────────────────────────
@@ -199,19 +234,16 @@ def test_the_symptom_sprayer_pays_on_every_clean_build(tallies):
         assert seeded.ready == []
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Gate defect, outside this check: an agent that tested nothing passes G1 and G2 "
-    "together on the seeded build. Symptom prose earns G1 (priced, by design). G2 asks "
-    "only that SOME quote was in a device result on the named step, and takes the step "
-    "from the agent's own 'Step N:' message, so one read of the start screen after "
-    "saying 'Step <last>' counts for every step. Measured on the public corpus: 101 of "
-    "149 report-tool reports and 288 of 739 findings reports pass both, and 61 of 149 "
-    "pass G1, G2 and G3 together with the test case's own steps copied (the rates "
-    "block's `ready_on_available`). Only G4 (replay) is left on a seeded "
-    "build, and a replay of the copied steps reaches the defect."))
 def test_the_symptom_sprayer_is_not_valid_and_located(tallies):
+    """An agent that tested nothing: symptom prose earns G1 (priced, by design), and G2
+    stops it. Its quote is the start screen's text, no truth text of any defect, and it
+    only SAID "Step <last>:" before reading that screen. Before QUA-3604 it passed G1
+    and G2 together on 101 of 149 report-tool reports and 288 of 739 findings reports,
+    and 61 passed G3 as well."""
     for channel, t in _every("symptom-quote", tallies):
-        assert t.both == [], f"symptom-quote ({channel}): {len(t.both)} report(s)"
+        assert t.passed["G1"] > 0
+        assert t.passed["G2"] == 0, f"symptom-quote ({channel}): G2 {t.cell('G2')}"
+        assert t.both == [] and t.available == 0
 
 
 # ── the gate itself ────────────────────────────────────────────────────────────
@@ -219,21 +251,31 @@ def test_the_symptom_sprayer_is_not_valid_and_located(tallies):
 def test_the_gate_holds_and_names_its_known_defects(tallies):
     failures, known = qadv.judge(*tallies)
     assert failures == []
-    assert any("'path-echo'" in line for line in known)
-    assert any("'symptom-quote'" in line for line in known)
-    assert any("'honest' (report_tool)" in line for line in known)
+    assert known and all("'path-echo'" in line for line in known)
     assert "path-echo" in qadv.table(*tallies)
 
 
 def test_a_valid_and_located_guesser_fails_the_gate_unless_it_is_a_known_defect(
         tallies, monkeypatch):
-    """The gate SEES a guesser that passes G1 and G2: with the known-defect entry taken
-    off, the run above is a failure."""
+    """The gate SEES a guesser that passes G1 and G2. Planted on the one known defect:
+    it is printed while the entry stands and fails the gate once the entry is off. A
+    priced adversary that does the same always fails it."""
+    results, paid = tallies
+    located = qadv.Tally(episodes=1, reports=1)
+    located.both, located.available = ["case~seeded: report 0"], 1
+    planted = {**results, ("path-echo", "findings"): located}
+    failures, known = qadv.judge(planted, paid)
+    assert failures == [] and any("G1 (valid) and G2 (located)" in line for line in known)
     monkeypatch.setattr(qadv, "KNOWN_DEFECTS", {})
-    failures, _ = qadv.judge(*tallies)
+    failures, _ = qadv.judge(planted, paid)
     assert failures and all("'path-echo'" in line for line in failures)
     assert any("G1 (valid) and G2 (located)" in line for line in failures)
     assert any("every registered headline gate" in line for line in failures)
+
+    sprayer = qadv.Tally(episodes=1, reports=1)
+    sprayer.passed["G1"], sprayer.both = 1, ["case~seeded: report 0"]
+    failures, _ = qadv.judge({**results, ("symptom-quote", "findings"): sprayer}, paid)
+    assert any("'symptom-quote' (findings) passes G1 and G2 together" in f for f in failures)
 
 
 def test_a_customer_ready_guesser_fails_the_build(tmp_path, monkeypatch, capsys):

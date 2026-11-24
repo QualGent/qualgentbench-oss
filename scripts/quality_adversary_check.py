@@ -34,29 +34,36 @@ it does not fail this gate until it is fixed and taken off `KNOWN_DEFECTS`):
                     the agent harness writes before a screenshot, `[Image: source:
                     <path>]`, whose path holds the case id, the agent and the model. The
                     scorer's grounding text includes that line, so the same words now
-                    count as shown by the device
+                    count as shown by the device and earn G1 where one is an echoable
+                    truth text. G2 no longer locates them (the screenshot is read on a
+                    step the agent only announced: unknown), but the same agent with one
+                    tap after its announcement would be located
 
 G3 (complete) is a rule about the SHAPE of the text, so a guesser may pass it; the first
 two do, on purpose. What stops a guesser is G1, G2 and (when it is registered) G4.
 
 Controls. `honest` is the reference agent: it quotes the screen string the truth file
 measured, at the step the case's reference report names, and files the reference report
-as its bug. It must stay near 1 on G1, G2 and G3. `right-step` is saw-elsewhere and
+as its bug. The device shows it every truth text that report quotes; for a defect that
+only removes text it acts on the step and reads a screen without the text. It must stay
+near 1 on G1, G2 and G3, through both report channels. `right-step` is saw-elsewhere and
 names-elsewhere with the step put right; it must pass G2, or their failures prove
 nothing about the step.
 
 Priced. `symptom-quote` writes the corpus's own symptom vocabulary as prose (the route
 `journey_adversary_check.py` prices, because prose is the only report some defects can
 have), copies the test case's steps, quotes a text the start screen really showed, and
-says it is on the last step. It is not asserted to earn nothing on a seeded build. What
-is asserted is the price: on a clean build every report of its fails G1. What it passes
-on a seeded build is printed, and is a finding about the gates.
+says it is on the last step. Symptom prose earns it G1 on a seeded build, by design, and
+it pays for that on a clean build, where every report of its fails G1. G2 must stop it on
+the seeded build: its quote is no truth text of any defect, and saying "Step N:" without
+acting on the device ties no screen to step N (QUA-3604). It may not pass G1 and G2
+together on any report.
 
     uv run python scripts/quality_adversary_check.py [--app a,b]
 
 Exit 1 when any agent that is not a control has a customer-ready report, when a guesser
-passes G1 and G2 together, when a control falls below its floor, or when the priced
-adversary stops paying.
+or a priced adversary passes G1 and G2 together, when a control falls below its floor, or
+when the priced adversary stops paying.
 """
 
 from __future__ import annotations
@@ -108,16 +115,14 @@ KNOWN_DEFECTS = {
     "path-echo": "the scorer's grounding text includes the harness-written `[Image: "
                  "source: <path>]` line of a screenshot, and the path holds the case id, "
                  "the agent and the model: a quote equal to one of those words counts as "
-                 "shown by the device, earns the catch where it is an echoable truth "
-                 "text, and G2 then finds it on the step the agent says it is on",
+                 "shown by the device and earns the catch (G1) where it is an echoable "
+                 "truth text. G2 answers unknown for it only because this agent never "
+                 "acts on the device after announcing its step",
 }
-#: Controls that fall below the floor today, as `(agent, channel, gate)`, and why.
-KNOWN_CONTROL_GAPS = {
-    ("honest", "report_tool", "G2"):
-        "G2 looks for the WHOLE `observed` text in one device result. Through the report "
-        "tool alone `observed` is the call's `actual`, which a reference report writes as "
-        "a sentence around the quote, so no device output holds it",
-}
+#: Controls that fall below the floor today, as `(agent, channel, gate)`, and why. None:
+#: QUA-3604 made G2 look for the truth text inside `observed`, so a reference report
+#: filed through the report tool alone is located.
+KNOWN_CONTROL_GAPS: dict[tuple[str, str, str], str] = {}
 #: The build each agent runs on. Everything else runs on the seeded build.
 CLEAN_ARM = ("structured-clean",)
 #: How the report reaches the scorer. `findings`: the findings file is the report of
@@ -126,7 +131,8 @@ CLEAN_ARM = ("structured-clean",)
 CHANNELS = ("findings", "report_tool")
 #: The honest control's lowest pass rate on each of G1, G2 and G3 (`Tally.rate`: for G2 a
 #: report the gate could not decide counts against it). Public corpus, findings channel,
-#: when this was written: G1 150/150, G2 138/150, G3 149/150.
+#: after QUA-3604: G1 150/150, G2 144/150 (the other 6 have no screen step in the truth
+#: and are unknown), G3 149/150.
 HONEST_FLOOR = 0.9
 
 #: What the one screen read of an agent that never looked shows: text no case knows.
@@ -249,6 +255,25 @@ def _reference_call(ref, *, failure_step: str | None = None, actual: str | None 
                  failure_step=failure_step or ref.failure_step)
 
 
+def _quoted_truth(spec: dict, bug: str, ref) -> list[str]:
+    """The truth texts of `bug` that the reference report's `actual` quotes, as the
+    report words them (a truth text's `<date>` slot filled with the report's date)."""
+    case = rq.load_case_truth(str(spec.get("app_id") or ""), str(spec.get("case_id") or ""))
+    if isinstance(case, str):
+        return []
+    actual = rq._norm_text(ref.actual)
+    found = (rq._text_re(t).search(actual) for t in rq.symptom_texts(case, bug).shown)
+    return [m.group(0) for m in found if m]
+
+
+def _acted_read(step_text: str, i: int) -> str:
+    """An action the transcript itself ties to one step (it aims at the step's own
+    words), answered with a screen listing that holds none of the case's texts."""
+    listing = json.dumps({"elements": [{"text": START_SCREEN, "x": 0, "y": 0}]})
+    return adv._mcp_lines("claude", f"a{i}", "mobile_tap_and_observe",
+                          {"element_text": step_text}, listing)
+
+
 def _symptoms(spec: dict) -> list[str]:
     return sorted({s for d in (spec.get("defects") or {}).values()
                    for s in (d.get("symptoms") or []) if s})
@@ -277,8 +302,13 @@ def _located(spec: dict, mode: str) -> Guess | None:
         if ref is None or (mode != "honest" and (not quotes or truth is None)):
             continue
         quote = quotes[0] if quotes else ""
+        saw = [quote] if quote else []
         if mode == "honest":
             named = showed = ref.step_number or 1
+            # The honest agent saw what its report says it saw: every truth text the
+            # reference report quotes was on the device at that step.
+            saw += [t for t in _quoted_truth(spec, bug, ref) if t not in saw]
+            quote = quote or (saw[0] if saw else "")
         else:
             steps, shown = truth
             every = range(1, steps.steps + 1)
@@ -291,8 +321,13 @@ def _located(spec: dict, mode: str) -> Guess | None:
                                       if not w <= s <= steps.through(w)), (0, 0))
             if not named:
                 continue                # the truth shows this defect on every step
-        if quote:
-            lines += [_say(showed), _tap(quote, i)]
+        brief = [str(s) for s in spec.get("steps") or []]
+        if saw:
+            lines += [_say(showed), _tap(" | ".join(saw), i)]
+        elif mode == "honest" and 1 <= named <= len(brief):
+            # Nothing to quote: the defect only removes text. It acted on the step and
+            # read a screen that lacks the text.
+            lines += [_say(named), _acted_read(brief[named - 1], i)]
         absent = adv._absences(spec, bug)
         entries.append({"step": named, "screen": "the app", "observed": quote,
                         "expected": absent[0] if absent else "",
@@ -599,6 +634,10 @@ def judge(results: dict, paid: dict) -> tuple[list[str], list[str]]:
             elif t.both:
                 failures.append(f"{who} passes G1 (valid) and G2 (located) together on "
                                 f"{len(t.both)} report(s):" + some(t.both))
+            elif t.passed["G1"] and mode in KNOWN_DEFECTS:
+                known.append(f"{who} is valid (G1) on {t.cell('G1')} report(s), having "
+                             f"seen nothing; G2 passes none of them ({t.unknown} "
+                             f"unknown): {KNOWN_DEFECTS[mode]}")
         elif mode == "honest":
             for g in ("G1", "G2", "G3"):
                 rate = t.rate(g)
@@ -624,13 +663,16 @@ def judge(results: dict, paid: dict) -> tuple[list[str], list[str]]:
             failures.append(f"{who} earns nothing on the seeded build; it has stopped "
                             f"measuring anything")
         if seeded.both:
-            known.append(
+            failures.append(
                 f"{who} passes G1 and G2 together on {len(seeded.both)} of its "
-                f"{seeded.reports} seeded-build report(s), and G3 on {seeded.cell('G3')}, "
-                f"without testing: symptom prose earns G1 (priced, by design), G2 accepts "
-                f"any quote the device answered with on a step the agent only SAID it was "
-                f"on, and the copied test-case steps satisfy G3. Only G4 (replay) and the "
-                f"clean-build price (G1 on {t.cell('G1')} report(s) there) are left")
+                f"{seeded.reports} seeded-build report(s) without testing: symptom prose "
+                f"earns G1 (priced, by design), so G2 must not locate a quote that is no "
+                f"truth text of the defect, on a step the agent only SAID it was on:"
+                + some(seeded.both))
+        if seeded.available:
+            failures.append(f"{who} has {seeded.available} seeded-build report(s) that pass "
+                            f"every registered headline gate (rates block, "
+                            f"`ready_on_available`)")
     return failures, known
 
 
@@ -684,8 +726,8 @@ def main(argv: list[str] | None = None) -> int:
     if not failures:
         honest = results[("honest", "findings")]
         print(f"\nPASS: no guesser, and no priced adversary, has a customer-ready report; "
-              f"no guesser outside the {len(KNOWN_DEFECTS)} known defect(s) passes G1 and G2 "
-              f"together; the honest control passes G1 on {honest.cell('G1')}, G2 on "
+              f"no guesser outside the {len(KNOWN_DEFECTS)} known defect(s), and no priced "
+              f"adversary, passes G1 and G2 together; the honest control passes G1 on {honest.cell('G1')}, G2 on "
               f"{honest.cell('G2')} and G3 on {honest.cell('G3')} of its reports; the "
               f"priced adversary pays on every clean episode")
     return 1 if failures else 0
