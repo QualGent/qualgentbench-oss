@@ -426,6 +426,45 @@ def test_the_scoring_command_writes_the_column_only_with_the_flag(tmp_path, caps
     capsys.readouterr()
 
 
+def test_the_rates_block_carries_the_column_as_data_and_prints_none_of_it(tmp_path):
+    from qualgentbench import quality_rates as qr
+
+    def record(d: Path, judge: bool) -> dict:
+        result = json.loads((d / "result.json").read_text())
+        return qr.episode_record(result, rq.score_episode(d, judge=judge))
+
+    good, poor, unasked = (_episode(tmp_path, "e1", GOOD_STEPS),
+                           _episode(tmp_path, "e2", POOR_STEPS),
+                           _episode(tmp_path, "e3", GOOD_STEPS + ["Tap Back"]))
+    qj.judge_episode(good, Scripted(GOOD_ANSWER))
+    qj.judge_episode(poor, Scripted(POOR_ANSWER))
+    plain = qr.block([record(d, False) for d in (good, poor, unasked)])
+    assert "steps_accuracy" not in plain["rows"][0]
+
+    block = qr.block([record(d, True) for d in (good, poor, unasked)])
+    (row,) = block["rows"]
+    assert row["steps_accuracy"] == {
+        "by": "judge", "judge_accepted": False, "passed": 1, "evaluated": 2,
+        "rate": 0.5, "ci": row["steps_accuracy"]["ci"], "applies": 3, "not_judged": 1,
+        "model": MODEL, "models": [MODEL]}
+    lo, hi = row["steps_accuracy"]["ci"]
+    assert 0 < lo < 0.5 < hi < 1
+    # Nothing else in the row moves, and the printed forms stay silent about it.
+    assert {k: v for k, v in row.items() if k != "steps_accuracy"} == plain["rows"][0]
+    printed = "\n".join(qr.lines(block)) + qr.block_html(block)
+    assert "judge" not in printed.lower() and "steps_accuracy" not in printed
+
+    # Two judge models in one arm: no single model is named. No judged report: no rate.
+    qj.judge_episode(unasked, Scripted(
+        {"steps": GOOD_ANSWER["steps"] + [{"step": 5, "label": "extra", "matches": []}]},
+        model=MODEL + "-b"))
+    mixed = qr.block([record(d, True) for d in (good, unasked)])["rows"][0]["steps_accuracy"]
+    assert (mixed["model"], mixed["models"]) == (None, [MODEL, MODEL + "-b"])
+    assert (mixed["passed"], mixed["evaluated"]) == (2, 2)
+    none = qr.block([record(_episode(tmp_path, "e4"), True)])["rows"][0]["steps_accuracy"]
+    assert (none["evaluated"], none["rate"], none["ci"], none["model"]) == (0, None, None, None)
+
+
 # ── the recorded files: no key, no network ─────────────────────────────────────
 
 @pytest.fixture

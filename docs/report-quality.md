@@ -1082,6 +1082,15 @@ answer fits (no file, another prompt version, changed steps).
 }
 ```
 
+In the per-arm [Report quality block](#the-report-quality-block), an arm with at least
+one episode scored this way gets `rows[].steps_accuracy`: `by`, `judge_accepted` (true
+only when every such episode says so), `passed`, `evaluated`, `rate` and `ci` (the G5
+pass rate with its 95% Wilson interval, `null` when `evaluated` is 0), `applies`,
+`not_judged`, and `model` (`null` when the episodes name more than one judge model; all
+of them are in `models`). An arm with no such episode has no such key. The printed block
+and its HTML do not show the figure; a reader of the data shows it only when
+`judge_accepted` is true.
+
 `evaluated` is the denominator of the G5 pass rate and `passed` its numerator;
 `applies = evaluated + not_judged`. `labels`, `missing_steps` and `reference_steps` sum
 over the judged reports. `precision` and `recall` are rounded to four places.
