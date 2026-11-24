@@ -53,3 +53,6 @@ heldout/
 # Agent worktrees and local Claude Code state. Worktrees are full checkouts, so
 # committing this would nest the repo inside itself.
 .claude/
+
+# Claude Code
+**/settings.local.json
