@@ -1366,6 +1366,66 @@ def _refused_reply(reply: str) -> bool:
     return bool(_REFUSED_REPLY_RE.search(reply or ""))
 
 
+# ── text the HARNESS wrote into a tool result (QUA-3605) ────────────────────────────
+# A tool result reaches the scorer as text, and some of that text never came off the
+# device: the agent harness, its hooks and the host's own adb client write lines of their
+# own into it. Three of them name the EPISODE DIRECTORY, which holds the case id, the
+# agent and the model (`<runs>/<case>/<stamp>_<case>_<agent>_<model>_<arm>_trial-N_ep-…`),
+# so a report quote equal to a piece of that path — a word of the case id, or `work` out
+# of `…-workspace` — was `grounded`, and where that word is an `echo_texts` string it
+# earned the blocking bug with the app never looked at. The same lines reached the screen
+# witness and the present-oracle evidence. `_harness_free` removes them before any journey
+# matcher reads a device result. The inventory, each shape taken from saved transcripts
+# (1,023 of them: both agents, both arms), matched on the lower-cased payload:
+#
+#   * `[Image: source: <path>]`, also `[Image: source: <path>, original WxH, displayed at
+#     WxH. Multiply coordinates by N to map to original image.]` — written by claude-code
+#     beside every image an MCP tool returns (a text block of its own, between the image
+#     and the tool's text). Every screenshot of every claude-code MCP episode has one.
+#     codex records nothing there, so the two agents' grounding text differed by it. Only
+#     an ABSOLUTE path is matched, and never one that is a whole JSON string value: a
+#     label the app drew (`"text": "[Image: source: …]"`, `click on [image] to add`) stays.
+#   * `PreToolUse:<tool> hook error: [<episode>/hooks/…]: …` — the harness's report that
+#     a hook (the step budget's) refused the call. The call never reached the device, so
+#     the WHOLE reply goes, as a refused MCP call's does (`_refused_reply`).
+#   * `Shell cwd was reset to <episode>/workspace` — claude-code's Bash tool, appended to
+#     a command's output on the bare arm.
+#   * `(Bash completed with no output)` — the same tool's stand-in for empty output. It
+#     names no path; it is here because the device said nothing and this says something.
+#   * `<date> <time> <pid> <tid> <L> adb : …` — the HOST adb client's own log line (tag
+#     exactly `adb`; the device's daemon logs as `adbd`), seen as `adb_utils.cpp:316 cannot
+#     mkdir '<episode>/…/.android'`. Bare arm only: it is the client's stderr in the
+#     shell output, never something a device printed.
+#
+# The last three are whole LINES of shell output and are dropped on the bare arm only (an
+# MCP result is never shell output). Deliberately NOT here, because the device tool wrote
+# them about the device and they name nothing of the episode: DevLoop's guidance text
+# (`Next: call mobile_observe_screen …`, `next_action`, `hint`), its `APP EVENT […]: <pkg>
+# crashed … (<exception>)` notice, and adb's own status lines (`UI hierchary dumped to:`,
+# `1 file pulled`), which `_STATUS_ONLY_RE` already keeps from counting as a screen.
+_IMAGE_SOURCE_LINE_RE = re.compile(r'(?<!")\[image: source: /[^\[\]\n"]*\](?!")')
+_HOOK_REFUSAL_RE = re.compile(r"^\s*pretooluse:\S+ hook error:")
+_SHELL_HARNESS_LINE_RE = re.compile(
+    r"""^[ \t]*(?:
+          shell \s cwd \s was \s reset \s to \s .*
+        | \(bash \s completed \s with \s no \s output\)
+        | \d\d-\d\d \s+ \d\d:\d\d:\d\d\.\d+ \s+ \d+ \s+ \d+ \s+ [a-z] \s+ adb \s* : .*
+        )[ \t]*$\n?""",
+    re.MULTILINE | re.VERBOSE)
+
+
+def _harness_free(payload: str, tooling: str = "mcp") -> str:
+    """A device RESULT (lower-cased, as `bugs._ordered_stream` hands it over) without the
+    lines the agent harness, a hook or the host adb client wrote into it — the inventory
+    is above. What is left is what the device tool answered; "" when nothing is."""
+    if not payload or _HOOK_REFUSAL_RE.match(payload):
+        return ""
+    payload = _IMAGE_SOURCE_LINE_RE.sub(" ", payload)
+    if tooling == "raw":
+        payload = _SHELL_HARNESS_LINE_RE.sub("", payload)
+    return payload if payload.strip() else ""
+
+
 def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) -> list[str]:
     """Device payloads in transcript order, normalised for matching (`_device_text`:
     lower-cased, whitespace runs folded like the needle). By default both what the agent
@@ -1381,7 +1441,11 @@ def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) 
     nothing. The reply is paired with its own call the way `_observation_texts` pairs a
     read: on the MCP arm a call enters the stream directly before its result. And it
     drops every REFUSED call's reply, whatever the tool (`_refused_reply`, QUA-2819): an
-    error repeats the call's arguments on read tools too, where the table cannot help."""
+    error repeats the call's arguments on read tools too, where the table cannot help.
+
+    In BOTH forms a result is read without the lines the harness wrote into it
+    (`_harness_free`, QUA-3605: the screenshot's `[Image: source: <episode path>]` line
+    and its kind), and a result that was nothing else is not device text at all."""
     from .bugs import _ordered_stream
     from .interactions import mcp_echoes_argument
     out: list[str] = []
@@ -1394,8 +1458,9 @@ def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) 
                     and (mcp_echoes_argument((last_call or "").split(" ", 1)[0])
                          or _refused_reply(p)))
             last_call = None
-            if not echo:
-                out.append(_device_text(p))
+            shown = _harness_free(p, tooling)
+            if not echo and (shown or not p.strip()):
+                out.append(_device_text(shown))
     return out
 
 
@@ -1448,6 +1513,9 @@ def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = Fal
             call = last_call or ""
             observed = (_mcp_call_reads(call, screen_only) and not _refused_reply(payload)
                         if tooling != "raw" else bool(raw_re.search(call)))
+            # Harness-written lines are not the screen (`_harness_free`, QUA-3605): a read
+            # that came back as an image and the harness's line about it carried no text.
+            payload = _harness_free(payload, tooling)
             if observed and payload.strip():
                 out.append(_device_text(payload) if fold else payload)
             last_call = None
@@ -2079,7 +2147,17 @@ BLOCKER_TIERS = ("L4", "L3")
 #:   term shared with the catch). Both can lower `false_reports` and raise
 #:   precision on a rescore of an earlier verdict; neither moves `bugs_found`, recall or
 #:   completion. Reports carry `known` / `consequence_of`, metrics the two counts.
-SCORER_VERSION = 5
+#: 6 (QUA-3605): lines the HARNESS wrote into a tool result are not device text
+#:   (`_harness_free`): the agent harness's `[Image: source: <episode path>…]` line beside
+#:   a screenshot, a pre-tool hook's refusal, and on the bare arm the shell tool's
+#:   `Shell cwd was reset to <path>` / `(Bash completed with no output)` and the host adb
+#:   client's own log line. Under v5 they were read with the device's answer, so a quote
+#:   equal to a piece of the episode path (a word of the case id, `work` out of
+#:   `…-workspace`) was `grounded` and could earn the blocking bug through `echo_texts`,
+#:   and the same words could witness a case. It can move a v5 verdict in one direction
+#:   only: a quote, witness or outcome text that only a harness line carried stops
+#:   counting. Over 1,023 saved episodes (527 with such lines) none moved.
+SCORER_VERSION = 6
 
 
 def _defect_lookup(m: list[dict]) -> rates.DefectLookup:

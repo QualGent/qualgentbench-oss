@@ -137,7 +137,10 @@ never device text: a report cannot ground itself on its own tool result. Nor is 
 REFUSED call's reply, whatever the tool (`journey._refused_reply`, QUA-2819): the
 server's error envelope repeats the call's own arguments (`Element '<text>' not
 found`, pydantic's `input_value='<x>'`), so it is dropped from grounding and from the
-screen witness while a successful read of the same tool is kept whole. The
+screen witness while a successful read of the same tool is kept whole. Nor are the
+lines the agent harness writes INTO a result (`journey._harness_free`, QUA-3605): the
+`[Image: source: <episode path>]` line beside a screenshot, a pre-tool hook's
+refusal, and the bare arm's shell-tool notices (docs/scoring.md has the table). The
 JS/React/WebView diagnostics are free only because no app in the corpus is React
 Native or a WebView, so they do nothing here. An app like that has to revisit those
 rows before its first board (TODO in `interactions.py`).
