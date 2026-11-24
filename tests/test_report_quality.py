@@ -215,7 +215,11 @@ def test_the_scorer_pin_is_unchanged_and_report_quality_is_outside_the_closure()
 def test_no_scoring_module_imports_report_quality_and_it_imports_none_of_the_package():
     for module in (*SCORING_MODULES, "rescore", "rates", "result"):
         assert "report_quality" not in _package_imports(SRC / f"{module}.py"), module
-    assert _package_imports(SRC / "report_quality.py") == set()
+    # One exception, QUA-3593: the G5 side column is attached on request, by an import
+    # inside `score_episode`. Nothing is imported when the module loads.
+    assert _package_imports(SRC / "report_quality.py") == {"", "quality_judge"}
+    top_level = ast.parse((SRC / "report_quality.py").read_text(encoding="utf-8")).body
+    assert not [n for n in top_level if isinstance(n, ast.ImportFrom) and n.level]
 
 
 def test_scoring_quality_leaves_a_verdict_alone(tmp_path):

@@ -13,7 +13,8 @@ Three rules keep it apart from the ranking:
 * The scoring modules never import it, so it is not in the pinned scorer closure
   (`tests/scorer_closure.py`) and `journey.SCORER_VERSION` does not move when it changes.
   It imports nothing from the package either: what it knows about a report is what the
-  scorer already saved.
+  scorer already saved. (The one exception is on request only: `--quality-judge` attaches
+  the G5 side column from saved judge results, through `quality_judge`.)
 * It has its own version, `QUALITY_VERSION`, stamped into every `quality.json`.
 
 A rescore is a pure function of the saved episode: no clock, no host name, no random
@@ -1553,15 +1554,19 @@ def load_episode(episode_dir: Path | str) -> Episode:
     return Episode(episode_dir, result)
 
 
-def score_episode(episode_dir: Path | str) -> dict[str, Any]:
+def score_episode(episode_dir: Path | str, *, judge: bool = False) -> dict[str, Any]:
     """The quality block of one saved journey episode, as `quality.json` holds it. Reads
     only; `write_quality` saves it. Raises `QualityError` for a directory that is not a
-    scorable journey episode."""
+    scorable journey episode.
+
+    `judge=True` adds the G5 side column (`steps_accuracy`) from the episode's SAVED
+    judge results (`quality_judge.attach`). It calls no model, and it changes no gate
+    and no other total; without it the block is the same as before G5 existed."""
     episode = load_episode(episode_dir)
     metrics = episode.metrics
     reports = [_score_report(episode, r, i) for i, r in enumerate(metrics["reports"])]
     replay = saved_replay(episode)
-    return {
+    quality = {
         # Only when replay results are saved beside the episode: which replayer and
         # replay rules produced the G4 answers above.
         **({"replay": {"replay_version": replay.get("replay_version"),
@@ -1576,6 +1581,12 @@ def score_episode(episode_dir: Path | str) -> dict[str, Any]:
         "reports": reports,
         "totals": _totals(reports),
     }
+    if judge:
+        # The one import from the package, and only on request: the side column lives
+        # in its own module so that nothing here depends on a model.
+        from . import quality_judge
+        quality_judge.attach(episode, quality)
+    return quality
 
 
 def render(quality: dict[str, Any]) -> str:
@@ -1584,12 +1595,12 @@ def render(quality: dict[str, Any]) -> str:
     return json.dumps(quality, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
-def write_quality(episode_dir: Path | str) -> Path:
+def write_quality(episode_dir: Path | str, *, judge: bool = False) -> Path:
     """Score one episode and write `quality.json` beside its `result.json`, through a
     temp file and `os.replace` so a reader never sees half a file. Touches no other
     file. Returns the path written."""
     episode_dir = Path(episode_dir)
-    text = render(score_episode(episode_dir))
+    text = render(score_episode(episode_dir, judge=judge))
     path = episode_dir / QUALITY_FILE
     tmp = episode_dir / f".{QUALITY_FILE}.{os.getpid()}.tmp"
     try:
@@ -1621,6 +1632,10 @@ def main(argv: list[str] | None = None) -> int:
                     "score.")
     ap.add_argument("run_dir", type=Path,
                     help="a runs directory, one run's directory, or one episode directory")
+    ap.add_argument("--quality-judge", action="store_true",
+                    help="also write the G5 side column (steps accurate) from each "
+                         "episode's saved quality_judge.json. Reads saved judge "
+                         "results only; never calls a model. Off by default.")
     args = ap.parse_args(argv)
     if not args.run_dir.is_dir():
         print(f"error: {args.run_dir} is not a directory", file=sys.stderr)
@@ -1628,7 +1643,7 @@ def main(argv: list[str] | None = None) -> int:
     written = skipped = 0
     for ep in episode_dirs(args.run_dir):
         try:
-            write_quality(ep)
+            write_quality(ep, judge=args.quality_judge)
             written += 1
         except QualityError as exc:
             skipped += 1

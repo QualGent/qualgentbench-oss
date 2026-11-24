@@ -282,7 +282,34 @@ def _row(key: tuple, records: list[Mapping[str, Any]]) -> dict[str, Any]:
         sources.setdefault(source, []).append(report)
     row["by_report_source"] = {s: _counts(rs, names, missing)
                                for s, rs in sorted(sources.items())}
+    judged = _steps_accuracy(counted)
+    if judged is not None:
+        row["steps_accuracy"] = judged
     return row
+
+
+def _steps_accuracy(counted: list[Mapping[str, Any]]) -> dict[str, Any] | None:
+    """The G5 side column of one arm (QUA-3593), or None when no counted episode was
+    scored with `--quality-judge`. It is a judged figure: it is in no gate, no funnel
+    and no customer-ready count above, the text and HTML blocks do not print it, and a
+    reader shows it only when `judge_accepted` is true. `evaluated` is the reports a
+    saved judge answer exists for; `model` is the judge model, None when the episodes
+    name more than one (they are then listed in `models`)."""
+    totals = [t for t in ((rec["quality"].get("totals") or {}).get("steps_accuracy")
+                          for rec in counted) if isinstance(t, Mapping)]
+    if not totals:
+        return None
+    passed = sum(int(t.get("passed") or 0) for t in totals)
+    evaluated = sum(int(t.get("evaluated") or 0) for t in totals)
+    models = sorted({str(t["model"]) for t in totals if t.get("model")})
+    rate = _rate(passed, evaluated)
+    return {"by": "judge",
+            "judge_accepted": all(t.get("judge_accepted") is True for t in totals),
+            "passed": passed, "evaluated": evaluated,
+            "rate": rate["rate"], "ci": rate["ci"],
+            "applies": sum(int(t.get("applies") or 0) for t in totals),
+            "not_judged": sum(int(t.get("not_judged") or 0) for t in totals),
+            "model": models[0] if len(models) == 1 else None, "models": models}
 
 
 def block(records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
