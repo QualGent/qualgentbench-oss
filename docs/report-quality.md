@@ -470,3 +470,30 @@ episode). Return
 `GateResult(None, reason)` when the gate does not apply to a report. A gate that ran
 and cannot decide returns `GateResult(None, reason, unknown=True)` and is registered
 with `reports_unknown=True`. A gate must be deterministic and must not write anything.
+
+## The label sample
+
+The gates are rules; whether a rule agrees with a person is checked on a label set,
+`rq-v1`. `scripts/quality_label_sample.py` draws it from scored episodes:
+
+```bash
+uv run python -m qualgentbench.report_quality <run dir>
+uv run python scripts/quality_label_sample.py <run dir> [<run dir> ...] --out <private dir>
+```
+
+It writes `rq-v1-label-sample.json` for the labellers (report text and the app's name;
+no agent, model, episode, case, defect, build or gate result, and no key outside a fixed
+whitelist) and `rq-v1-label-sample-key.json`, which is not for them: `item_id` → `board`
+(the run directory's name), `episode` (its path under that directory) and `report_index`,
+so a label joins to `reports[report_index]` of that episode's `quality.json`.
+
+By default it draws 120 reports that are not neutral: about 20 from clean builds, the
+rest shared equally between the strata of seeded-build reports (the set of headline
+gates a report failed, or `pass`; a gate that answered unknown is named too, as in
+`fail:G3,unknown:G2`, so such reports are never counted as passes or failures of that
+gate), one app at a time inside a stratum. Up to 40 carry
+step labels: the agent's own step list beside the case's steps up to the step the
+defect's reference report names. Order and choice come from SHA-256 of `--seed` and each
+report's place, so the same seed and episodes give the same bytes. The script refuses to
+write inside this repository, because a sample can hold held-out report text
+(`--exclude-heldout` leaves those episodes out).
