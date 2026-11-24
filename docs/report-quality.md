@@ -512,6 +512,9 @@ A report is judged when all three hold:
    each entry rendered as one line exactly as the [label sample](#the-label-sample)
    renders its `step_items`. Otherwise the bug's `steps` text is used when it passes G3's
    steps rule. A summary repeated, or a code investigation, is not a step list.
+   The list is `agent_steps`, not `repro_steps`, so that a judge label and a human label
+   are for the same text: an entry sent as an object is shown as compact JSON, where the
+   stored bug shows its first text field.
 3. The corpus has reference steps for the defect: the case's own steps from step 1 to
    the step that the defect's reference report names. This is the label sample's
    `reference_steps` rule.
