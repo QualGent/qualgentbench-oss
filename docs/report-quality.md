@@ -18,9 +18,11 @@ Report quality never moves the board.
 - The scoring modules do not import it, so it is outside the pinned scorer closure.
   `journey.SCORER_VERSION` and `tests/scorer_pin.txt` do not change when a gate changes.
   `tests/test_report_quality.py` asserts both.
-- The module imports nothing from the rest of the package. What it knows about a report
-  is what the scorer already saved.
-- This version uses no model. Every gate here is a deterministic rule.
+- The module imports nothing from the rest of the package when it loads. What it knows
+  about a report is what the scorer already saved.
+- No gate uses a model. Every gate here is a deterministic rule. The one judged figure,
+  [G5](#g5-steps-accurate-side-column), is a side column: it is off by default, it is
+  read from saved answers, and it is in no gate, no total and no ranking key.
 
 Read a quality number beside the ranking numbers, never in place of them.
 
@@ -443,6 +445,227 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
 | `totals.customer_ready` / `customer_ready_unknown` | scored reports that are ready, and those not yet decidable |
 
 An episode with no report has an empty `reports` list and zero totals.
+
+## G5, steps accurate (side column)
+
+G3 tests that a report has steps. It does not test that they are the right steps, and no
+rule can. G5 asks a model one closed question per report and derives two rates from the
+answer.
+
+- Code: `src/qualgentbench/quality_judge.py`
+- Saved answers: `quality_judge.json`, beside each episode's `result.json`
+- Prompt and answer schema version: `JUDGE_PROMPT_VERSION` (currently `1`)
+
+G5 is not a gate in the sense above. It is not in `GATES`, `HEADLINE_GATES`, a report's
+`gates` map or `totals.gates`, and it never changes `customer_ready`. It is hidden until
+the judge has been checked against human step labels: `JUDGE_ACCEPTED` is `false`, every
+`totals.steps_accuracy` block carries it as `judge_accepted`, and a board or page shows
+the number only when that flag is true, always marked as judged (`"by": "judge"`).
+
+### Two commands
+
+```bash
+uv run python -m qualgentbench.quality_judge <run dir> --model <id>      # asks the model
+uv run python -m qualgentbench.report_quality <run dir> --quality-judge  # reads the answers
+```
+
+Only the first calls a model. The second reads `quality_judge.json` and nothing else;
+with no file, or no answer for a report's steps, the report is recorded as not judged.
+Without `--quality-judge` the scoring command writes the same `quality.json` as before
+G5 existed, whether or not a judge file is there.
+
+The model is configuration: `--model`, else the environment variable
+`QGB_QUALITY_JUDGE_MODEL`. There is no default. It must be a Bedrock inference-profile
+id (`<scope>.<vendor>.<model>`), and the call goes to the Bedrock Runtime Converse API
+with `AWS_BEARER_TOKEN_BEDROCK` and `AWS_REGION`, as the benchmark's other Bedrock calls
+do. There is no other provider and no consumer login.
+
+| Option | Effect |
+|---|---|
+| `--dry-run` | calls nothing and writes nothing; prints how many reports have steps, how many are already answered, how many calls a run would make, and a token estimate |
+| `--max-calls N` | stops asking after N model calls; the rest stay not judged |
+| `--retries N` | extra calls for an answer that does not fit the schema (default 1) |
+| `--fake` | uses a built-in word-overlap stand-in, not a model. No spend. Its answers are not a judgement, and its id (`fake-word-overlap`) is stamped into every file it fills |
+
+The exit code is 1 when a report got no answer, an episode was kept for another model,
+or no journey episode was found.
+
+### Which reports are judged
+
+A report is judged when all three hold:
+
+1. The scorer matched it to a seeded defect. A report that matched none has no "steps up
+   to the defect".
+2. It has a step list. The agent's own list (`agent_steps`) is used when there is one,
+   each entry rendered as one line exactly as the [label sample](#the-label-sample)
+   renders its `step_items`. Otherwise the bug's `steps` text is used when it passes G3's
+   steps rule. A summary repeated, or a code investigation, is not a step list.
+3. The corpus has reference steps for the defect: the case's own steps from step 1 to
+   the step that the defect's reference report names. This is the label sample's
+   `reference_steps` rule.
+
+Every other report has `"applies": false` and is in no G5 count. A list of more than 60
+steps on either side is not sent.
+
+### What the judge is shown
+
+Two numbered lists and a fixed instruction, nothing else:
+
+```
+REFERENCE STEPS
+R1. <case step 1>
+R2. <case step 2>
+
+REPORT STEPS
+S1. <report step 1>
+S2. <report step 2>
+```
+
+The prompt holds no defect id, no truth text, no summary, no expected or observed
+result, no app, case, agent or model name, and no path. A test sends a report through
+the judge and checks each of these.
+
+### The answer
+
+One JSON object with one entry per report step:
+
+```json
+{"steps": [{"step": 1, "label": "correct", "matches": [1]},
+           {"step": 2, "label": "extra", "matches": []}]}
+```
+
+| Label | Meaning |
+|---|---|
+| `correct` | a person can follow the step, and it does what one or more reference steps ask |
+| `ambiguous` | it probably belongs to a reference step but is too vague to follow with certainty |
+| `extra` | it is not in the reference steps and would not stop the reproduction |
+| `wrong` | it contradicts the reference steps, or cannot be done |
+
+`matches` lists the reference steps the step covers (`correct`, `ambiguous`) or gets
+wrong (`wrong`). The answer is refused, and asked for again, when an entry is missing or
+out of order, a label is outside the set, a number is out of range or repeated, a
+`correct` or `ambiguous` step matches nothing, or an `extra` step matches something.
+Anything else in the answer, such as a comment or a score, is dropped.
+
+**Missing steps** are not asked for. They are computed: a reference step is missing when
+no `correct` or `ambiguous` step lists it. A reference step that only a `wrong` step
+lists is missing.
+
+### The two rates
+
+```
+step precision = report steps labelled correct / all report steps
+step recall    = reference steps not missing   / all reference steps
+```
+
+An `ambiguous`, `extra` or `wrong` step is not a correct step. G5 passes when both rates
+are at least `PASS_THRESHOLD` (0.8). The test uses the exact fractions, so 4 of 5 passes.
+
+### `quality_judge.json`
+
+```json
+{
+  "format": "rq-step-judge",
+  "model": "<the judge model id>",
+  "prompt_sha256": "<hash of the prompt version, the instruction and the label set>",
+  "prompt_version": 1,
+  "results": {
+    "<key>": {
+      "labels": ["correct", "wrong", "correct"],
+      "matches": [[1], [2], [4]],
+      "missing_steps": [2, 3],
+      "reference_steps": 4,
+      "report_steps": 3,
+      "step_source": "agent_steps"
+    }
+  },
+  "version": 1
+}
+```
+
+- `<key>` is SHA-256 of (the two step lists, `prompt_sha256`, the model id). A change to
+  any step's text, to the prompt or to the model gives another key, so an old answer is
+  never read for new inputs.
+- `labels[i]` and `matches[i]` belong to report step `i + 1`. `missing_steps` and
+  `matches` hold reference step numbers, counted from 1.
+- The file holds answers only: no step text, no report text, no defect id, no clock and
+  no path. A judge file for a held-out episode therefore holds no held-out text.
+- One file holds one model's answers. Running the judge with another model (or with
+  `--fake`) leaves such an episode alone and exits 1; `--overwrite` replaces the file.
+- A second run finds every key, makes no call and leaves the bytes alone. The file is
+  rewritten only when its text changes, and it then holds exactly the answers for the
+  episode's current reports.
+- An entry that does not fit its report (edited by hand, damaged) is read as no answer.
+- An episode with no report to judge gets no file.
+
+To publish a G5 number, commit each episode's `quality_judge.json` with the board. The
+number then re-derives with `--quality-judge` and no model call.
+
+### In `quality.json`
+
+With `--quality-judge`, every report gets `steps_accuracy` (`null` for a neutral report)
+and the totals get a block of the same name. No other key changes.
+
+```json
+"steps_accuracy": {
+  "applies": true,
+  "by": "judge",
+  "counts": {"ambiguous": 1, "correct": 2, "extra": 1, "missing": 1,
+             "reference_steps": 4, "report_steps": 5, "wrong": 1},
+  "labels": ["correct", "wrong", "correct", "extra", "ambiguous"],
+  "missing_steps": [2],
+  "pass": false,
+  "precision": 0.4,
+  "reason": "precision 2/5, recall 3/4",
+  "recall": 0.75,
+  "step_source": "agent_steps"
+}
+```
+
+A report that is not judged has only `by`, `applies`, `pass` (`null`) and `reason`:
+`applies` is false when G5 has nothing to judge, and true when it has but no saved
+answer fits (no file, another prompt version, changed steps).
+
+```json
+"totals": {
+  "steps_accuracy": {
+    "applies": 1,
+    "by": "judge",
+    "evaluated": 1,
+    "judge_accepted": false,
+    "labels": {"ambiguous": 1, "correct": 2, "extra": 1, "wrong": 1},
+    "missing_steps": 1,
+    "model": "<the judge model id, or null>",
+    "not_judged": 0,
+    "passed": 0,
+    "prompt_version": 1,
+    "reference_steps": 4,
+    "threshold": 0.8
+  }
+}
+```
+
+`evaluated` is the denominator of the G5 pass rate and `passed` its numerator;
+`applies = evaluated + not_judged`. `labels`, `missing_steps` and `reference_steps` sum
+over the judged reports. `precision` and `recall` are rounded to four places.
+
+`QUALITY_VERSION` does not move for G5: a `quality.json` written without the flag is
+unchanged, and no published board was scored with it. A change to the prompt, the labels
+or the answer rules bumps `JUDGE_PROMPT_VERSION`; saved answers of another version are
+then not read, and a test pins the prompt's hash to its version.
+
+### Limits
+
+- The step text is written by the agent under test and is shown to the judge. The
+  instruction says the lists are data, and the answer must fit a closed schema, but a
+  step that argues for its own label is not ruled out. Read the labels when a number
+  looks too good.
+- The reference is the case's own steps. A report that reaches the defect by another
+  valid path is marked down. That is the definition of G5, not a fault of the judge.
+- Few reports carry a step list today, so the pass rate can rest on a small count. Read
+  it with `evaluated` beside it.
+- The judge's agreement with people is not yet measured. Until it is, the number is not
+  shown.
 
 ## The version rule
 

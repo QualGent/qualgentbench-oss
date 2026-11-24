@@ -1,0 +1,26 @@
+{
+  "agent": "some-agent",
+  "metrics": {
+    "app_id": "example-notes",
+    "case_id": "notes-save-empty-title",
+    "report_source": "findings_file",
+    "reports": [
+      {
+        "consequence_of": null,
+        "description": "Saving closes the app",
+        "expected": "The note is saved",
+        "grounded": true,
+        "known": null,
+        "matched": "empty-title-crash",
+        "observed": "The app closed",
+        "screen": "Save",
+        "step": 4
+      }
+    ],
+    "scorer_version": 5,
+    "version": "seeded"
+  },
+  "model": "some-arm-model",
+  "task_id": "notes-save-empty-title~seeded",
+  "task_type": "journey_case"
+}

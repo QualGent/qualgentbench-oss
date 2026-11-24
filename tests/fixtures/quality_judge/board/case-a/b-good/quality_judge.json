@@ -1,0 +1,35 @@
+{
+  "format": "rq-step-judge",
+  "model": "us.example.step-judge-1",
+  "prompt_sha256": "a7d8601667d3d0a7d3c6a2663bea6f89956485eba47c5ed870a07a550be5e155",
+  "prompt_version": 1,
+  "results": {
+    "0d3fcd0ab6177d024ad58661292485dc9f9da7bb9999fa501798d2cd3bdc6e64": {
+      "labels": [
+        "correct",
+        "correct",
+        "correct",
+        "correct"
+      ],
+      "matches": [
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ]
+      ],
+      "missing_steps": [],
+      "reference_steps": 4,
+      "report_steps": 4,
+      "step_source": "agent_steps"
+    }
+  },
+  "version": 1
+}

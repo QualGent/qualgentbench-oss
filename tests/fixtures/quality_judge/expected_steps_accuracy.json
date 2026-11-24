@@ -1,0 +1,130 @@
+{
+  "a-poor": {
+    "reports": [
+      {
+        "applies": true,
+        "by": "judge",
+        "counts": {
+          "ambiguous": 1,
+          "correct": 2,
+          "extra": 1,
+          "missing": 1,
+          "reference_steps": 4,
+          "report_steps": 5,
+          "wrong": 1
+        },
+        "labels": [
+          "correct",
+          "wrong",
+          "correct",
+          "extra",
+          "ambiguous"
+        ],
+        "missing_steps": [
+          2
+        ],
+        "pass": false,
+        "precision": 0.4,
+        "reason": "precision 2/5, recall 3/4",
+        "recall": 0.75,
+        "step_source": "agent_steps"
+      }
+    ],
+    "totals": {
+      "applies": 1,
+      "by": "judge",
+      "evaluated": 1,
+      "judge_accepted": false,
+      "labels": {
+        "ambiguous": 1,
+        "correct": 2,
+        "extra": 1,
+        "wrong": 1
+      },
+      "missing_steps": 1,
+      "model": "us.example.step-judge-1",
+      "not_judged": 0,
+      "passed": 0,
+      "prompt_version": 1,
+      "reference_steps": 4,
+      "threshold": 0.8
+    }
+  },
+  "b-good": {
+    "reports": [
+      {
+        "applies": true,
+        "by": "judge",
+        "counts": {
+          "ambiguous": 0,
+          "correct": 4,
+          "extra": 0,
+          "missing": 0,
+          "reference_steps": 4,
+          "report_steps": 4,
+          "wrong": 0
+        },
+        "labels": [
+          "correct",
+          "correct",
+          "correct",
+          "correct"
+        ],
+        "missing_steps": [],
+        "pass": true,
+        "precision": 1.0,
+        "reason": "precision 4/4, recall 4/4",
+        "recall": 1.0,
+        "step_source": "agent_steps"
+      }
+    ],
+    "totals": {
+      "applies": 1,
+      "by": "judge",
+      "evaluated": 1,
+      "judge_accepted": false,
+      "labels": {
+        "ambiguous": 0,
+        "correct": 4,
+        "extra": 0,
+        "wrong": 0
+      },
+      "missing_steps": 0,
+      "model": "us.example.step-judge-1",
+      "not_judged": 0,
+      "passed": 1,
+      "prompt_version": 1,
+      "reference_steps": 4,
+      "threshold": 0.8
+    }
+  },
+  "c-findings": {
+    "reports": [
+      {
+        "applies": false,
+        "by": "judge",
+        "pass": null,
+        "reason": "the report has no step list"
+      }
+    ],
+    "totals": {
+      "applies": 0,
+      "by": "judge",
+      "evaluated": 0,
+      "judge_accepted": false,
+      "labels": {
+        "ambiguous": 0,
+        "correct": 0,
+        "extra": 0,
+        "wrong": 0
+      },
+      "missing_steps": 0,
+      "model": null,
+      "not_judged": 0,
+      "passed": 0,
+      "prompt_version": 1,
+      "reference_steps": 0,
+      "threshold": 0.8
+    }
+  }
+}
