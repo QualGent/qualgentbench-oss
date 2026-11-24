@@ -30,11 +30,12 @@ from __future__ import annotations
 
 import argparse
 import functools
+import hashlib
 import json
 import os
 import re
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -508,13 +509,22 @@ def gate_reproducible(episode: Episode, report: dict[str, Any], index: int) -> G
 #          and a device result on the step holds that text; or
 #        * the defect is a crash or a hang, which leaves no text of its own: the device
 #          showed the `observed` text on the step, on a screen an action of the agent's
-#          left (not the screen the case starts on); or
+#          left (not the screen the case starts on), and the agent read one of the
+#          step's own screens there; or
 #        * the defect only REMOVES text: a screen the agent read on the step, left by
-#          an action of its own, lacks the text only the clean build shows.
+#          an action of its own, lacks the text only the clean build shows, and is the
+#          screen the truth shows the defect on.
 #
 #      A quote the device did show on the step, but which is no truth text of the
 #      defect, proves nothing either way: unknown. So does a report on missing text
 #      with no such screen (QUA-3604).
+#
+#      "The step's own screens" (QUA-3607): the truth row keeps the texts of the screen
+#      after every route step. A screen listing is one of step N's when it holds a text
+#      recorded on a screen that is up during step N and not on the screen the case
+#      starts on (`step_screen_texts`). An agent's own action, and its saying "Step N:",
+#      do not put it on step N; a screen with none of the step's texts can be any
+#      screen, and lacks every text there is.
 #
 # The scorer's `grounded` asks only whether the quote appeared anywhere in the episode.
 # This gate adds the "where". It reads the saved transcript, the case file and the truth
@@ -828,17 +838,59 @@ def grounding_texts(events: list[_Event]) -> list[str]:
 
 # ── the case and its truth ─────────────────────────────────────────────────────
 
-def _corpus_json(rel: str) -> Any:
-    """A corpus file, read from the held-out directory when it is there, else from the
-    packaged data. None when neither has it."""
-    roots = [Path(os.environ[HELDOUT_ENV]).expanduser()] if os.environ.get(
+def _corpus_file(rel: str) -> tuple[Path, str] | None:
+    """Where a corpus file is read from, as `(path, "heldout" | "packaged")`: the
+    held-out directory when the file is there, else the packaged data. None when
+    neither has it."""
+    roots = [(Path(os.environ[HELDOUT_ENV]).expanduser(), "heldout")] if os.environ.get(
         HELDOUT_ENV, "").strip() else []
-    for root in (*roots, _CORPUS_DIR):
+    for root, source in (*roots, (_CORPUS_DIR, "packaged")):
         path = root / rel
         if path.is_file():
-            stat = path.stat()
-            return _parsed_file(str(path), stat.st_mtime_ns, stat.st_size)
+            return path, source
     return None
+
+
+def _corpus_json(rel: str) -> Any:
+    """A corpus file parsed (`_corpus_file` says which one). None when there is none."""
+    found = _corpus_file(rel)
+    if found is None:
+        return None
+    stat = found[0].stat()
+    return _parsed_file(str(found[0]), stat.st_mtime_ns, stat.st_size)
+
+
+@functools.lru_cache(maxsize=128)
+def _file_sha256(path: str, mtime_ns: int, size: int) -> str | None:
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:12]
+    except OSError:
+        return None
+
+
+def corpus_stamp(episode: Episode) -> dict[str, Any]:
+    """Which corpus stands behind an episode's quality block (QUA-3607).
+
+    `episode` is what the run recorded in `result.json`: the corpus versions the episode
+    ran on. `scored_with` is what G2 read when it scored: for the episode's app, where
+    the test-case file and the truth file came from (`heldout` or `packaged`) and the
+    first 12 hex digits of each file's SHA-256. G2 reads the corpus of the checkout
+    that scores, so the two can differ; a reader that needs them equal compares a run's
+    stamps. No path, no clock: the same episode and corpus give the same stamp."""
+    metrics = episode.metrics
+    app_id = str(metrics.get("app_id") or "")
+    scored: dict[str, Any] = {"source": None, "test_cases_sha256": None,
+                              "truth_sha256": None}
+    for key, rel in (("test_cases_sha256", f"test-cases/{app_id}.yaml"),
+                     ("truth_sha256", f"truth/journey-{app_id}.json")):
+        found = _corpus_file(rel) if app_id else None
+        if found is not None:
+            stat = found[0].stat()
+            scored[key] = _file_sha256(str(found[0]), stat.st_mtime_ns, stat.st_size)
+            scored["source"] = scored["source"] or found[1]
+    return {"episode": {"corpus_version": metrics.get("corpus_version"),
+                        "heldout_version": metrics.get("heldout_version")},
+            "scored_with": scored}
 
 
 @functools.lru_cache(maxsize=64)
@@ -1105,6 +1157,105 @@ def symptom_texts(case: CaseTruth, defect: str) -> SymptomTexts:
     return SymptomTexts(tuple(sorted(shown)), tuple(sorted(lost)))
 
 
+def _truth_screen(row: dict[str, Any], route_step: int,
+                  versions: tuple[str, ...]) -> set[str]:
+    """The texts the truth recorded on the screen after one route step, on the named
+    passes (`clean`, `seeded`). Empty when the pass did not get that far."""
+    out: set[str] = set()
+    screens = row.get("screens")
+    for version in versions:
+        passes = screens.get(version) if isinstance(screens, dict) else None
+        if isinstance(passes, list) and 1 <= route_step <= len(passes) \
+                and isinstance(passes[route_step - 1], list):
+            out.update(str(t) for t in passes[route_step - 1])
+    return out
+
+
+def start_screen_texts(case: CaseTruth,
+                       versions: tuple[str, ...] = ("clean", "seeded")) -> set[str]:
+    """Every text the truth recorded (on the named passes) before the route's first
+    action: the screen after its first step and after the steps that follow it without
+    acting (`launch`, then `wait`). What an agent can read without doing anything."""
+    start: set[str] = set()
+    for r, route_step in enumerate(case.route, 1):
+        if r > 1 and _acts(route_step):
+            break
+        start |= _truth_screen(case.row, r, versions)
+    return start
+
+
+def _shown_in(texts: Iterable[str]) -> str:
+    """Screen texts as one string a truth text is looked for in."""
+    return _norm_text(" \n ".join(sorted(texts)))
+
+
+#: The shortest text that can tell one screen from another: "14", "+5", "Wed" and "1m"
+#: are on a launcher's date as well. A text with no letter in it ("10:00") has to be
+#: longer still ("$ 75.00").
+MIN_SCREEN_TEXT_CHARS = 4
+MIN_SCREEN_NUMBER_CHARS = 6
+
+
+def _tells_screens_apart(text: str) -> bool:
+    plain = _needle(text).replace(_DATE_SLOT, "").strip()
+    return len(plain) >= (MIN_SCREEN_TEXT_CHARS if any(c.isalpha() for c in plain)
+                          else MIN_SCREEN_NUMBER_CHARS)
+
+
+def step_screen_texts(case: CaseTruth, step: int,
+                      versions: tuple[str, ...] = ("clean", "seeded"),
+                      only: Iterable[int] | None = None) -> tuple[re.Pattern[str], ...]:
+    """The texts that tell brief step `step`'s screens from the screen the case starts
+    on: every text the truth recorded (on the named passes) on a screen that is up
+    during the step, less every text it recorded before the route's first action.
+
+    A screen is up during a step when it was left by a route step that can belong to
+    it, or by an earlier one whose screen stays up into it (`StepMap.through`): the
+    screen a step starts on is one of its screens. The start screen is taken out
+    because an agent reads it without doing anything: a text that is also there says
+    nothing about how far the agent got (QUA-3607). So are texts too short to tell
+    screens apart (`MIN_SCREEN_TEXT_CHARS`), and, when only the clean pass is asked,
+    every text that is also on a screen only the seeded pass recorded: for a build that
+    dies those are the launcher's screens, which an agent reaches with HOME.
+
+    `only` keeps the screens of those route steps alone: the screens on which the truth
+    shows a defect, not every screen that is up during the step (the screen a step
+    STARTS on lacks whatever the step is about to put there).
+
+    Empty when the truth's screens for the step hold nothing the start screen lacks; the
+    truth then cannot tell them apart."""
+    steps = step_map(case)
+    start = start_screen_texts(case)
+    wanted = None if only is None else set(only)
+    texts: set[str] = set()
+    for r, (first, last) in enumerate(steps.spans, 1):
+        if first <= step <= steps.through(last) and (wanted is None or r in wanted):
+            texts |= _truth_screen(case.row, r, versions)
+    # Matched as a quote is matched, on token boundaries: a text is on the start screen
+    # when a longer text there holds it ("Add" in "Add to favorites").
+    elsewhere = set(start)
+    if "seeded" not in versions:
+        every = range(1, len(case.route) + 1)
+        elsewhere |= ({t for r in every for t in _truth_screen(case.row, r, ("seeded",))}
+                      - {t for r in every for t in _truth_screen(case.row, r, ("clean",))})
+    not_the_step = _shown_in(elsewhere)
+    return tuple(p for t, p in ((t, _text_re(t)) for t in sorted(texts - elsewhere))
+                 if p is not None and not p.search(not_the_step)
+                 and _tells_screens_apart(t))
+
+
+def _at_step(seen: list[_Seen], step: int, texts: tuple[re.Pattern[str], ...],
+             lacking: Iterable[re.Pattern[str]] = ()) -> bool:
+    """Did the agent read, on `step` and after an action of its own, a screen listing
+    that holds one of `texts` (and, when `lacking` is given, lacks one of those)? This
+    is what ties a screen to the truth's step: a listing with none of the step's texts
+    can be any screen."""
+    lacking = tuple(lacking)
+    return any(s.surely(step) and s.acted and s.screen
+               and any(p.search(s.text) for p in texts)
+               and not (lacking and all(p.search(s.text) for p in lacking)) for s in seen)
+
+
 # ── which step each device result belongs to ───────────────────────────────────
 
 @dataclass(frozen=True)
@@ -1122,6 +1273,9 @@ class _Seen:
     acted: bool = False
     #: Below `first`: a step the agent announced and has not acted on (possible only).
     low: int | None = None
+    #: That action was put on its step by what it aimed at (a text of the step's own
+    #: sentence or route), not only by the agent saying "Step N:" before it.
+    fitted: bool = False
 
     def surely(self, step: int) -> bool:
         return self.first <= step <= self.sure_last
@@ -1143,6 +1297,7 @@ class _Where:
     last: int
     sure: bool
     acted: bool = False       # an action on the device, not the screen the case starts on
+    fitted: bool = False      # its own target put it on `first`, not an announcement
 
 
 def attribute_steps(events: list[_Event], case: CaseTruth) -> list[_Seen]:
@@ -1220,11 +1375,11 @@ def attribute_steps(events: list[_Event], case: CaseTruth) -> list[_Seen]:
             if ahead:
                 current = ahead[0]
                 mark(current)
-                last_action = _Where(current, current, True, acted=True)
+                last_action = _Where(current, current, True, acted=True, fitted=True)
             elif announced:
                 last_action = _Where(current, current, True, acted=True)
             elif fits:
-                last_action = _Where(fits[-1], current, True, acted=True)
+                last_action = _Where(fits[-1], current, True, acted=True, fitted=True)
             else:
                 last_action = _Where(current, steps.steps, False, acted=True)
                 waiting.append(last_action)
@@ -1248,7 +1403,8 @@ def attribute_steps(events: list[_Event], case: CaseTruth) -> list[_Seen]:
         low = None
         if said is not None:                    # announced, not acted on: possible only
             last, low = max(last, steps.through(said)), min(first, said)
-        seen.append(_Seen(text, first, sure_last, last, acted=where.acted and where.sure, low=low))
+        seen.append(_Seen(text, first, sure_last, last, acted=where.acted and where.sure,
+                          low=low, fitted=where.fitted and where.sure))
     return seen
 
 
@@ -1308,14 +1464,17 @@ def gate_located(episode: Episode, report: dict[str, Any], index: int) -> GateRe
                   holds it
       a death     a crash or a hang has no text of its own unless Android puts up a
                   dialog. Without one: the device showed `observed` on the step, on a
-                  screen an action of the agent's left
+                  screen an action of the agent's left, and the agent read one of the
+                  step's own screens (`step_screen_texts`, clean pass) on that step
       an absence  the defect removes text. A screen the agent read on the step, left by
-                  an action of its own, lacks the text only the clean build shows
+                  an action of its own, lacks the text only the clean build shows, and
+                  is the screen the truth shows the defect on (`_absence_seen`)
 
     Unknown (never a pass, never a fail) when the truth has no step for the defect, when
     the transcript does not say which step the calls belong to, when the device showed
-    the quote on the step but it is no truth text of the defect, and when a report on
-    missing text has no screen that settles it."""
+    the quote on the step but it is no truth text of the defect, when a report on
+    missing text has no screen that settles it, and when nothing the agent read on the
+    step is one of the step's own screens where the rule asks for one."""
     defect = report.get("matched")
     if not defect:
         return GateResult(None, "not run: the report matched no seeded defect")
@@ -1348,6 +1507,19 @@ def gate_located(episode: Episode, report: dict[str, Any], index: int) -> GateRe
         each = [hits for hits in ([s for s in seen if p.search(s.text)] for p in quoted)
                 if hits]
         if each and all(any(s.surely(step) for s in hits) for hits in each):
+            # The screen diff can carry a text that the CLEAN build shows too, on the
+            # screen the case starts on (the two builds differ at one step, not
+            # everywhere). Seeing only such texts shows the start screen; the step's own
+            # screen has to be there too. A text only the seeded build's start screen
+            # shows is the defect, wherever the agent read it.
+            at_start = _shown_in(start_screen_texts(case, ("clean",)))
+            if all(p.search(at_start) for p in quoted) and not _at_step(
+                    seen, step, step_screen_texts(case, step)):
+                return _unknown(f"the device showed the observed text on step {step}, "
+                                "but the screen the case starts on shows it too, and no "
+                                "screen the agent read on that step holds a text the "
+                                "truth recorded on that step's screens and not on the "
+                                "start screen")
             return GateResult(True, f"step {step}: the truth {where} {defect} there and "
                                     "the device showed the observed text on that step")
         if any(s.surely(step) for hits in each for s in hits):
@@ -1357,9 +1529,19 @@ def gate_located(episode: Episode, report: dict[str, Any], index: int) -> GateRe
     hits = [s for s in seen if quote and quote in s.text]
     on_step = [s for s in hits if s.surely(step)]
     if kind == "crash" and any(s.acted for s in on_step):
-        return GateResult(True, f"step {step}: the truth crashes {defect} there, the agent "
-                                "acted on that step and the device showed the observed "
-                                "text on it")
+        # The agent's own action, and its saying "Step N:", do not put it on step N: one
+        # tap anywhere after the announcement would do (QUA-3607). A screen it read on
+        # the step must be one of the step's screens as the truth recorded them. Only
+        # the clean pass is asked: the seeded pass's screens after the death are the
+        # launcher's, which an agent reaches from anywhere.
+        if _at_step(seen, step, step_screen_texts(case, step, ("clean",))):
+            return GateResult(True, f"step {step}: the truth crashes {defect} there, the "
+                                    "agent acted on that step, read one of that step's "
+                                    "screens and the device showed the observed text on it")
+        return _unknown(f"the device showed the observed text on step {step} after an "
+                        "action of the agent's, but no screen it read there holds a text "
+                        "the truth recorded on that step's screens and not on the start "
+                        "screen: nothing shows the agent had reached the step")
     # A defect that removes text has nothing to quote. The report says what is missing
     # in `expected`; a defect that shows no text at all here can only be reported so.
     expected = _norm_text(report.get("expected"))
@@ -1368,11 +1550,18 @@ def gate_located(episode: Episode, report: dict[str, Any], index: int) -> GateRe
     # Where the defect also SHOWS text, a quote the device never showed on this step
     # is judged as a quote (below); the absence does not excuse it.
     if missing and (not texts.shown or not quote or any(s.possibly(step) for s in hits)):
-        if any(s.surely(step) and s.acted and s.screen
-               and not any(p.search(s.text) for p in missing) for s in seen):
+        # A screen that lacks the text settles it only when it is the step's screen: a
+        # listing with none of the step's texts lacks every text there is (QUA-3607).
+        if _absence_seen(case, seen, step, route_steps, missing):
             return GateResult(True, f"step {step}: the truth shows {defect} there as "
-                                    "missing text, and a screen the agent read on that "
-                                    "step lacks it")
+                                    "missing text, and the screen it shows that on, read "
+                                    "by the agent on that step, lacks it")
+        if _at_step(seen, step, (re.compile(""),), lacking=missing):
+            return _unknown(f"the truth shows {defect} at step {step} as missing text; a "
+                            "screen the agent read on that step lacks it, but that screen "
+                            "holds no text the truth recorded on the screens it shows "
+                            "the defect on and not on the start screen: it may be any "
+                            "screen")
         return _unknown(f"the truth shows {defect} at step {step} as missing text; no "
                         "screen the agent read on that step, after acting on it, settles "
                         "whether the text is missing")
@@ -1385,6 +1574,116 @@ def gate_located(episode: Episode, report: dict[str, Any], index: int) -> GateRe
         return _unknown(f"the device showed the observed text on step {step}, but it is "
                         f"none of the texts the truth measured for {defect}")
     return _not_on_step(hits, step)
+
+
+def _symptom_screen_texts(case: CaseTruth, step: int, route_steps: list[int],
+                          missing: list[re.Pattern[str]]) -> tuple[
+                              tuple[re.Pattern[str], ...], tuple[re.Pattern[str], ...]]:
+    """For a defect that removes text: the texts of the seeded pass's screens at the
+    route steps the truth shows it on (those up during `step`), less the missing text
+    itself. `(the ones the start screen lacks, all of them that can tell screens
+    apart)`."""
+    steps = step_map(case)
+    every: set[str] = set()
+    for r in route_steps:
+        if 1 <= r <= len(steps.spans) and steps.spans[r - 1][0] <= step <= steps.through(
+                steps.spans[r - 1][1]):
+            every |= _truth_screen(case.row, r, ("seeded",))
+    kept = tuple(p for t, p in ((t, _text_re(t)) for t in sorted(every))
+                 if p is not None and _tells_screens_apart(t)
+                 and not any(m.search(_norm_text(t)) for m in missing))
+    own = {p.pattern for p in step_screen_texts(case, step, ("seeded",), only=route_steps)}
+    return tuple(p for p in kept if p.pattern in own), kept
+
+
+def _absence_seen(case: CaseTruth, seen: list[_Seen], step: int, route_steps: list[int],
+                  missing: list[re.Pattern[str]]) -> bool:
+    """Did the agent read, on `step` and after an action of its own, the screen the
+    truth shows the missing text on, without that text?
+
+    "Without that text": the screen lacks one or more of the texts the report names as
+    missing (`missing`). Not every one has to be gone: a defect that drops the bottom
+    tabs `Overview`, `Medicine` and `Analysis` leaves `Medicine settings` on the screen,
+    and that still holds the word.
+
+    A listing with none of the case's texts lacks every text there is, and so does the
+    start screen, and so does the screen the step STARTS on (the step has not put the
+    text there yet). So the screen has to be the truth's: it holds a text the seeded
+    pass recorded on the screens it shows the defect on. Where one of those texts is
+    not on the start screen, it must be one of those. Where none is (the defect shows on
+    the start screen again, less one text: a list after Save and Back), any of them
+    will do, and the agent must ALSO have read, on the step, a screen that holds a text
+    of the step's own screens: that is what shows it got there (QUA-3607)."""
+    own, every = _symptom_screen_texts(case, step, route_steps, missing)
+    if own:
+        return _at_step(seen, step, own, lacking=missing)
+    return (_at_step(seen, step, every, lacking=missing)
+            and _at_step(seen, step, step_screen_texts(case, step)))
+
+
+# Why no report of a defect can pass G2, whatever the agent did (`defect_coverage`).
+NO_TRUTH = "no_truth"                # no usable case or truth row for the episode
+NOT_IN_TRUTH = "not_in_truth"        # the truth row does not list the defect
+NO_SCREEN_STEP = "no_screen_step"    # the truth recorded no screen for it (stored data only)
+NO_STEP_SCREEN = "no_step_screen"    # it only removes text, and no screen the truth
+#                                      recorded both lacks the text and can be told
+#                                      from the start screen
+
+
+def _never_located(case: CaseTruth | str, defect: str) -> str | None:
+    """Why G2 can never pass a report of `defect` on this case, or None when it can.
+    These are the answers `gate_located` gives before it looks at the transcript."""
+    if isinstance(case, str):
+        return NO_TRUTH
+    kind, route_steps = symptom_route_steps(case.row, defect)
+    if not kind:
+        return NOT_IN_TRUTH
+    shown = symptom_brief_steps(case, route_steps)
+    if not shown:
+        return NO_SCREEN_STEP
+    texts = symptom_texts(case, defect)
+    if kind != "blocking" or texts.shown:
+        return None                  # a text to quote, or a death: a report can pass
+    lost = [p for p in map(_text_re, texts.lost) if p is not None]
+    steps = step_map(case)
+    for step in shown:
+        for one in lost:             # a report that names this one text as missing
+            own, every = _symptom_screen_texts(case, step, route_steps, [one])
+            if not own and not step_screen_texts(case, step):
+                continue             # nothing tells any screen of this step apart
+            for r, (first, last) in enumerate(steps.spans, 1):
+                screen = _shown_in(_truth_screen(case.row, r, ("seeded",)))
+                if r in route_steps and first <= step <= steps.through(last) \
+                        and any(p.search(screen) for p in (own or every)) \
+                        and not one.search(screen):
+                    return None
+    return NO_STEP_SCREEN
+
+
+def defect_coverage(episode: Episode) -> dict[str, dict[str, Any]]:
+    """For each seeded defect present in the episode (`bugs_present`): can ANY report of
+    it be customer-ready under this scoring? `{defect: {coverable, located_never,
+    replay_excluded}}`.
+
+    `located_never`   why G2 answers unknown for every report of the defect (a code
+                      above), or null
+    `replay_excluded` the code G4's saved replay excluded the defect with, or null
+                      (also null while no replay of it is saved)
+    `coverable`       false when either is set: the defect is in the yield's
+                      denominator and can never be in its numerator
+
+    This is the ceiling of the customer-ready yield, reported beside it (QUA-3607)."""
+    case, _ = _located_context(episode)
+    entries = (saved_replay(episode) or {}).get("reports")
+    excluded = {str(e.get("defect")): str(e["excluded"])
+                for e in (entries if isinstance(entries, list) else [])
+                if isinstance(e, dict) and e.get("excluded")}
+    out: dict[str, dict[str, Any]] = {}
+    for defect in (str(d) for d in episode.metrics.get("bugs_present") or []):
+        never = _never_located(case, defect)
+        out[defect] = {"coverable": never is None and defect not in excluded,
+                       "located_never": never, "replay_excluded": excluded.get(defect)}
+    return out
 
 
 def _not_on_step(hits: list[_Seen], step: int) -> GateResult:
@@ -1738,6 +2037,10 @@ def score_episode(episode_dir: Path | str, *, judge: bool = False) -> dict[str, 
         **({"replay": {"replay_version": replay.get("replay_version"),
                        "replayer": replay.get("replayer")}} if replay else {}),
         "quality_version": QUALITY_VERSION,
+        # Which corpus the episode ran on and which one G2 read to score it.
+        "corpus": corpus_stamp(episode),
+        # Each seeded defect present: can a report of it be customer-ready at all?
+        "defects": defect_coverage(episode),
         # The scorer whose `matched` / neutral marks the gates read (None on a verdict
         # saved before the scorer stamped its version).
         "scorer_version": metrics.get("scorer_version"),

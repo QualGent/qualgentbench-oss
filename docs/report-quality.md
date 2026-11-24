@@ -73,7 +73,7 @@ G1 decides nothing new. It reads the `matched` field the scorer saved.
 
 A gate can also answer **unknown**: it ran and the saved episode does not hold enough
 to decide. Unknown is never a pass. It is counted on its own (`totals.gates.<id>.unknown`)
-and is in neither `evaluated` nor `passed`. Only G2 answers unknown today.
+and is in neither `evaluated` nor `passed`. G2 and G4 can answer unknown.
 
 A report is **customer-ready** when it passes every headline gate (G1 to G4). Gates are
 not averaged: a clear report of something that is not a defect fails G1 and is not
@@ -102,7 +102,10 @@ G2 runs on a report that passed G1. It passes when all three hold:
 2. **The truth file shows the matched defect at that step.**
 3. **The device shows the defect's symptom on that step**, in a result that the agent's
    own actions on the device tie to the step. What that asks depends on what the defect
-   leaves on the screen ("What the quote has to be", below).
+   leaves on the screen ("What the quote has to be", below). Where the symptom is not a
+   text only the seeded build shows (a death with no dialog, text that is missing), the
+   agent must also have read one of **the step's own screens** as the truth recorded
+   them ("The step's own screens", below).
 
 It reads the saved transcript (`agent/transcript.txt`), the brief the agent was sent
 (`instruction_sent.md`), and the corpus's case file and truth file for the case. It does
@@ -197,20 +200,51 @@ the device showed anywhere is looked for:
   surely on the step and one is possibly on it;
 - **fail**: the device showed them on other steps only, or showed none of them.
 
+A truth text can also be on the screen the case starts on, on the clean build as well:
+the screen diff records a string that differs at one step, not one that differs
+everywhere. When every truth text the report quotes is of that kind, seeing it shows the
+start screen and nothing more, so the agent must also have read one of the step's own
+screens there; without one the answer is unknown. A text that only the seeded build's
+start screen shows is the defect itself, wherever the agent read it.
+
 **A death.** Most crashes put up no dialog: the app is gone and the agent sees the home
-screen. A report then has no truth text to quote. It passes when the device showed its
-`observed` text on the named step, on a screen that an action of the agent's left. The
-screen the case starts on, read by an agent that has not acted, is not such a screen:
-unknown.
+screen. A report then has no truth text to quote. It passes when both hold:
+
+- the device showed its `observed` text on the named step, on a screen that an action of
+  the agent's left (the screen the case starts on, read by an agent that has not acted,
+  is not such a screen);
+- the agent read one of the step's own screens on that step, as the truth's **clean**
+  pass recorded them. The seeded pass is not asked: its screens after the death are the
+  launcher's, which an agent reaches with HOME from anywhere.
+
+With the first and not the second the answer is unknown, never a fail. An agent's own
+action does not put it on a step: one tap anywhere after saying "Step N:" would do.
 
 **An absence.** A defect can remove text and add none. The report cannot quote what is
 not there; it names the text in `expected`. When `expected` holds a text the seeded build
 lost, or the defect shows no text at all, G2 looks for a screen listing that the agent
-read on the named step, left by an action of its own, that lacks the text:
+read on the named step, left by an action of its own, that lacks the text **and is the
+screen the truth shows the defect on**:
 
-- **pass**: there is one;
-- **unknown**: there is none (every screen on the step still shows the text, or the
-  agent read no screen there). Never a fail.
+- it holds a text the seeded pass recorded on the screens of the defect's route steps
+  and not on the start screen; or,
+- where those screens hold no such text (the defect shows on the start screen again,
+  less one string: a list after Save and Back), it holds any text of those screens, and
+  the agent also read one of the step's own screens on the step.
+
+The screen "lacks the text" when one or more of the texts the report names as missing
+are not on it. Not every one has to be gone: a defect that drops the bottom tabs
+`Overview`, `Medicine` and `Analysis` leaves `Medicine settings` on the screen, which
+still holds the word.
+
+A listing with none of the case's texts lacks every text there is. So does the start
+screen, and so does the screen a step *starts* on, because the step has not put the text
+there yet. None of them settles anything.
+
+- **pass**: there is such a screen;
+- **unknown**: there is none (every screen on the step still shows the text, the agent
+  read no screen there, or the screen that lacks the text cannot be told to be the
+  step's). Never a fail.
 
 Where the defect also shows text, a quote that the device showed only on other steps, or
 never, is still judged as a quote and fails.
@@ -220,6 +254,37 @@ step, but it is none of the defect's texts and nothing above applies, G2 answers
 unknown. The truth file records only the strings that differ between the two builds. A
 string that is on both builds' screens can be a true observation ("the Notes field is
 empty") or the start screen's title, and the truth cannot tell which.
+
+#### The step's own screens
+
+The truth row keeps the texts of the screen after every route step, on the clean pass and
+on the seeded pass (`screens`). The texts that tell brief step N's screens from the
+screen the case starts on are:
+
+- every text on a screen that is up during step N: a screen left by a route step that
+  can belong to step N, or by an earlier one whose screen stays up into it (the screen a
+  step starts on is one of its screens);
+- less every text the truth recorded before the route's first action, on either pass.
+  An agent reads the start screen without doing anything, so a text that is also there
+  says nothing about how far it got. A text counts as "also there" when a longer text on
+  the start screen holds it on token boundaries (`Add` in `Add to favorites`);
+- less texts too short to tell screens apart: under 4 characters, or under 6 with no
+  letter in them (`Wed`, `14`, `10:00` are on a launcher's date and clock as well);
+- when only the clean pass is asked (a death), less every text on a screen only the
+  seeded pass recorded.
+
+The agent "read one of the step's own screens" when a screen listing in a result that is
+surely on the step, after an action of its own, holds one of those texts. When the list
+is empty, the truth cannot tell the step's screens from the start screen, and the answer
+is unknown.
+
+This is what stops an agent that never finds out where it is. Before this rule
+(QUA-3607), an agent that wrote symptom prose, copied `expected` from the brief, and on
+each step said "Step N:", tapped one point and read a screen with nothing on it, passed
+G1 and G2 on 99 of the 150 public defects: 56 as a crash "seen" after its own action and
+43 as text "missing" from a screen that was never the step's. It now passes on none of
+those. `scripts/quality_adversary_check.py` runs three such agents (`blind-tap`,
+`blind-type`, `blind-home`).
 
 #### What grounds a quote
 
@@ -241,7 +306,12 @@ lists and normalisers with the scorer's own.
 - The device showed the quote on the named step, but it is no truth text of the defect.
 - Part of the quote was on the named step and the rest only on other steps.
 - A crash report's quote is on the screen the case starts on and the agent had not acted.
-- A report on missing text has no screen on the step that lacks the text.
+- A crash report's quote is on the named step after the agent's action, but no screen
+  the agent read there is one of the step's own.
+- A report on missing text has no screen on the step that lacks the text, or the screen
+  that lacks it cannot be told to be the screen the truth shows the defect on.
+- Every truth text the report quotes is also on the clean build's start screen, and the
+  agent read none of the step's own screens there.
 
 #### Limits
 
@@ -256,10 +326,27 @@ lists and normalisers with the scorer's own.
 - **A quote the agent read later.** A crash can leave no dialog until the agent opens
   the app again. A report that quotes that dialog and names the step that crashed passes
   only when the agent was still on that step when the dialog came up.
-- **A crash step reached by one blind action.** For a crash with no dialog, rule 3 asks
-  for the agent's own action, not for the right action. An agent that says "Step N:",
-  taps anything once and reads the screen satisfies it at step N. Rules 1 and 2 still
-  have to hold, and so does G1.
+- **A defect on the screen the case starts on.** Seven public defects show a text there
+  that only the seeded build has (a misspelt tab title, a wrong count). An agent that
+  reads that screen and quotes that text has seen the defect where it is, with no step
+  of the test case done, and G2 locates it. The truth holds nothing that tells this from
+  a tester who noticed the typo. G4 is the gate meant to stop it: its control replays
+  the reference report with the steps deleted, and a defect that shows without steps is
+  excluded from replay. The adversary check lists this as a known residue with its
+  count, and fails when the count grows.
+- **A step whose screens are the start screen.** When the truth's screens for a step
+  hold nothing the start screen lacks, a death or an absence reported at that step is
+  unknown whatever the agent did. So is a crash that happens before the agent has read
+  any screen the start screen differs from, and a report whose device read was taken
+  before the screen had filled in.
+- **An agent that does the steps and then guesses.** The step's own screens show that
+  the agent got to the step. They do not show that it did the step's action: an agent
+  that reaches the right screen, does something else and sees the launcher is located
+  on a crash step.
+- **Measured.** On four saved boards (483 valid reports) the rule moved G2 from 356 pass
+  / 41 fail / 86 unknown to 354 / 41 / 88, and on 97 valid reports of older local runs
+  from 76 / 12 / 9 to 73 / 12 / 12. Every changed answer went from pass to unknown; none
+  became a fail.
 - **A true observation the truth did not measure.** A report that quotes text which is
   the same on both builds is unknown, although a person would call it located.
 - G2 reads the corpus of the checkout that scores, not the corpus the episode ran on.
@@ -445,6 +532,24 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
 
 ```json
 {
+  "corpus": {
+    "episode": {
+      "corpus_version": "<12 hex>",
+      "heldout_version": null
+    },
+    "scored_with": {
+      "source": "packaged",
+      "test_cases_sha256": "<12 hex>",
+      "truth_sha256": "<12 hex>"
+    }
+  },
+  "defects": {
+    "<defect id>": {
+      "coverable": false,
+      "located_never": "no_screen_step",
+      "replay_excluded": null
+    }
+  },
   "quality_version": 1,
   "reports": [
     {
@@ -552,6 +657,9 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
 | Field | Meaning |
 |---|---|
 | `quality_version` | `QUALITY_VERSION` of the code that wrote the file |
+| `corpus.episode` | the `corpus_version` and `heldout_version` the episode ran on, as `result.json` recorded them |
+| `corpus.scored_with` | what G2 read when it scored, for the episode's app: `source` (`packaged`, `heldout`, or null when the corpus has no file for the app) and the first 12 hex digits of the SHA-256 of the test-case file and of the truth file. G2 reads the corpus of the checkout that scores, so this can differ from `corpus.episode`; no path and no clock is in it |
+| `defects.<id>` | one entry per seeded defect present in the episode (`bugs_present`): can any report of it be customer-ready under this scoring? `located_never` is why G2 answers unknown for every report of it, or null: `no_truth` (no usable case or truth row), `not_in_truth`, `no_screen_step` (the truth recorded no screen for it), `no_step_screen` (it only removes text, and no screen the truth recorded can settle a report). `replay_excluded` is the code a saved replay excluded the defect with, or null. `coverable` is false when either is set |
 | `scorer_version` | the scorer version recorded in `result.json`; its marks are what the gates read |
 | `scorer_report_source` | where the SCORER read the episode's reports, as `result.json` records it (`findings_file`, `transcript_write`, `result_line`, `report_tool`). Named `report_source` before the customer-shaped report existed |
 | `reports[]` | one entry per report, in the order `result.json` lists them |
@@ -577,8 +685,10 @@ run, because no replay is saved beside this episode; a reader must treat a gate 
 absent from `gates` (a file written before the gate existed) the same as one that did
 not run.
 
-`quality.json` does not copy `bugs_present`. A figure that needs the seeded defects of
-the episode (the yield below) reads them from `result.json`.
+`quality.json` does not copy `bugs_present`; `defects` has the same ids as its keys, and
+a figure that needs the seeded defects of the episode (the yield below) still reads them
+from `result.json`. A file written before `corpus` and `defects` existed has neither; a
+reader treats the yield's ceiling as not known for it.
 
 ## G4: replay from the report
 
@@ -596,8 +706,14 @@ split in two:
   a journey episode of that case is staged: the same defects switched on, the same
   fixtures, the same pinned clock, the same check that the starting screen is right.
 - **Brief.** The customer-shaped report (title, steps, expected result, actual result,
-  failed-at) and the instruction to reproduce it. The replayer does not get the test
-  case, the truth file or the first agent's transcript. Its working directory is named
+  failed-at) and the instruction to reproduce it. The steps are what the customer sees:
+  the bug's `repro_steps` (the agent's own step list, as the bug stores it) when the
+  report has them, numbered unless the agent numbered them; only a report without them
+  gets the bug's `steps` text. For a report-tool bug with no code investigation that
+  text is the summary repeated, so replaying it for a report that did list its steps
+  would be the evidence-removed control (`quality_replay.replay_fields`). The reference
+  report and the control are not affected. The replayer does not get the test case, the
+  truth file or the first agent's transcript. Its working directory is named
   `replay-<12 hex>`, which names neither the case nor the defect.
 - **Budget.** Tool calls: `budget_factor` (2) times the length of the case's reference
   route, `check.steps`. A case with no recorded route keeps its journey budget.
@@ -672,15 +788,32 @@ uv run qualgent-bench run --mode journey --quality-replay <run dir> --quality-re
 uv run qualgent-bench run --mode journey --quality-replay <run dir> \
     --agent <agent> --models <model> --mcp-server <url> --device <serial>
 
-# Rebuild the saved files from the replay episodes. No device, no agent.
-uv run python -m qualgentbench.quality_replay fold <run dir> --agent <agent> --model <model>
+# Rebuild the saved files from the replay episodes. No device, no agent. Name the
+# replayer the episodes were run under, all of it.
+uv run python -m qualgentbench.quality_replay fold <run dir> --agent <agent> --model <model> \
+    --provider <provider> --tooling <mcp|raw>
 ```
+
+`fold` folds only the episodes of the replayer it is given. An episode saved under
+another fingerprint (agent, model, provider, tooling, `give_test_case`, budget, `textless`
+or replay version) measured something else. When the replay directory holds such
+episodes, `fold` writes nothing, prints how the fingerprints differ and exits 2:
+a fold under the wrong replayer would find no episode of its own and rewrite every saved
+G4 answer to "not measured". Leave `--provider` out only when the replays were run
+without one. `--allow-other-replayer` folds this replayer's episodes anyway and prints
+how many it left out; the plan (`--quality-replay-plan`, or `quality_replay plan`) prints
+the same count, as `other_replayer` in its JSON. Exit codes: 0 folded, 2 refused or
+another error.
+
+A fold rewrites each touched episode's `quality.json` and keeps every column it does not
+compute: an episode scored with `--quality-judge` keeps its G5 side column.
 
 The run command prints the plan and asks `Continue?` like any other run; without a
 terminal it needs `--yes`. `--quality-replay-max N` caps the episodes started.
 `--quality-replay-unit KEY` runs one unit, for a fan-out over several machines; the keys
 are in `--quality-replay-plan --quality-replay-json`. Run it again to continue: the
-replay episodes on disk are the state, and nothing is replayed twice.
+replay episodes on disk are the state, and nothing is replayed twice. The run command itself
+folds with the other replayers' episodes left out, after printing their count in the plan.
 
 Replay episodes are saved under `<run dir>/quality-replay/` (`--quality-replay-dir`
 moves it). Several boards replayed by the same replayer can share one directory, and
@@ -710,6 +843,10 @@ different one on the command line is refused; `--quality-replay-config` runs an
 experiment under another file. The replayer and the rules are stamped into every replay
 episode, into `quality_replay.json` and into `quality.json` (`replay`).
 
+`REPLAY_VERSION` (currently `2`) is part of the fingerprint. It moves when the brief, the
+verdict rule or the budget rule changes; version 2 is the brief that gives `repro_steps`.
+No replay was ever run under version 1.
+
 `scripts/quality_replay_pilot.py` is how the replayer is chosen. For each candidate it
 replays the reference reports of the same 10 public defects (ceiling 3 times, control
 once: at most 40 episodes per candidate) and prints one line per candidate: ceiling,
@@ -723,10 +860,10 @@ per valid report:
 
 ```json
 {
-  "replay_version": 1,
+  "replay_version": 2,
   "replayer": {"agent": "<agent>", "model": "<model>", "provider": null, "tooling": "mcp",
                "give_test_case": false, "budget_factor": 2.0, "budget_floor": 0,
-               "textless": "canary_only", "replay_version": 1, "attempts": 1,
+               "textless": "canary_only", "replay_version": 2, "attempts": 1,
                "ceiling_attempts": 3, "ceiling_min": 2, "control_attempts": 1},
   "reports": [
     {
@@ -753,7 +890,7 @@ per valid report:
 |---|---|
 | `index` | the report's position in `result.json`'s `metrics.reports` |
 | `defect` | the defect the report was matched to when it was replayed. G4 ignores an entry whose defect is no longer the report's `matched` |
-| `status` | `replayed`, `excluded` (the defect is out of G4), `pending` (ceiling, control or the replay itself not run yet) or `unavailable` (the replay could not be run) |
+| `status` | `replayed`, `excluded` (the defect is out of G4), `pending` (ceiling, control or the replay itself not run yet, and still to be run) or `unavailable` (it could not be run: the replay itself, or the defect's ceiling or control, failed to run more often than `max_retries` allows and was given up) |
 | `reproduced` | true or false when `status` is `replayed`, else null |
 | `basis` | `canary_and_text` or `canary_only` |
 | `excluded` | null, or one of the codes above |
@@ -770,7 +907,12 @@ In `quality.json`, G4 is `reports[].gates.G4` and `totals.gates.G4` (`evaluated`
 |---|---|
 | `pass: true` / `pass: false` | the report was replayed and the verdict is in |
 | `pass: null` (did not run) | the report is not valid; no replay is saved; the saved replay is for another defect; or the replay is still `pending` |
-| `pass: null`, `unknown: true` | the defect is excluded from replay, or the replay could not be run (`unavailable`) |
+| `pass: null`, `unknown: true` | the defect is excluded from replay, or the replay, its ceiling or its control could not be run (`unavailable`) |
+
+A given-up ceiling or control is `unavailable`, not `pending`. Nothing is left to wait
+for, so its reports are unknown beside the rate; saved as pending, one such report kept
+its whole arm "not measured" for ever. To try again, delete the replay episodes that
+did not run and run the replay again.
 
 The Report quality block reads these the same way as every other gate. A report that
 failed nothing and whose G4 did not run is waiting, so its arm's customer-ready rate is
@@ -843,9 +985,13 @@ customer_ready_rate      = reports that passed EVERY headline gate (G1, G2, G3, 
                            (a report left undecided by an unknown answer is in neither
                            side; the count and its share of scored reports are printed)
 customer_ready_yield     = seeded DEFECTS with >= 1 customer-ready report
-                           / seeded defects present
-                           (per defect per episode, the denominator of catch_rate:
-                           `bugs_present` of each counted episode's result.json)
+                           / seeded defects with a decided answer
+                           (per defect per episode: `bugs_present` of each counted
+                           episode's result.json, less the defects left unknown. A
+                           defect is unknown when no report of it is ready and one or
+                           more of its reports failed nothing and is undecided by an
+                           unknown answer. Printed beside it: the defects present, the
+                           unknown ones, and how many could be covered at all)
 reports_per_defect       = matched reports / defects found
                            (a ratio, not a rate: 1.00 means no defect was reported
                            twice. A defect found in two episodes counts twice.
@@ -857,6 +1003,25 @@ complete_if_steps_carried = reports that would pass G3 if the bug stored the age
 
 One failed headline gate makes a report not ready, whatever the other gates say. This
 is the same rule as `reports[].customer_ready`.
+
+**One rule for unknown.** An unknown answer is in neither side of the rate, so it is in
+neither side of the yield. Take three defects with one report each: one ready, one whose
+defect replay excluded, one G2 could not decide. The rate is 1/1. Counting the two
+unknown defects as misses would make the yield 1/3 for the same reports, and an arm
+could raise its rate and lower its yield by nothing but the truth's gaps. The yield is
+1/1 with `unknown: 2` and `present: 3` beside it. A defect that no report matched, or
+whose every report failed a gate, is a miss and stays in the denominator.
+
+**The ceiling.** Some defects can never be covered, whatever the agent writes: the truth
+holds no screen for the defect, so G2 answers unknown for every report of it
+(`defects.<id>.located_never` in `quality.json`), or replay excluded it from G4
+(`replay_excluded`). `coverable` is the number of defects present that are neither, and
+`not_coverable_by` counts the rest by reason (`no_screen_step`, `replay:control`, ...).
+An exclusion from replay is a fact about the (case, defect), so it counts for every
+counted episode of that case in the block, also for an arm that never reported the
+defect. Read the yield against `coverable`, not against `present`: in the public corpus
+6 of the 150 (case, defect) pairs have no screen step. `coverable` is `null` when a
+counted episode's `quality.json` was written before the `defects` map existed.
 
 ### Which gates were available
 
@@ -931,8 +1096,8 @@ it in the manifest. `records` come from `quality_rates.episode_record(result, qu
 | `rows[].gates_available`, `gates_missing` | see "Which gates were available" |
 | `rows[].gates.<id>` | `name`, `available`, `evaluated`, `passed`, `unknown`, `not_run`, `rate`, `ci` |
 | `rows[].customer_ready` | `measured`, `ready`, `not_ready`, `unknown`, `waiting`, `k` (= `ready`), `n` (= `ready` + `not_ready`), `rate`, `ci`, `unknown_share` (= `unknown` / `scored`) |
-| `rows[].customer_ready_yield` | `measured`, `k`, `n`, `rate`, `ci` |
-| `rows[].ready_on_available` | `gates`, `k`, `n`, `rate`, `ci`, `unknown`, and `yield` = `{k, n, rate, ci}` |
+| `rows[].customer_ready_yield` | `measured`, `k`, `n` (the defects with a decided answer: `present` − `unknown`), `rate`, `ci`, `present` (seeded defects present), `unknown`, `coverable`, `not_coverable`, `not_coverable_by` (reason → count) |
+| `rows[].ready_on_available` | `gates`, `k`, `n`, `rate`, `ci`, `unknown`, and `yield` = `{k, n, rate, ci, present, unknown}` |
 | `rows[].reports_per_defect` | `matched_reports`, `defects_found`, `value`, `repeats` = `{k, n, rate, ci}` |
 | `rows[].complete_if_steps_carried` | `{k, n, rate, ci}` |
 | `rows[].funnel[]` | one stage per headline gate: `gate`, `name`, `measured`, `entered`, `passed`, `failed`, `unknown`, `not_run` |
@@ -941,6 +1106,12 @@ it in the manifest. `records` come from `quality_rates.episode_record(result, qu
 
 `rate` is rounded to four places and `ci` is `[lo, hi]`; both are `null` when `n` is 0
 or the figure is not measured. `ready + not_ready + unknown + waiting = scored`.
+
+`format` is still 1: `present`, `unknown`, `coverable`, `not_coverable` and
+`not_coverable_by` were added to the yield (QUA-3607) and no key was renamed or removed.
+The yield's `n` is the one value whose meaning moved: it was every defect present, and
+is now the decided ones, so that `k`/`n` is still the `rate` beside it. The two are
+equal whenever `unknown` is 0.
 
 ## G5, steps accurate (side column)
 
@@ -1222,9 +1393,19 @@ By default it draws 120 reports that are not neutral: about 20 from clean builds
 rest shared equally between the strata of seeded-build reports (the set of headline
 gates a report failed, or `pass`; a gate that answered unknown is named too, as in
 `fail:G3,unknown:G2`, so such reports are never counted as passes or failures of that
-gate), one app at a time inside a stratum. Up to 40 carry
+gate), one app at a time inside a stratum. A gate that did not run is not named, so
+`pass` holds a report that passed G4 and one G4 never ran for. `--name-not-run` gives
+the second its own stratum (`not_run:G4`); it is off by default, because `rq-v1` was
+drawn without it and with it the same episodes give other bytes (the key then records
+`targets.name_not_run`). Up to 40 carry
 step labels: the agent's own step list beside the case's steps up to the step the
 defect's reference report names. Order and choice come from SHA-256 of `--seed` and each
 report's place, so the same seed and episodes give the same bytes. The script refuses to
 write inside this repository, because a sample can hold held-out report text
 (`--exclude-heldout` leaves those episodes out).
+
+Each line of `step_items` is sanitised as the other fields of the customer-shaped report
+are (`report_quality.sanitize_text`), and the judge renders its steps the same way, so a
+credential an agent typed into a step reaches neither a labeller nor the judge. No step
+of the drawn `rq-v1` sample holds such text: drawn again from the same episodes and
+seed, both files have the bytes they had.

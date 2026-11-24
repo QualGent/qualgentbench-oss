@@ -59,6 +59,23 @@ the seeded build: its quote is no truth text of any defect, and saying "Step N:"
 acting on the device ties no screen to step N (QUA-3604). It may not pass G1 and G2
 together on any report.
 
+Blind (priced the same way: symptom prose for G1, paid for on the clean build).
+`blind-tap`, `blind-type` and `blind-home` add what `symptom-quote` lacks, an action on
+the device after each "Step N:": a tap on a point of the start screen, the phrases the
+step's own sentence quotes typed into nothing, or HOME. Each then reads the screen and
+quotes a text the device really showed. None of those screens is a screen of any step,
+so G2 may not locate them: a crash is not "seen" because the agent did something and
+read a screen, and text is not "missing" from a screen that was never the step's
+(QUA-3607; before it the first of these passed G1 and G2 on 99 of 150 public defects).
+
+Known residue of the blind agents (`KNOWN_RESIDUE`, printed, bounded): 7 public defects
+show a text on the screen the case STARTS on that only the seeded build shows there (a
+misspelt tab title, a wrong count). An agent that reads that screen and happens to quote
+that text has seen the defect where it is, without one step of the test case, and G2
+locates it. The truth holds nothing that tells this from a tester who noticed the typo.
+The gate meant to stop it is G4: its evidence-removed control replays the reference
+report with the steps deleted, and a defect that shows with no steps is excluded there.
+
     uv run python scripts/quality_adversary_check.py [--app a,b]
 
 Exit 1 when any agent that is not a control has a customer-ready report, when a guesser
@@ -104,7 +121,9 @@ adv = _sibling("journey_adversary_check")
 GUESSERS = ("steps-copy", "structured-clean", "brief-fill", "saw-elsewhere",
             "names-elsewhere", "id-echo", "path-echo")
 #: Earns G1 through symptom prose by design; measured, and asserted to pay on a clean build.
-PRICED = ("symptom-quote",)
+PRICED = ("symptom-quote", "blind-tap", "blind-type", "blind-home")
+#: The priced adversaries that act on the device without looking where they are.
+BLIND = ("blind-tap", "blind-type", "blind-home")
 CONTROLS = ("honest", "right-step")
 LOCATED = ("honest", "right-step", "saw-elsewhere", "names-elsewhere")
 #: Guessers that DO pass G1 and G2 together today, and why. Each is a defect outside
@@ -119,6 +138,20 @@ KNOWN_DEFECTS = {
                  "truth text. G2 answers unknown for it only because this agent never "
                  "acts on the device after announcing its step",
 }
+#: Priced adversaries that pass G1 and G2 together on a bounded set of defects, as
+#: `agent: (the most (case, defect) pairs, why)`. Printed on every run; one pair more
+#: fails the gate. Measured on the public corpus (150 seeded (case, defect) pairs).
+_START_VISIBLE = (
+    "the defect shows on the screen the case starts on, in a text only the seeded build "
+    "has there. An agent that reads that screen and quotes that text saw the defect "
+    "where it is, with no step of the test case done, and G2 locates it: the truth "
+    "holds nothing that tells this from a tester who noticed it. G4 is the gate meant "
+    "to stop it (its control replays the reference report with the steps deleted; a "
+    "defect that shows without steps is excluded from replay)")
+KNOWN_RESIDUE: dict[str, tuple[int, str]] = {
+    "blind-tap": (7, _START_VISIBLE),
+    "blind-type": (7, _START_VISIBLE),
+}
 #: Controls that fall below the floor today, as `(agent, channel, gate)`, and why. None:
 #: QUA-3604 made G2 look for the truth text inside `observed`, so a reference report
 #: filed through the report tool alone is located.
@@ -131,8 +164,8 @@ CLEAN_ARM = ("structured-clean",)
 CHANNELS = ("findings", "report_tool")
 #: The honest control's lowest pass rate on each of G1, G2 and G3 (`Tally.rate`: for G2 a
 #: report the gate could not decide counts against it). Public corpus, findings channel,
-#: after QUA-3604: G1 150/150, G2 144/150 (the other 6 have no screen step in the truth
-#: and are unknown), G3 149/150.
+#: after QUA-3607 as after QUA-3604: G1 150/150, G2 144/150 (the other 6 have no screen
+#: step in the truth and are unknown), G3 149/150.
 HONEST_FLOOR = 0.9
 
 #: What the one screen read of an agent that never looked shows: text no case knows.
@@ -140,8 +173,9 @@ START_SCREEN = "Lorem ipsum dolor"
 #: Reproduction steps with the right shape and no content: G3 passes them.
 BOILERPLATE_STEPS = ("Launch the app", "Tap through the steps of the test case",
                      "Verify the result on the last screen")
-#: The agent and model in the made-up episode path of `path-echo` (any would do).
-PATH_AGENT, PATH_MODEL = "claude-code", "claude-opus-5"
+#: The agent and model in the made-up episode path of `path-echo` (any would do; these
+#: name no real agent or model).
+PATH_AGENT, PATH_MODEL = "agent-cli", "model-x1"
 
 
 @dataclasses.dataclass
@@ -266,12 +300,121 @@ def _quoted_truth(spec: dict, bug: str, ref) -> list[str]:
     return [m.group(0) for m in found if m]
 
 
-def _acted_read(step_text: str, i: int) -> str:
+def _acted_read(step_text: str, i: int, texts: list[str] | None = None,
+                extra: str = "") -> str:
     """An action the transcript itself ties to one step (it aims at the step's own
-    words), answered with a screen listing that holds none of the case's texts."""
-    listing = json.dumps({"elements": [{"text": START_SCREEN, "x": 0, "y": 0}]})
+    words), answered with a screen listing of `texts` (none: a text no case knows) and
+    whatever else the device said (`extra`)."""
+    listing = _listing(texts or [START_SCREEN])
     return adv._mcp_lines("claude", f"a{i}", "mobile_tap_and_observe",
-                          {"element_text": step_text}, listing)
+                          {"element_text": step_text}, f"{extra} {listing}".strip())
+
+
+def _listing(texts: list[str]) -> str:
+    """A screen listing with one element per text, each at its own point."""
+    return json.dumps({"elements": [{"text": t, "x": 40 + 7 * i, "y": 90 + 31 * i}
+                                    for i, t in enumerate(texts)]})
+
+
+def _case_truth(spec: dict) -> rq.CaseTruth | None:
+    case = rq.load_case_truth(str(spec.get("app_id") or ""), str(spec.get("case_id") or ""))
+    return None if isinstance(case, str) else case
+
+
+def _start_texts(spec: dict) -> list[str]:
+    """What the device shows an agent that has done nothing: the screen the truth's
+    seeded pass recorded before the route's first action. The texts the clean pass does
+    not have there come first: the worst case for the gate is the agent that happens to
+    quote one of them."""
+    case = _case_truth(spec)
+    if case is None:
+        return []
+    seeded = rq.start_screen_texts(case, ("seeded",)) or rq.start_screen_texts(case)
+    clean = rq._shown_in(rq.start_screen_texts(case, ("clean",)))
+    usable = sorted(t for t in seeded if rq._text_re(t))
+    return sorted(usable, key=lambda t: rq._text_re(t).search(clean) is not None)
+
+
+def _launcher_texts(spec: dict) -> list[str]:
+    """What the device shows after HOME, for a case whose seeded build dies: the texts
+    the truth's seeded pass recorded and its clean pass never did, which are the
+    launcher's, less the wording of the crash dialog (HOME does not put that up).
+    Empty for any other case: there the difference is the defect's own text."""
+    case = _case_truth(spec)
+    blocking = str(case.row.get("blocking") or "") if case else ""
+    if case is None or rq.symptom_route_steps(case.row, blocking)[0] != "crash":
+        return []
+    every = range(1, len(case.route) + 1)
+    clean = {t for r in every for t in rq._truth_screen(case.row, r, ("clean",))}
+    seeded = {t for r in every for t in rq._truth_screen(case.row, r, ("seeded",))}
+    dialog = [p for p in map(rq._text_re, rq.symptom_texts(case, blocking).shown) if p]
+    in_app = rq._norm_text(" \n ".join(sorted(clean)))
+    return sorted(t for t in seeded - clean if rq._text_re(t)
+                  and not rq._text_re(t).search(in_app)        # the app's own, re-cased
+                  and not any(p.search(rq._norm_text(t)) for p in dialog))
+
+
+def _step_screens(spec: dict, step: int, bug: str) -> list[list[str]]:
+    """What the device shows an agent that really is on `step` of the seeded build: each
+    screen the truth's seeded pass recorded during that step, in route order. For a
+    build that dies there, the clean pass's: what was up before the death (the seeded
+    pass's own screens are the launcher's from then on)."""
+    case = _case_truth(spec)
+    if case is None:
+        return []
+    dies = rq.symptom_route_steps(case.row, bug)[0] == "crash"
+    steps = rq.step_map(case)
+    out: list[list[str]] = []
+    for r, (first, last) in enumerate(steps.spans, 1):
+        screen = sorted(rq._truth_screen(case.row, r, ("clean" if dies else "seeded",)))
+        if first <= step <= steps.through(last) and screen and screen not in out:
+            out.append(screen)
+    return out
+
+
+def _blind(spec: dict, mode: str) -> Guess:
+    """An agent that never finds out where it is (QUA-3607). It writes the corpus's own
+    symptom vocabulary as prose (G1, priced), copies the brief's outcome into
+    `expected`, and names every step. On each step it says "Step N:", does ONE thing
+    and reads the screen, which is still the screen the case starts on:
+
+      blind-tap    taps a point of the start screen
+      blind-type   types the phrases the step's own sentence quotes (an action the
+                   transcript ties to the step), else taps
+      blind-home   presses HOME and reads the launcher
+
+    It quotes a text the device really showed. Nothing it read is a screen of any
+    step, so G2 may not locate it: not as a crash "seen" after its own action, and not
+    as text "missing" from a screen that was never the step's."""
+    brief = [str(s) for s in spec.get("steps") or []]
+    last = max(len(brief), 1)
+    outcome = str(spec.get("expected_outcome") or "the expected outcome")
+    prose = "; ".join(_symptoms(spec)) or adv.VAGUE
+    start = _start_texts(spec) or [START_SCREEN]
+    shown = (_launcher_texts(spec) or [START_SCREEN]) if mode == "blind-home" else start
+    screen = _listing(shown)
+    lines = [_read(_listing(start), 0)]
+    for s in range(1, last + 1):
+        lines.append(_say(s))
+        typed = adv._QUOTED_RE.findall(brief[s - 1]) if s <= len(brief) else []
+        if mode == "blind-home":
+            lines.append(adv._mcp_lines("claude", f"h{s}", "mobile_press_button",
+                                        {"button": "HOME"}, "Pressed HOME"))
+        elif mode == "blind-type" and typed:
+            lines += [adv._mcp_lines("claude", f"t{s}-{j}", "mobile_type_text", {"text": q},
+                                     f"Set focused field to: '{q}'")
+                      for j, q in enumerate(typed)]
+        else:
+            el = json.loads(screen)["elements"][s % len(shown)]
+            lines.append(adv._mcp_lines("claude", f"b{s}", "mobile_tap",
+                                        {"x": el["x"], "y": el["y"]}, screen))
+        lines.append(_read(screen, s))
+    quote = shown[0]
+    entries = [{"step": s, "screen": "the app", "observed": quote, "expected": outcome,
+                "description": prose} for s in range(1, last + 1)]
+    return Guess("\n".join(lines) + "\n", entries, call=_call(
+        summary=prose, steps_text=_numbered(brief), steps=brief, expected=outcome,
+        actual=quote, failure_step=f"Step {last}"))
 
 
 def _symptoms(spec: dict) -> list[str]:
@@ -322,13 +465,16 @@ def _located(spec: dict, mode: str) -> Guess | None:
             if not named:
                 continue                # the truth shows this defect on every step
         brief = [str(s) for s in spec.get("steps") or []]
-        if saw:
-            lines += [_say(showed), _tap(" | ".join(saw), i)]
-        elif mode == "honest" and 1 <= named <= len(brief):
-            # Nothing to quote: the defect only removes text. It acted on the step and
-            # read a screen that lacks the text.
-            lines += [_say(named), _acted_read(brief[named - 1], i)]
         absent = adv._absences(spec, bug)
+        if mode in CONTROLS and 1 <= named <= len(brief):
+            # A control got to the step it names, so the device showed it that step's
+            # screen as the truth recorded it, and the texts it quotes.
+            first, *later = _step_screens(spec, named, bug) or [[]]
+            lines += [_say(named), _acted_read(brief[named - 1], i, first, " | ".join(saw)),
+                      *(_read(_listing(screen), 100 * (i + 1) + j)
+                        for j, screen in enumerate(later))]
+        elif saw:
+            lines += [_say(showed), _tap(" | ".join(saw), i)]
         entries.append({"step": named, "screen": "the app", "observed": quote,
                         "expected": absent[0] if absent else "",
                         "description": adv._symptom(spec, bug) or ref.summary})
@@ -409,6 +555,9 @@ def guess(task, mode: str, seeded: dict | None = None) -> Guess | None:
             summary=adv.VAGUE, steps_text=_numbered(BOILERPLATE_STEPS),
             steps=list(BOILERPLATE_STEPS), expected=word, actual=word,
             failure_step=f"Step {last}"))
+
+    if mode in BLIND:
+        return _blind(spec, mode)
 
     if mode in PRICED:
         prose = "; ".join(_symptoms(spec)) or adv.VAGUE
@@ -522,6 +671,8 @@ class Tally:
     passed: dict = dataclasses.field(default_factory=lambda: {"G1": 0, "G2": 0, "G3": 0})
     unknown: int = 0                       # G2 could not decide
     both: list = dataclasses.field(default_factory=list)      # G1 and G2 on one report
+    #: The same reports as `(task id, defect, G2's reason)`.
+    located: list = dataclasses.field(default_factory=list)
     ready: list = dataclasses.field(default_factory=list)     # customer-ready claims
     reasons: dict = dataclasses.field(default_factory=dict)   # G2 not-a-pass reason -> count
     misses: list = dataclasses.field(default_factory=list)    # each G1/G2 answer not a pass
@@ -551,7 +702,14 @@ class Tally:
                                    f"{g2.get('reason')}")
         self.both += [f"{task_id}: report {r['index']} (step {r['step']}, matched "
                       f"{r['matched']})" for r in valid_and_located(quality)]
+        self.located += [(task_id, r["matched"], r["gates"]["G2"]["reason"])
+                         for r in valid_and_located(quality)]
         self.ready += [f"{task_id}: {claim}" for claim in ready_claims(quality)]
+
+    @property
+    def located_defects(self) -> set[tuple[str, str]]:
+        """The (case, defect) pairs with a report that passed G1 and G2 together."""
+        return {(task_id, str(defect)) for task_id, defect, _ in self.located}
 
     def rate(self, g: str) -> float | None:
         """Passed over the reports the gate ran on. For G2 the reports it could not
@@ -662,13 +820,23 @@ def judge(results: dict, paid: dict) -> tuple[list[str], list[str]]:
         if not seeded.passed["G1"]:
             failures.append(f"{who} earns nothing on the seeded build; it has stopped "
                             f"measuring anything")
+        bound, why = KNOWN_RESIDUE.get(mode, (0, ""))
+        pairs = len(seeded.located_defects)
+        if seeded.both and mode in KNOWN_RESIDUE and pairs <= bound:
+            known.append(
+                f"{who} passes G1 and G2 together on {len(seeded.both)} of its "
+                f"{seeded.reports} seeded-build report(s), on {pairs} (case, defect) "
+                f"pair(s) (bound {bound}); {seeded.available} of them pass every "
+                f"registered headline gate: {why}" + some(seeded.both))
+            continue
         if seeded.both:
             failures.append(
                 f"{who} passes G1 and G2 together on {len(seeded.both)} of its "
-                f"{seeded.reports} seeded-build report(s) without testing: symptom prose "
-                f"earns G1 (priced, by design), so G2 must not locate a quote that is no "
-                f"truth text of the defect, on a step the agent only SAID it was on:"
-                + some(seeded.both))
+                f"{seeded.reports} seeded-build report(s), on {pairs} (case, defect) "
+                f"pair(s)" + (f", above its known residue of {bound}" if bound else "")
+                + " without testing: symptom prose earns G1 (priced, by design), so G2 "
+                "must not locate a report on a step the agent only SAID it was on, or "
+                "acted on without reaching one of that step's screens:" + some(seeded.both))
         if seeded.available:
             failures.append(f"{who} has {seeded.available} seeded-build report(s) that pass "
                             f"every registered headline gate (rates block, "
@@ -727,7 +895,7 @@ def main(argv: list[str] | None = None) -> int:
         honest = results[("honest", "findings")]
         print(f"\nPASS: no guesser, and no priced adversary, has a customer-ready report; "
               f"no guesser outside the {len(KNOWN_DEFECTS)} known defect(s), and no priced "
-              f"adversary, passes G1 and G2 together; the honest control passes G1 on {honest.cell('G1')}, G2 on "
+              f"adversary beyond its known residue, passes G1 and G2 together; the honest control passes G1 on {honest.cell('G1')}, G2 on "
               f"{honest.cell('G2')} and G3 on {honest.cell('G3')} of its reports; the "
               f"priced adversary pays on every clean episode")
     return 1 if failures else 0

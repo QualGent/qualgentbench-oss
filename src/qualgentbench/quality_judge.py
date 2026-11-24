@@ -118,10 +118,11 @@ def render_step(step: Any) -> str:
     """One entry of the agent's step list as one line of text: a string keeps its words
     (whitespace collapsed), anything else is compact JSON with sorted keys. The same
     rendering as the label sample's `step_items`, so a judge label and a human label are
-    for the same text (a test compares the two functions)."""
+    for the same text (a test compares the two functions). Sanitised as the label
+    sample's is, so a credential in a step is not sent to the judge either."""
     if not isinstance(step, str):
         step = json.dumps(step, sort_keys=True, ensure_ascii=False, separators=(", ", ": "))
-    return " ".join(step.split())
+    return rq.sanitize_text(" ".join(step.split()))
 
 
 def render_steps(agent_steps: Any) -> list[str]:

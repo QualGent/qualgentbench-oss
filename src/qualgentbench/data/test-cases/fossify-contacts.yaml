@@ -189,12 +189,10 @@ test_cases:
           summary: The Contacts tab label is misspelled
           steps:
             - Launch Fossify Contacts.
-            - Tap the + button (Create new contact).
-            - Type "Alice" into the First name field.
-            - Tap Save.
+            - Open the contacts list, the first tab at the bottom (it is the tab the app starts on).
           expected: The bottom tabs read "Contacts", "Favorites" and "Groups".
-          actual: The first tab reads "Contatcs". It is misspelled from launch on, before and after the contact is created.
-          failure_step: 'Step 4: Read the contacts list'
+          actual: The first tab reads "Contatcs". It is misspelled from launch on, before any contact is created.
+          failure_step: 'Step 1: Tap the + button to create a contact'
 
   - id: contacts-phone
     name: Create a contact with a phone number

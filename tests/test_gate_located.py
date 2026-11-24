@@ -44,8 +44,19 @@ CASES = {"test_cases": [
                             {"type": "Milk"}, {"tap": "confirm"}, "wait"]},
     },
 ]}
+# What the truth recorded on the screen after each route step, on each pass.
+_HOME = ["Notes", "New note", "Settings"]
+_EDITOR = ["New note", "Title", "Save"]
+_TYPO_EDITOR = ["New ntoe", "Title", "Save"]
+_SAVE_SCREENS = {
+    "clean": [_HOME, _EDITOR, _EDITOR, [*_EDITOR, "Milk"], [*_HOME, "Milk"], [*_HOME, "Milk"]],
+    "seeded": [_HOME, _TYPO_EDITOR, _TYPO_EDITOR, [*_TYPO_EDITOR, "Milk"],
+               ["Notes", "No notes", "New note"], ["Notes", "No notes", "New note"]],
+}
+_LAUNCHER = ["Wed, Sep 16", "Chrome"]
 TRUTH = {
     "notes-save": {
+        "screens": _SAVE_SCREENS,
         "blocking": "save-drops-note",
         "side": [{"bug": "editor-title-typo", "marker": "New ntoe",
                   "visible_steps": [2, 3, 4], "texts": ["New ntoe"]}],
@@ -53,11 +64,15 @@ TRUTH = {
         "passes": {"seeded": {"outcome": "violated", "detail": "", "steps_run": 6}},
     },
     "notes-about": {
+        "screens": {"clean": [_HOME, ["Settings", "About"], ["About", "Version 1.0"],
+                              ["About", "Version 1.0"]],
+                    "seeded": [_HOME, ["Settings", "About"], _LAUNCHER, _LAUNCHER]},
         "blocking": "about-crash", "side": [], "unclaimed_diff": [],
         "passes": {"seeded": {"outcome": "crashed", "steps_run": 4,
                               "detail": "step 4: demo.notes crashed — NullPointerException"}},
     },
     "notes-vague": {
+        "screens": _SAVE_SCREENS,
         "blocking": "save-drops-note", "side": [],
         "unclaimed_diff": [{"step": 5, "added": ["No notes"], "removed": ["Milk"]}],
         "passes": {"seeded": {"outcome": "violated", "detail": "", "steps_run": 6}},
@@ -311,8 +326,9 @@ def test_a_crash_with_no_dialog_needs_the_agents_own_action_on_the_step(tmp_path
     report = _report(2, "Wed, Sep 16", matched="about-crash", expected="the version")
     g = _g2(tmp_path, run, report, case="notes-about")
     assert g == {"pass": True, "reason": "step 2: the truth crashes about-crash there, the "
-                                         "agent acted on that step and the device showed "
-                                         "the observed text on it"}
+                                         "agent acted on that step, read one of that "
+                                         "step's screens and the device showed the "
+                                         "observed text on it"}
     # The same quote read off the screen the case starts on, by an agent that only said
     # it was on step 1 and did nothing: not located. (Step 1 is where the truth would
     # crash a case whose first tap kills the app.)
@@ -341,8 +357,17 @@ def test_a_crash_quote_on_the_start_screen_is_unknown(tmp_path, corpus):
     assert g == {"pass": None, "unknown": True,
                  "reason": "the device showed the observed text on step 1, but no device "
                            "action of the agent's is tied to that step"}
+    # Acting is not enough (QUA-3607): the screen its tap left holds nothing the truth
+    # recorded on step 1's screens beyond the start screen. Unknown, never a fail.
     acted = [*idle, _tap("Settings", "Settings", "Wed, Sep 16")]
-    assert _g2(tmp_path, acted, report, case="notes-about", name="ep2")["pass"] is True
+    g = _g2(tmp_path, acted, report, case="notes-about", name="ep2")
+    assert g["pass"] is None and g["unknown"] is True
+    assert "nothing shows the agent had reached the step" in g["reason"]
+    # It read the screen the tap opened (`About` is on it, and not on the start screen)
+    # before the app went: located.
+    reached = [*idle, _tap("Settings", "Settings", "About"),
+               Call("mobile_observe_screen", {}, _screen("Settings", "Wed, Sep 16"))]
+    assert _g2(tmp_path, reached, report, case="notes-about", name="ep3")["pass"] is True
 
 
 def test_the_crash_wording_and_the_named_exception_are_truth_texts(tmp_path, corpus):
@@ -374,12 +399,15 @@ def test_a_defect_that_removes_text_is_located_by_a_screen_without_it(tmp_path, 
     case = rq.load_case_truth(APP, "notes-save")
     assert rq.symptom_texts(case, "save-drops-note") == rq.SymptomTexts((), ("Milk",))
     passed = {"pass": True, "reason": "step 3: the truth shows save-drops-note there as "
-                                      "missing text, and a screen the agent read on that "
-                                      "step lacks it"}
+                                      "missing text, and the screen it shows that on, "
+                                      "read by the agent on that step, lacks it"}
     # Whatever it wrote under observed: nothing, a sentence, text from another step.
     for i, observed in enumerate(("", "The list has no row for the note", "New ntoe")):
         g = _g2(tmp_path, SAVE_RUN, _report(3, observed), name=f"ep{i}")
         assert g == passed, observed
+    # A report that names two texts as missing is located by the screen that lacks one.
+    g = _g2(tmp_path, SAVE_RUN, _report(3, "", expected="Milk"), name="one")
+    assert g == passed
     # The screen on that step still shows the text: nothing is missing there. Unknown,
     # never a fail, and never a pass.
     kept = [*SAVE_RUN[:3], _tap("Save", "Notes", "Milk", "New note")]
@@ -391,6 +419,153 @@ def test_a_defect_that_removes_text_is_located_by_a_screen_without_it(tmp_path, 
     assert _g2(tmp_path, bare, _report(3, ""), name="bare")["unknown"] is True
     idle = [Say("Step 3: saving."), Call("mobile_observe_screen", {}, _screen(*HOME))]
     assert _g2(tmp_path, idle, _report(3, ""), name="idle")["unknown"] is True
+
+
+# ── the blind agent (QUA-3607) ─────────────────────────────────────────────────
+
+def test_the_texts_that_tell_a_steps_screens_from_the_start_screen():
+    case = rq.load_case_truth(APP, "notes-save")
+    assert rq.start_screen_texts(case) == set(_HOME)
+
+    def texts(step, *versions):
+        return sorted(p.pattern.split(")", 1)[1].rsplit("(", 1)[0].replace("\\", "")
+                      for p in rq.step_screen_texts(case, step, *versions))
+    # Step 3 is Save. The editor (typed into at step 2) is still up when it starts, and
+    # the list comes after. `Notes`, `New note` and `Settings` are the start screen's.
+    assert texts(3) == ["milk", "new ntoe", "no notes", "save", "title"]
+    # Step 1 opens the editor. `New note` is its clean title AND a start-screen button.
+    assert texts(1) == ["new ntoe", "save", "title"]
+    about = rq.load_case_truth(APP, "notes-about")
+    # Clean pass only: the launcher (seeded pass, after the death) is nobody's step.
+    assert [p.search("wed, sep 16 chrome") for p in
+            rq.step_screen_texts(about, 2, ("clean",))] == [None, None]
+    # Too short to tell screens apart, or a number a launcher's clock shows too.
+    assert not rq._tells_screens_apart("Wed") and not rq._tells_screens_apart("10:00")
+    assert rq._tells_screens_apart("Save") and rq._tells_screens_apart("$ 75.00")
+
+
+@pytest.mark.parametrize("fmt", sorted(FORMATS))
+@pytest.mark.parametrize("act", ["tap", "type", "home"])
+def test_a_blind_action_after_saying_the_step_does_not_locate_a_crash(tmp_path, fmt, act):
+    """Says "Step 2:", does one thing, reads a screen. The action is the agent's own
+    and the device did show the quote after it, but no screen it read is one of step
+    2's as the truth recorded them: the tap could have been anywhere."""
+    listing = _screen(*((t, 10 * i, 50) for i, t in enumerate(HOME)))
+    blind = {"tap": Call("mobile_tap", {"x": 10, "y": 50}, listing),
+             "type": Call("mobile_type_text", {"text": "About"}, "Set focused field to: 'About'"),
+             "home": Call("mobile_press_button", {"button": "HOME"}, "Pressed HOME")}[act]
+    shown = _screen(*_LAUNCHER) if act == "home" else listing
+    run = [Call("mobile_observe_screen", {}, listing), Say("Step 2: tapping About."), blind,
+           Call("mobile_observe_screen", {}, shown)]
+    quote = "Chrome" if act == "home" else "Notes"
+    g = _g2(tmp_path, run, _report(2, quote, matched="about-crash", expected="the version"),
+            case="notes-about", fmt=fmt)
+    assert g["pass"] is None and g["unknown"] is True, g
+    assert "nothing shows the agent had reached the step" in g["reason"]
+
+
+@pytest.mark.parametrize("fmt", sorted(FORMATS))
+def test_a_screen_with_none_of_the_steps_texts_does_not_show_that_text_is_missing(
+        tmp_path, corpus, fmt):
+    """`Milk` is missing from every screen that is not the list after Save. A blind tap
+    after "Step 3:" and a read of the start screen (or of a listing with nothing on it)
+    lacks `Milk` too, and says nothing about the defect."""
+    truth = json.loads(json.dumps(TRUTH))
+    truth["notes-save"]["unclaimed_diff"] = [{"step": 5, "added": [], "removed": ["Milk"]}]
+    (corpus / "truth" / f"journey-{APP}.json").write_text(json.dumps(truth))
+    for i, screen in enumerate((_screen(*HOME), _screen("Lorem ipsum dolor"))):
+        run = [Say("Step 3: saving."), Call("mobile_tap", {"x": 900, "y": 900}, screen),
+               Call("mobile_observe_screen", {}, screen)]
+        g = _g2(tmp_path, run, _report(3, "", expected="Milk is in the list"), fmt=fmt,
+                name=f"ep{i}")
+        assert g["pass"] is None and g["unknown"] is True, g
+        assert "it may be any screen" in g["reason"]
+    # Nor does the screen the step STARTS on: the editor, before Save, has no `Milk`
+    # in a list either. The agent did steps 1 and 2 and stopped.
+    stopped = [*SAVE_RUN[:2], Say("Step 3: saving."),
+               Call("mobile_observe_screen", {}, _screen(*EDITOR))]
+    g = _g2(tmp_path, stopped, _report(3, "", expected="Milk is in the list"), fmt=fmt,
+            name="stopped")
+    assert g["pass"] is None and g["unknown"] is True, g
+
+
+def test_missing_text_on_a_screen_that_is_the_start_screen_again(tmp_path, corpus):
+    """After Save the seeded build is back on the start screen, less `Milk`: no text of
+    that screen tells it from the start screen. It is the truth's screen when it holds
+    that screen's texts AND the agent read one of the step's own screens (the editor)
+    on the step; a blind tap and a read of the start screen has only the first."""
+    truth = json.loads(json.dumps(TRUTH))
+    truth["notes-save"]["unclaimed_diff"] = [{"step": 5, "added": [], "removed": ["Milk"]}]
+    truth["notes-save"]["screens"] = {**_SAVE_SCREENS, "seeded": [
+        *_SAVE_SCREENS["seeded"][:4], _HOME, _HOME]}
+    (corpus / "truth" / f"journey-{APP}.json").write_text(json.dumps(truth))
+    case = rq.load_case_truth(APP, "notes-save")
+    assert rq._never_located(case, "save-drops-note") is None
+    report = _report(3, "", expected="Milk is in the list")
+    # It typed the title, read the editor (still up when step 3 starts), then saved.
+    there = [*SAVE_RUN[:3], Call("mobile_observe_screen", {}, _screen(*EDITOR, "Milk")),
+             _tap("Save", *HOME)]
+    assert _g2(tmp_path, there, report)["pass"] is True
+    blind = [Say("Step 3: saving."), Call("mobile_tap", {"x": 900, "y": 900}, _screen(*HOME)),
+             Call("mobile_observe_screen", {}, _screen(*HOME))]
+    g = _g2(tmp_path, blind, report, name="blind")
+    assert g["pass"] is None and g["unknown"] is True
+
+
+def test_a_quote_the_clean_start_screen_shows_too_needs_the_steps_screen(tmp_path, corpus):
+    """The screen diff can carry a text that is on the start screen of both builds (it
+    differs at one step, not everywhere). Read off the start screen after a blind tap,
+    it locates nothing; on the step's own screen it does."""
+    truth = json.loads(json.dumps(TRUTH))
+    truth["notes-save"]["unclaimed_diff"] = [
+        {"step": 5, "added": ["New note"], "removed": ["Milk"]}]
+    (corpus / "truth" / f"journey-{APP}.json").write_text(json.dumps(truth))
+    blind = [Say("Step 3: saving."), Call("mobile_tap", {"x": 900, "y": 900}, _screen(*HOME)),
+             Call("mobile_observe_screen", {}, _screen(*HOME))]
+    g = _g2(tmp_path, blind, _report(3, "New note", expected=""))
+    assert g["pass"] is None and g["unknown"] is True
+    assert "the screen the case starts on shows it too" in g["reason"]
+    there = [*SAVE_RUN[:3], _tap("Save", "Notes", "No notes", "New note")]
+    assert _g2(tmp_path, there, _report(3, "New note", expected=""), name="ep2")["pass"] is True
+    # A text only the SEEDED build's start screen shows is the defect itself, wherever
+    # the agent read it: no step screen is asked for.
+    truth["notes-save"]["screens"] = {**_SAVE_SCREENS, "seeded": [
+        ["Notse", "New note", "Settings"], *_SAVE_SCREENS["seeded"][1:]]}
+    truth["notes-save"]["side"] = [{"bug": "title-typo", "marker": "Notse",
+                                    "visible_steps": [1], "texts": ["Notse"]}]
+    (corpus / "truth" / f"journey-{APP}.json").write_text(json.dumps(truth))
+    start = [Call("mobile_observe_screen", {}, _screen("Notse", "New note", "Settings"))]
+    g = _g2(tmp_path, start, _report(1, "Notse", matched="title-typo"), name="ep3")
+    assert g["pass"] is True
+
+
+def test_which_defects_no_report_can_be_located_for(tmp_path, corpus):
+    case = rq.load_case_truth(APP, "notes-save")
+    assert rq._never_located(case, "save-drops-note") is None
+    assert rq._never_located(case, "editor-title-typo") is None
+    assert rq._never_located(case, "nobody") == rq.NOT_IN_TRUTH
+    assert rq._never_located("no truth file", "save-drops-note") == rq.NO_TRUTH
+    truth = json.loads(json.dumps(TRUTH))
+    truth["notes-save"]["unclaimed_diff"] = []          # seen only in stored data
+    (corpus / "truth" / f"journey-{APP}.json").write_text(json.dumps(truth))
+    case = rq.load_case_truth(APP, "notes-save")
+    assert rq._never_located(case, "save-drops-note") == rq.NO_SCREEN_STEP
+    # It only removes text, and the one screen without the text is the start screen
+    # again: nothing the truth recorded can settle a report.
+    truth["notes-save"]["unclaimed_diff"] = [{"step": 5, "added": [], "removed": ["Milk"]}]
+    truth["notes-save"]["screens"] = {v: [_HOME] * 6 for v in ("clean", "seeded")}
+    (corpus / "truth" / f"journey-{APP}.json").write_text(json.dumps(truth))
+    case = rq.load_case_truth(APP, "notes-save")
+    assert rq._never_located(case, "save-drops-note") == rq.NO_STEP_SCREEN
+    d = _saved(tmp_path, SAVE_RUN, [_report(3, "")])
+    result = json.loads((d / "result.json").read_text())
+    result["metrics"]["bugs_present"] = ["save-drops-note", "editor-title-typo"]
+    (d / "result.json").write_text(json.dumps(result))
+    assert rq.score_episode(d)["defects"] == {
+        "save-drops-note": {"coverable": False, "located_never": "no_step_screen",
+                            "replay_excluded": None},
+        "editor-title-typo": {"coverable": True, "located_never": None,
+                              "replay_excluded": None}}
 
 
 def test_missing_text_named_in_expected_counts_where_the_defect_also_shows_text(tmp_path):

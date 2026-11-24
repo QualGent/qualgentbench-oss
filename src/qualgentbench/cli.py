@@ -2059,7 +2059,8 @@ def _quality_replay_cmd(run_dir: Path, *, mode: str, agent: str, models: str | N
             "no replayer: pass --agent and --models (the packaged replay config pins "
             "none yet), or a --quality-replay-config that names one")
     if not doc["runnable_now"]:
-        summary = qr.fold(run_dir, config, replay_dir=replay_dir, state=state)
+        summary = qr.fold(run_dir, config, replay_dir=replay_dir, state=state,
+                          allow_other_replayer=True)
         console.print(f"Nothing to replay. Folded {summary['episodes']} episode(s).",
                       markup=False)
         return
@@ -2090,13 +2091,15 @@ def _quality_replay_cmd(run_dir: Path, *, mode: str, agent: str, models: str | N
                 attempt.invalid or f"reproduced={attempt.reproduced} ({attempt.reason})")
             console.print(f"replay {unit.key}: {answer}", markup=False, highlight=False)
             # Fold after every episode, so a stopped run leaves files that are current.
-            qr.fold(run_dir, config, replay_dir=replay_dir, state=state, rescore=False)
+            qr.fold(run_dir, config, replay_dir=replay_dir, state=state, rescore=False,
+                    allow_other_replayer=True)
 
         return await qr.run(state, execute, only=units or None,
                             max_episodes=max_episodes, on_attempt=_line)
 
     started = _run_async(_go())
-    summary = qr.fold(run_dir, config, replay_dir=replay_dir, state=state)
+    summary = qr.fold(run_dir, config, replay_dir=replay_dir, state=state,
+                          allow_other_replayer=True)
     console.print(f"Started {started} replay episode(s). Reports: {summary['reports']}. "
                   f"Excluded defects: {len(summary['excluded'])}. Still to run, at most: "
                   f"{summary['remaining']['total']}.", markup=False, highlight=False)

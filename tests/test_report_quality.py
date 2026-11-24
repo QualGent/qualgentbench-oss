@@ -180,6 +180,41 @@ def test_the_cli_fails_when_there_is_nothing_to_score(tmp_path, capsys):
     assert list(tmp_path.iterdir()) == []
 
 
+def test_quality_json_says_which_corpus_stands_behind_it(tmp_path, monkeypatch):
+    """QUA-3607. What the episode ran on (from result.json) and what G2 read to score
+    it (which files, by hash): no path, no clock, the same on every machine."""
+    metrics = {**_seeded_metrics(FOUND), "corpus_version": "aaaabbbbcccc",
+               "heldout_version": None}
+    ep = _episode(tmp_path / "runs", "ep1", metrics)
+    # No corpus file for the episode's app: nothing was read.
+    assert rq.score_episode(ep)["corpus"] == {
+        "episode": {"corpus_version": "aaaabbbbcccc", "heldout_version": None},
+        "scored_with": {"source": None, "test_cases_sha256": None, "truth_sha256": None}}
+    app = metrics["app_id"]
+    root = tmp_path / "split"
+    (root / "test-cases").mkdir(parents=True)
+    (root / "truth").mkdir()
+    (root / "test-cases" / f"{app}.yaml").write_text("test_cases: []\n")
+    (root / "truth" / f"journey-{app}.json").write_text("{}")
+    monkeypatch.setenv(rq.HELDOUT_ENV, str(root))
+    stamp = rq.score_episode(ep)["corpus"]
+    assert stamp["scored_with"] == {
+        "source": "heldout",
+        "test_cases_sha256": hashlib.sha256(b"test_cases: []\n").hexdigest()[:12],
+        "truth_sha256": hashlib.sha256(b"{}").hexdigest()[:12]}
+    assert str(tmp_path) not in rq.render(rq.score_episode(ep))
+    # A changed truth file is a changed stamp; scoring twice is the same bytes.
+    assert rq.render(rq.score_episode(ep)) == rq.render(rq.score_episode(ep))
+    (root / "truth" / f"journey-{app}.json").write_text('{"x": {}}')
+    assert rq.score_episode(ep)["corpus"]["scored_with"]["truth_sha256"] != stamp[
+        "scored_with"]["truth_sha256"]
+    # The packaged corpus is named as such.
+    public = {**metrics, "app_id": "openscale", "case_id": "openscale-add-measurement"}
+    monkeypatch.delenv(rq.HELDOUT_ENV)
+    assert rq.score_episode(_episode(tmp_path / "runs", "ep2", public))["corpus"][
+        "scored_with"]["source"] == "packaged"
+
+
 # ── the scorer does not know this module exists ────────────────────────────────
 
 def _package_imports(path: Path) -> set[str]:

@@ -219,7 +219,7 @@ test_cases:
     # header against Spanish's new count — but the count is a one-character node no report
     # can quote. With no `bugs:` the case has no seeded arm; its clean arm still scores
     # completion and prices a false report.
-    bugs:
+    bugs: []
 
   # PERSISTENCE (QUA-2870): the pruned anki-add-note, re-admitted with its 2026-09 route
   # unchanged (+ -> Add, Front "quatro", Back "four", Save; the editor's deck is Spanish).
@@ -448,4 +448,4 @@ test_cases:
             - Tap the card "tres".
           expected: The "Edit note" screen opens for the card, with "tres" in its Front field and "three" in its Back field.
           actual: 'The wrong screen opens: its title is "Add", the Front and Back fields are empty, and it offers "Make field Front sticky" and "Make field Back sticky". It did not open the card.'
-          failure_step: 'Step 3: Read its Front and Back fields'
+          failure_step: 'Step 2: Tap the card "tres" to open it'

@@ -269,6 +269,49 @@ def test_strata_come_from_the_failed_headline_gates():
     assert qls.stratum_of("seeded", {"G1": {"pass": True}, "G5": {"pass": False}}) == "pass"
 
 
+def test_a_gate_that_never_ran_can_be_named_and_is_not_by_default(tmp_path):
+    """QUA-3607. `pass` mixes "passed G4" with "G4 never ran". `name_not_run` splits
+    them for a later draw; the default is what `rq-v1` was drawn with."""
+    waits = {"G1": {"pass": True}, "G2": {"pass": True}, "G3": {"pass": True},
+             "G4": {"pass": None, "reason": "no replay saved for this report"}}
+    passed = {**waits, "G4": {"pass": True}}
+    assert qls.stratum_of("seeded", waits) == qls.stratum_of("seeded", passed) == "pass"
+    assert qls.stratum_of("seeded", waits, name_not_run=True) == "not_run:G4"
+    assert qls.stratum_of("seeded", passed, name_not_run=True) == "pass"
+    # A report that failed a gate is owed no later gate: its stratum does not change.
+    failed = {**waits, "G3": {"pass": False}}
+    assert qls.stratum_of("seeded", failed, name_not_run=True) == "fail:G3"
+    unknown = {**waits, "G2": {"pass": None, "unknown": True}}
+    assert qls.stratum_of("seeded", unknown, name_not_run=True) == "unknown:G2,not_run:G4"
+    assert qls.stratum_of("clean", waits, name_not_run=True) == "clean"
+
+    board = _board(tmp_path / "b")
+    plain = _build(board)
+    assert _build(board) == plain and "name_not_run" not in plain[1]["targets"]
+    sample, key = _build(board, name_not_run=True)
+    assert key["targets"]["name_not_run"] is True
+    assert {k["stratum"] for k in key["items"]} != {k["stratum"] for k in plain[1]["items"]}
+    assert any("not_run:" in k["stratum"] for k in key["items"])
+    assert qls.validate_sample(sample) == []
+
+
+def test_a_secret_in_a_step_does_not_reach_a_labeller():
+    """QUA-3607. `step_items` come from the agent's own list, which is not sanitised
+    where it is stored; each line is sanitised as the report's other fields are."""
+    steps = ['Type "hunter2" into the field', "Enter password: hunter2 and tap Sign in",
+             {"description": "Send Authorization: Bearer abc.def.ghi"}]
+    rendered = qls.render_steps(steps)
+    assert rendered[0] == 'Type "hunter2" into the field'       # a quoted value is a step
+    assert "hunter2" not in rendered[1] and rq.REDACTED in rendered[1]
+    assert "abc.def.ghi" not in rendered[2] and rq.REDACTED in rendered[2]
+    assert rendered == [rq.sanitize_text(" ".join(s.split())) if isinstance(s, str) else r
+                        for s, r in zip(steps, rendered)]
+    # Text with no secret in it is what it was: the drawn sample's bytes do not move.
+    plain = ["  Tap\n Save ", {"b": 1, "a": "x"}, "Read the total: $ 4.00"]
+    assert qls.render_steps(plain) == ["Tap Save", '{"a": "x", "b": 1}',
+                                       "Read the total: $ 4.00"]
+
+
 # ── determinism ────────────────────────────────────────────────────────────────
 
 def test_the_same_seed_and_episodes_give_the_same_bytes_anywhere(tmp_path):

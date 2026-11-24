@@ -176,15 +176,10 @@ test_cases:
           summary: A task due today is listed under the header Due tomorrow
           steps:
             - Launch Tasks.org.
-            - Tap the + button (Create new task).
-            - Type "Groceries" into the Task name field.
-            - Tap the due date field, which shows "No due date".
-            - Tap Today.
-            - Tap OK.
-            - Tap Save.
-          expected: The My Tasks list shows "Groceries" under the header "Due today".
-          actual: The list shows "Groceries" and "Water plants" under the header "Due tomorrow"; there is no "Due today" section, although both tasks are due today.
-          failure_step: 'Step 6: Find the new task in the list'
+            - Scroll to "Water plants" in the My Tasks list.
+          expected: The My Tasks list shows "Water plants", which is due today, under the header "Due today".
+          actual: The list shows "Water plants" under the header "Due tomorrow"; there is no "Due today" section, although the task is due today. The header is wrong from launch on, before any task is created.
+          failure_step: 'Step 1: Tap the + button to create a task'
 
   - id: tasks-complete-parent
     name: Complete a task that has subtasks
@@ -251,14 +246,10 @@ test_cases:
           summary: A task due today at 9 AM is listed under the header Due tomorrow
           steps:
             - Launch Tasks.org.
-            - Tap "Water plants".
-            - Tap its due date, which shows "Today".
-            - Tap the 9 AM time chip.
-            - Tap OK.
-            - Tap Save.
-          expected: The My Tasks list shows "Water plants", 9 AM, under the header "Due today".
-          actual: The list shows "Water plants", 9 AM, under the header "Due tomorrow". The header is already wrong at launch, before the time is changed.
-          failure_step: 'Step 5: Save the task'
+            - Scroll to "Water plants" in the My Tasks list.
+          expected: The My Tasks list shows "Water plants", which is due today, under the header "Due today".
+          actual: The list shows "Water plants" under the header "Due tomorrow", although its due date is today. The header is wrong from launch on, before the time is changed.
+          failure_step: 'Step 1: Open "Water plants"'
 
   - id: tasks-complete-and-rename
     name: Rename one task and complete another
@@ -287,7 +278,7 @@ test_cases:
     # note above `defects:`) — unquotable, and with no reference in this brief. With no
     # `bugs:` the case has no seeded arm; its clean arm still scores completion and prices
     # a false report.
-    bugs:
+    bugs: []
 
   # ── CRASH on completing a repeating task (QUA-2730) ──────────────────────────────
   # Route: 6 steps, exactly the hunt's `repeating_done` check in
