@@ -302,10 +302,20 @@ The product files a bug from one accepted `mobile_report_result` call. Its field
 | `code_investigation`, else `summary` | `steps` |
 | `expected`, `actual` | `expected`, `actual`: kept only as a pair, each cut to 250 characters |
 | `failure_step` | `failure_step` |
-| `steps` (the agent's step list) | not on the bug |
+| `steps` (the agent's step list) | `repro_steps`: the text of each entry, shown as the bug's reproduction steps beside the `steps` text |
 
 Only a `FAIL` call files a bug. `PASS` and `BLOCKED` file none. Every field is trimmed,
 and an argument that is not a string counts as absent.
+
+`repro_steps` keeps the agent's words. An entry sent as text is kept as written, its own
+pass or fail mark included; an entry sent as an object gives its first text field
+(`description`, `action`, `text`, `instruction`, `title`, `name`, `step`). Each entry is
+trimmed, sanitised like the other fields and cut to 500 characters; blank entries and
+entries that are not text are dropped; at most 50 are kept. A closing sentence that
+states the outcome instead of an action stays as the last entry. The bug's `steps` text
+is not changed by this, and G3's `steps` check still reads that text;
+`complete_if_steps_carried` reads the raw list (`agent_steps`), whose entries are the
+same ones `repro_steps` keeps.
 
 `customer_report(episode)` returns one `CustomerReport` per report, in the order of
 `result.json`'s `metrics.reports`, so entry `i` belongs to report `i`:
@@ -318,6 +328,7 @@ and an argument that is not a string counts as absent.
 | `expected`, `actual` | str or None | both set or both None, each at most 250 characters |
 | `failure_step` | str or None | |
 | `agent_steps` | tuple | the call's own `steps` list, unchanged; empty for a findings entry |
+| `repro_steps` | tuple of str | `agent_steps` as the bug stores it (above); empty for a findings entry |
 | `report_source` | str | `report_tool`, `findings` or `scorer_report` (below) |
 | `paired_by` | str or None | how the call was matched to this report (below) |
 
@@ -378,6 +389,7 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
         "failure_step": "Step 4",
         "paired_by": "only_report",
         "report_source": "report_tool",
+        "repro_steps": [],
         "steps": "<the call's code_investigation>",
         "summary": "<the bug's title>"
       },
@@ -434,7 +446,7 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
 | `reports[].step`, `matched`, `known`, `consequence_of` | copied from the saved report |
 | `reports[].neutral` | true for a neutral report (see above) |
 | `reports[].gates` | gate id → `{pass, reason}`. `pass` is `true`, `false`, or `null` when the gate did not run for this report or answered unknown. An unknown answer also carries `"unknown": true` |
-| `reports[].customer_report` | the customer-shaped report of this report, neutral ones included: `summary`, `steps`, `expected`, `actual`, `failure_step`, `agent_steps`, `report_source`, `paired_by` (see above) |
+| `reports[].customer_report` | the customer-shaped report of this report, neutral ones included: `summary`, `steps`, `expected`, `actual`, `failure_step`, `agent_steps`, `repro_steps`, `report_source`, `paired_by` (see above) |
 | `reports[].complete` | G3's sub-checks for this report: `observed`, `expected`, `steps` and `steps_reason`; the same steps rule on the agent's own list as `agent_steps` and `agent_steps_reason`; and `complete_if_steps_carried`. `null` for a neutral report (see G3, complete) |
 | `reports[].customer_ready` | `false` when a headline gate failed, `true` when all passed, `null` otherwise and for neutral reports |
 | `totals.reports` / `neutral` / `scored` | all reports, neutral ones, and the rest (`scored` is the denominator) |
