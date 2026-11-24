@@ -331,7 +331,9 @@ def test_the_command_prints_the_block_and_writes_nothing(tmp_path, capsys):
     assert out.startswith("Report quality — ") and "agent-a · model-a · mcp" in out
     assert "2 episodes · 3 reports: 3 scored, 0 neutral" in out
     assert "G1 valid         2/3 67%" in out and "G3 complete      0/3 0%" in out
-    assert "customer-ready rate   not measured (G4 reproducible has not run)" in out
+    # G4 is registered (QUA-3591) and every report here failed an earlier gate, so no
+    # report waits on a replay: the rate is measured, and it is 0.
+    assert "customer-ready rate   0/3 0%" in out and "G4 reproducible  0/0 —" in out
 
     assert qr.main([str(tmp_path), "--run", "run-2", "--json"]) == 0
     block = json.loads(capsys.readouterr().out)
@@ -406,7 +408,8 @@ def test_the_view_adds_the_section_and_leaves_the_board_byte_identical(tmp_path,
     assert _snapshot(runs).items() >= saved.items()     # nothing in the run was touched
     assert not list(runs.glob("*/*/quality.json"))      # scored in memory only
     assert '<section id="report-quality">\n<h3>Report quality</h3>' in index
-    assert "Where reports are lost" in index and "not measured (G4 reproducible" in index
+    # No report waits on a replay (both failed G3), so nothing reads "not measured".
+    assert "Where reports are lost" in index and "not measured (G4" not in index
     entry = json.loads((res.out_dir / view.MANIFEST).read_text())["runs"][0]
     row = entry["report_quality"]["rows"][0]
     assert (row["agent"], row["episodes"], row["scored"]) == ("claude-code", 2, 2)
