@@ -128,7 +128,9 @@ def is_neutral(report: dict[str, Any]) -> bool:
 #   expected, actual                    expected / actual, kept only as a pair, each cut
 #                                       to RESULT_FIELD_MAX characters
 #   failure_step                        failure_step
-#   steps (the agent's step list)       not on the bug (kept here as `agent_steps`)
+#   steps (the agent's step list)       repro_steps: the text of each entry, at most
+#                                       REPRO_STEPS_MAX entries of REPRO_STEP_MAX
+#                                       characters (the raw list is `agent_steps`)
 #
 # Only a FAIL call files a bug; PASS and BLOCKED file none. The same fixture file,
 # tests/fixtures/report-mapping-fixture.json, is tested against this code and against
@@ -139,6 +141,12 @@ REPORT_TOOL = "mobile_report_result"
 RESULT_FIELD_MAX = 250
 #: The title the product gives a FAIL report that has no usable `summary`.
 DEFAULT_SUMMARY = "Agent reported an app issue"
+#: The most reproduction steps the product keeps from one call, and the longest one, in
+#: characters (code points).
+REPRO_STEPS_MAX = 50
+REPRO_STEP_MAX = 500
+#: The text keys of a step sent as a mapping, in the order they are tried.
+_STEP_TEXT_KEYS = ("description", "action", "text", "instruction", "title", "name", "step")
 REDACTED = "[REDACTED]"
 
 #: Where a customer-shaped report came from.
@@ -196,6 +204,30 @@ def _result_pair(expected: str | None, actual: str | None) -> tuple[str | None, 
             actual[:RESULT_FIELD_MAX].rstrip(_JS_SPACE))
 
 
+def repro_steps_from_tool(args: dict[str, Any]) -> tuple[str, ...]:
+    """The reproduction steps the product stores on the bug from the call's `steps`
+    list: each entry's text (a string, or a mapping's first text field), trimmed,
+    sanitised and cut to REPRO_STEP_MAX characters; blank and non-text entries dropped;
+    at most REPRO_STEPS_MAX entries. The words and any pass/fail mark are the agent's.
+    A `steps` that is not a list gives none."""
+    steps = args.get("steps")
+    if not isinstance(steps, list):
+        return ()
+    out: list[str] = []
+    for item in steps:
+        if isinstance(item, dict):
+            item = next((_pick(item, key) for key in _STEP_TEXT_KEYS if _pick(item, key)), "")
+        if not isinstance(item, str):
+            continue
+        text = sanitize_text(item.strip(_JS_SPACE))[:REPRO_STEP_MAX].strip(_JS_SPACE)
+        if not text:
+            continue
+        out.append(text)
+        if len(out) >= REPRO_STEPS_MAX:
+            break
+    return tuple(out)
+
+
 @dataclass(frozen=True)
 class CustomerReport:
     """One report as the product would store it as a bug, plus where it came from."""
@@ -205,9 +237,13 @@ class CustomerReport:
     expected: str | None          # both or neither, each at most RESULT_FIELD_MAX
     actual: str | None
     failure_step: str | None
-    #: The agent's own `steps` argument, unchanged (a list; the product drops it).
-    #: Empty for a findings entry. Not sanitised and not part of the bug.
+    #: The agent's own `steps` argument, unchanged (a list). Empty for a findings
+    #: entry. Not sanitised and not part of the bug; `repro_steps` is the stored form.
     agent_steps: tuple[Any, ...] = ()
+    #: The reproduction steps the product stores beside the bug's `steps` text and shows
+    #: as the bug's reproduction steps: the text of `agent_steps`, sanitised and bounded
+    #: (`repro_steps_from_tool`). Empty for a findings entry.
+    repro_steps: tuple[str, ...] = ()
     report_source: str = SOURCE_FINDINGS
     #: How the tool call was matched to this report when there were several:
     #: "only_report", "step", "text" or "first". None for a rendered entry.
@@ -217,6 +253,7 @@ class CustomerReport:
         return {"summary": self.summary, "steps": self.steps, "expected": self.expected,
                 "actual": self.actual, "failure_step": self.failure_step,
                 "agent_steps": list(self.agent_steps),
+                "repro_steps": list(self.repro_steps),
                 "report_source": self.report_source, "paired_by": self.paired_by}
 
 
@@ -238,6 +275,7 @@ def customer_report_from_tool(args: dict[str, Any], index: int = 0,
         index=index, summary=summary, steps=steps, expected=expected, actual=actual,
         failure_step=failure_step,
         agent_steps=tuple(agent_steps) if isinstance(agent_steps, list) else (),
+        repro_steps=repro_steps_from_tool(args),
         report_source=SOURCE_REPORT_TOOL, paired_by=paired_by)
 
 
@@ -1248,8 +1286,6 @@ _CODE_RE = re.compile(
     r"\b[\w/-]+\.(?:kt|kts|java|swift|m|mm|dart|ts|tsx|js|jsx|py|rb|go|rs|cs|cpp|xml"
     r"|gradle|json|ya?ml)\b|\b\w+\(\)|\b\w+\.\w+\(")
 _NOT_ALNUM_RE = re.compile(r"[^a-z0-9]+")
-#: The text keys of one `agent_steps` item, in the order they are tried.
-_STEP_TEXT_KEYS = ("description", "action", "text", "instruction", "title", "name", "step")
 
 
 def _strip_step_markers(text: str) -> str:

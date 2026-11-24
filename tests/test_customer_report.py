@@ -79,7 +79,8 @@ def test_the_accepted_tool_call_is_the_customer_report(tmp_path, fmt):
         "summary": "the stock button opened the medicine settings, not the stock screen",
         "steps": "no source available",            # code_investigation, not the summary
         "expected": "Amount", "actual": "Color", "failure_step": "3",
-        "agent_steps": [], "report_source": "report_tool", "paired_by": "only_report"}
+        "agent_steps": [], "repro_steps": [],
+        "report_source": "report_tool", "paired_by": "only_report"}
 
     q = rq.score_episode(ep.dir)
     assert q["scorer_report_source"] == "report_tool" and "report_source" not in q
@@ -110,7 +111,7 @@ def test_no_tool_call_renders_every_findings_entry(tmp_path):
         assert first.as_dict() == {
             "summary": "the total counts a deleted row", "steps": "",
             "expected": "Total: 3 items", "actual": "Total: 4 items",
-            "failure_step": "Step 4: Cart", "agent_steps": [],
+            "failure_step": "Step 4: Cart", "agent_steps": [], "repro_steps": [],
             "report_source": "findings", "paired_by": None}
         # The product's rules apply to a rendered entry too: default title, 250 characters.
         assert second.summary == rq.DEFAULT_SUMMARY and second.failure_step is None
@@ -215,7 +216,7 @@ def test_quality_json_shows_the_customer_report_and_source_of_every_report(tmp_p
     for r in q["reports"]:                      # neutral reports included
         assert set(r["customer_report"]) == {
             "summary", "steps", "expected", "actual", "failure_step", "agent_steps",
-            "report_source", "paired_by"}
+            "repro_steps", "report_source", "paired_by"}
     assert q["reports"][1]["customer_report"]["agent_steps"] == [{"step": 3, "status": "failed"}]
     assert q["reports"][2]["neutral"] is True
     # A rescore writes the same bytes, and the memo does not leak between episodes.
