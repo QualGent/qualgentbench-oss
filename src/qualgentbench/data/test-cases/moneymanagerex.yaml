@@ -125,20 +125,10 @@ test_cases:
           summary: The Income label in the home screen summary is misspelled
           steps:
             - Launch Money Manager Ex.
-            - Tap Checking on the home screen.
-            - Tap the + button.
-            - Tap Payee.
-            - Tap Grocer.
-            - Tap Deposit.
-            - Tap the amount.
-            - Tap 4 on the keypad.
-            - Tap 0 on the keypad.
-            - Tap Save on the keypad to confirm the amount.
-            - Tap Save.
-            - Press the back button to return to the home screen.
-          expected: 'The summary "INCOME VS EXPENSES: CURRENT MONTH" labels the $ 40.00 row "Income".'
-          actual: The row is labelled "Incomme". The label is misspelled from launch on.
-          failure_step: 'Step 7: Go back to the home screen and read the Checking balance and the month''s Income in the summary'
+            - 'Scroll to the summary "INCOME VS EXPENSES: CURRENT MONTH" on the home screen.'
+          expected: 'The summary "INCOME VS EXPENSES: CURRENT MONTH" labels its income row "Income".'
+          actual: The row is labelled "Incomme". The label is misspelled from launch on, before any transaction is entered.
+          failure_step: 'Step 1: Open the Checking account from the home screen'
 
   # Re-authored 2026-09-23 (QUA-2789). It recorded a withdrawal alone, so the month had
   # Income 0.00, the seeded Difference ($ 30.00) equalled the Expenses figure beside it,

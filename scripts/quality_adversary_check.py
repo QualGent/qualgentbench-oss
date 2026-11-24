@@ -822,7 +822,7 @@ def judge(results: dict, paid: dict) -> tuple[list[str], list[str]]:
                             f"measuring anything")
         bound, why = KNOWN_RESIDUE.get(mode, (0, ""))
         pairs = len(seeded.located_defects)
-        if seeded.both and pairs <= bound:
+        if seeded.both and mode in KNOWN_RESIDUE and pairs <= bound:
             known.append(
                 f"{who} passes G1 and G2 together on {len(seeded.both)} of its "
                 f"{seeded.reports} seeded-build report(s), on {pairs} (case, defect) "

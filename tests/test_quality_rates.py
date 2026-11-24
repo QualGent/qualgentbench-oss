@@ -459,6 +459,102 @@ def test_index_from_rebuilds_the_section_byte_for_byte(tmp_path):
     assert strip(copy / view.MANIFEST) == strip(res.out_dir / view.MANIFEST)
 
 
+def test_unknown_is_outside_the_rate_and_outside_the_yield_alike():
+    """QUA-3607. Three defects, one report each: one ready, one left unknown by G4 (its
+    defect is excluded from replay), one left unknown by G2. The rate was 1/1 = 100%
+    while the yield counted the two unknown defects as misses, 1/3. One rule now: an
+    unknown defect is in neither side, as an unknown report is in neither side."""
+    ready = _rep(True, True, True, True, matched="bug-a", gates=ALL)
+    g4_unknown = _rep(True, True, True, UNKNOWN, matched="bug-b", gates=ALL)
+    g2_unknown = _rep(True, UNKNOWN, True, True, matched="bug-c", gates=ALL)
+    row = _one(_rec(_quality(ready, gates=ALL), present=["bug-a"]),
+               _rec(_quality(g4_unknown, gates=ALL), present=["bug-b"]),
+               _rec(_quality(g2_unknown, gates=ALL), present=["bug-c"]))
+    cr, y = row["customer_ready"], row["customer_ready_yield"]
+    assert (cr["k"], cr["n"], cr["rate"], cr["unknown"]) == (1, 1, 1.0, 2)
+    assert (y["k"], y["n"], y["rate"], y["unknown"], y["present"]) == (1, 1, 1.0, 2, 3)
+    assert y["measured"] is True and y["ci"] == cr["ci"]
+    text = "\n".join(qr.lines(qr.block([_rec(_quality(ready, gates=ALL), present=["bug-a"]),
+                                        _rec(_quality(g4_unknown, gates=ALL),
+                                             present=["bug-b"])])))
+    assert "seeded defects present: 2, 1 unknown (in neither side)" in text
+
+    # A defect is unknown only while a report of it could still turn out ready.
+    failed = _rep(True, False, True, None, matched="bug-b", gates=ALL)
+    missed = _one(_rec(_quality(g4_unknown, failed, gates=ALL), present=["bug-b", "bug-d"]))
+    y = missed["customer_ready_yield"]
+    # bug-b: one report failed, one is unknown -> unknown. bug-d: no report -> missed.
+    assert (y["k"], y["n"], y["unknown"], y["present"]) == (0, 1, 1, 2)
+    only_failed = _one(_rec(_quality(failed, gates=ALL), present=["bug-b"]))
+    assert (only_failed["customer_ready_yield"]["n"],
+            only_failed["customer_ready_yield"]["unknown"]) == (1, 0)
+    # A ready report covers the defect whatever its other reports are.
+    both = _one(_rec(_quality(ready, _rep(True, UNKNOWN, True, True, matched="bug-a",
+                                          gates=ALL), gates=ALL), present=["bug-a"]))
+    assert (both["customer_ready_yield"]["k"], both["customer_ready_yield"]["unknown"]) == (1, 0)
+    # The figure over the available gates follows the same rule.
+    roa = _one(_rec(_quality(_rep(True, UNKNOWN, True, matched="bug-a")),
+                    present=["bug-a", "bug-b"]))["ready_on_available"]["yield"]
+    assert (roa["k"], roa["n"], roa["unknown"], roa["present"]) == (0, 1, 1, 2)
+
+
+def _with_defects(quality: dict, **defects) -> dict:
+    """`quality` with its `defects` map: `id=(located_never, replay_excluded)`."""
+    return {**quality, "defects": {
+        d: {"coverable": never is None and excluded is None, "located_never": never,
+            "replay_excluded": excluded} for d, (never, excluded) in defects.items()}}
+
+
+def test_the_yield_says_how_many_defects_could_be_covered_at_all():
+    """QUA-3607. A defect G2 can never locate (the truth holds no screen for it) and a
+    defect replay excluded from G4 are in the yield's denominator and can never be in
+    its numerator. `coverable` is that ceiling, beside the yield."""
+    ready = _rep(True, True, True, True, matched="bug-a", gates=ALL)
+    stored = _rep(True, UNKNOWN, True, True, matched="bug-s", gates=ALL)
+    excluded = _rep(True, True, True, UNKNOWN, matched="bug-x", gates=ALL)
+    first = _rec(_with_defects(_quality(ready, stored, excluded, gates=ALL),
+                               **{"bug-a": (None, None), "bug-s": ("no_screen_step", None),
+                                  "bug-x": (None, "control"), "bug-m": (None, None)}),
+                 present=["bug-a", "bug-s", "bug-x", "bug-m"], app_id="app", case_id="case-1")
+    # Another arm's episode of the same case: it never reported bug-x, so its own file
+    # does not know replay excluded it. The exclusion is a fact about (case, defect).
+    silent = _rec(_with_defects(_quality(gates=ALL), **{"bug-x": (None, None)}),
+                  present=["bug-x"], app_id="app", case_id="case-1")
+    # The same defect id on another case is another (case, defect).
+    elsewhere = _rec(_with_defects(_quality(gates=ALL), **{"bug-x": (None, None)}),
+                     present=["bug-x"], app_id="app", case_id="case-2")
+    row = _one(first, silent, elsewhere)
+    y = row["customer_ready_yield"]
+    assert (y["present"], y["coverable"], y["not_coverable"]) == (6, 3, 3)
+    assert y["not_coverable_by"] == {"no_screen_step": 1, "replay:control": 2}
+    # bug-a covered; bug-m and the two silent bug-x missed; bug-s and bug-x unknown.
+    assert (y["k"], y["n"], y["unknown"]) == (1, 4, 2)
+    text = "\n".join(qr.lines(qr.block([first, silent, elsewhere])))
+    assert ("seeded defects present: 6, 2 unknown (in neither side) · could be covered at "
+            "all: 3 (not: 1 no_screen_step, 2 replay:control)") in text
+    # A file written before the map existed: the ceiling is not known, and says so.
+    old = _one(_rec(_quality(ready, gates=ALL), present=["bug-a"]))["customer_ready_yield"]
+    assert (old["coverable"], old["not_coverable"], old["not_coverable_by"]) == (None, None, {})
+    assert "could be covered at all:" not in "\n".join(qr.lines(qr.block(
+        [_rec(_quality(ready, gates=ALL), present=["bug-a"])])))
+
+
+def test_adding_keys_left_every_earlier_key_of_the_block_in_place():
+    """The lab viewer parses the block strictly: keys may be added, never renamed or
+    removed, while `format` stays 1."""
+    row = _one(_rec(_quality(_rep(True, True, True, True, matched="bug-a", gates=ALL),
+                             gates=ALL), present=["bug-a"]))
+    assert qr.BLOCK_FORMAT == 1
+    assert {"measured", "k", "n", "rate", "ci"} <= set(row["customer_ready_yield"])
+    assert set(row["customer_ready_yield"]) - {"measured", "k", "n", "rate", "ci"} == {
+        "present", "unknown", "coverable", "not_coverable", "not_coverable_by"}
+    assert {"gates", "k", "n", "rate", "ci", "unknown", "yield"} == set(row["ready_on_available"])
+    assert set(row["ready_on_available"]["yield"]) == {"k", "n", "rate", "ci", "present",
+                                                       "unknown"}
+    assert {"measured", "ready", "not_ready", "unknown", "waiting", "k", "n", "rate", "ci",
+            "unknown_share"} == set(row["customer_ready"])
+
+
 # ── the documentation ──────────────────────────────────────────────────────────
 
 def _keys(value, path=""):
@@ -474,13 +570,17 @@ def _keys(value, path=""):
 
 def test_the_documented_quality_json_has_the_keys_the_code_writes(tmp_path):
     doc = (SRC.parent.parent / "docs" / "report-quality.md").read_text()
-    example = json.loads(re.search(r'```json\n(\{\n  "quality_version".*?\n\})\n```', doc,
+    example = json.loads(re.search(r'```json\n(\{\n  "corpus".*?\n\})\n```', doc,
                                    re.DOTALL).group(1))
     assert rq.render(example).strip() == re.search(
-        r'```json\n(\{\n  "quality_version".*?\n\})\n```', doc, re.DOTALL).group(1)
+        r'```json\n(\{\n  "corpus".*?\n\})\n```', doc, re.DOTALL).group(1)
     real = rq.score_episode(_saved_episode(tmp_path, "ep1", _seeded_metrics(FOUND)))
     skip = "/reports[]/gates/G2/unknown"      # only on an unknown answer
-    assert set(_keys(example)) - {skip} == set(_keys(real)) - {skip}
+    # The example names its one defect `<defect id>`; the episode's is `delete-bug`.
+    real_keys = {k.replace("/defects/delete-bug", "/defects/<defect id>") for k in _keys(real)}
+    assert set(_keys(example)) - {skip} == real_keys - {skip}
+    assert real["defects"] == {"delete-bug": {"coverable": False, "located_never": "no_truth",
+                                              "replay_excluded": None}}
     assert list(example["totals"]["gates"]) == [g.id for g in rq.GATES]
     assert example["quality_version"] == rq.QUALITY_VERSION
     # Every key of the block that the documentation's table names is in a real row.

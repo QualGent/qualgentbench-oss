@@ -246,12 +246,110 @@ def test_the_symptom_sprayer_is_not_valid_and_located(tallies):
         assert t.both == [] and t.available == 0
 
 
+# ── the blind agents (QUA-3607) ────────────────────────────────────────────────
+
+START_VISIBLE = ("step N: the truth shows <defect> there and the device showed the "
+                 "observed text on that step")
+
+
+def test_the_blind_agents_are_on_the_roster_and_pay_like_the_sprayer(tallies):
+    results, paid = tallies
+    assert set(qadv.BLIND) == {"blind-tap", "blind-type", "blind-home"}
+    assert set(qadv.BLIND) <= set(qadv.PRICED) and set(qadv.KNOWN_RESIDUE) <= set(qadv.BLIND)
+    for mode in qadv.BLIND:
+        for channel in qadv.CHANNELS:
+            clean, seeded = paid[(mode, channel)], results[(mode, channel)]
+            assert seeded.episodes >= 30 and seeded.reports >= seeded.episodes
+            assert seeded.passed["G1"] > 100 or channel == "report_tool" and seeded.passed["G1"] > 50
+            assert clean.passed["G1"] == 0 and clean.both == [] and clean.ready == []
+            assert seeded.ready == [], f"{mode} ({channel}) has a customer-ready report"
+
+
+def test_a_blind_action_per_step_locates_no_crash_and_no_missing_text(tallies):
+    """Before QUA-3607 the first of these agents passed G1 and G2 together on 99 of the
+    150 public defects: 56 as a crash "seen" on a step it had only acted on, 43 as text
+    "missing" from a screen that was never the step's. None of that is left: what it
+    still passes on is the quote path, on the residue below."""
+    for mode in qadv.BLIND:
+        for channel, t in _every(mode, tallies):
+            for _, defect, reason in t.located:
+                assert qadv._shape(reason.replace(f" {defect} ", " <defect> ")) == (
+                    START_VISIBLE), (mode, channel, reason)
+    # HOME shows the launcher, which is nobody's step and no defect's text.
+    for channel, t in _every("blind-home", tallies):
+        assert t.both == [] and t.available == 0 and t.passed["G2"] == 0, channel
+
+
+def test_the_blind_residue_is_the_defects_that_show_on_the_start_screen(tallies):
+    """Seven public defects show a text on the screen the case starts on that only the
+    seeded build has there. An agent that reads that screen and quotes it saw the
+    defect where it is: located, with no step done. Recorded with its count, and the
+    gate fails when the count grows. G4's steps-deleted control is what excludes these."""
+    seeded = {t.id: t.bug_spec for t in qadv._tasks("seeded")}
+    for mode in ("blind-tap", "blind-type"):
+        bound, why = qadv.KNOWN_RESIDUE[mode]
+        assert bound == 7 and "G4 is the gate meant to stop it" in why
+        for channel, t in _every(mode, tallies):
+            pairs = t.located_defects
+            assert 0 < len(pairs) <= bound, (mode, channel, len(pairs))
+            for task_id, defect in pairs:
+                case = qadv._case_truth(seeded[task_id])
+                shown = [p for p in map(rq._text_re, rq.symptom_texts(case, defect).shown) if p]
+                on_seeded_start = rq._shown_in(rq.start_screen_texts(case, ("seeded",)))
+                on_clean_start = rq._shown_in(rq.start_screen_texts(case, ("clean",)))
+                assert any(p.search(on_seeded_start) and not p.search(on_clean_start)
+                           for p in shown), (task_id, defect)
+    failures, known = qadv.judge(*tallies)
+    assert failures == []
+    assert sum("'blind-" in line and "(bound 7)" in line for line in known) == 4
+
+
+def test_one_defect_over_the_residue_fails_the_gate(tallies, monkeypatch):
+    results, paid = tallies
+    monkeypatch.setattr(qadv, "KNOWN_RESIDUE", {"blind-tap": (6, "why"), "blind-type": (7, "why")})
+    failures, _ = qadv.judge(results, paid)
+    assert any("'blind-tap' (findings) passes G1 and G2 together" in f
+               and "above its known residue of 6" in f for f in failures)
+    assert any("'blind-tap' (findings) has" in f and "every registered headline gate" in f
+               for f in failures)
+    assert not any("'blind-type'" in f for f in failures)
+
+
+def test_the_blind_agents_read_the_real_start_screen_and_act_once_per_step():
+    """What makes them a fair test: the screen they read is the truth's own start
+    screen, each step has one action after its announcement, and the typed phrase is
+    one the transcript itself ties to the step."""
+    task = next(t for t in qadv._tasks("seeded")
+                if t.bug_spec["case_id"] == "birday-search-full-name")
+    spec = task.bug_spec
+    case = qadv._case_truth(spec)
+    assert set(qadv._start_texts(spec)) <= rq.start_screen_texts(case, ("seeded",))
+    for mode, tool in (("blind-tap", "mobile_tap"), ("blind-type", "mobile_type_text"),
+                       ("blind-home", "mobile_press_button")):
+        g = qadv.guess(task, mode)
+        events = rq.agent_events(g.transcript, False)
+        acts = [e for e in events if e.acts]
+        # `blind-type` taps on a step whose sentence quotes nothing to type.
+        assert tool in {e.name for e in acts} <= {tool, "mobile_tap"}
+        assert len(acts) == len(spec["steps"])
+        seen = rq.attribute_steps(events, case)
+        assert all(any(s.surely(n) and s.acted for s in seen)
+                   for n in range(1, len(spec["steps"]) + 1)), mode
+        assert [e["step"] for e in g.entries] == list(range(1, len(spec["steps"]) + 1))
+    typed = [e for e in rq.agent_events(qadv.guess(task, "blind-type").transcript, False)
+             if e.acts]
+    assert typed[0].targets == ("clara novak",)
+    # The made-up episode path of `path-echo` names no real agent or model.
+    assert (qadv.PATH_AGENT, qadv.PATH_MODEL) == ("agent-cli", "model-x1")
+
+
 # ── the gate itself ────────────────────────────────────────────────────────────
 
 def test_the_gate_holds_and_names_its_known_defects(tallies):
     failures, known = qadv.judge(*tallies)
     assert failures == []
-    assert known and all("'path-echo'" in line for line in known)
+    assert known and all("'path-echo'" in line or "'blind-" in line for line in known)
+    assert any("'path-echo'" in line for line in known)
     assert "path-echo" in qadv.table(*tallies)
 
 
@@ -263,6 +361,7 @@ def test_a_valid_and_located_guesser_fails_the_gate_unless_it_is_a_known_defect(
     results, paid = tallies
     located = qadv.Tally(episodes=1, reports=1)
     located.both, located.available = ["case~seeded: report 0"], 1
+    located.located = [("case~seeded", "a-defect", "why")]
     planted = {**results, ("path-echo", "findings"): located}
     failures, known = qadv.judge(planted, paid)
     assert failures == [] and any("G1 (valid) and G2 (located)" in line for line in known)
@@ -274,6 +373,7 @@ def test_a_valid_and_located_guesser_fails_the_gate_unless_it_is_a_known_defect(
 
     sprayer = qadv.Tally(episodes=1, reports=1)
     sprayer.passed["G1"], sprayer.both = 1, ["case~seeded: report 0"]
+    sprayer.located = [("case~seeded", "a-defect", "why")]
     failures, _ = qadv.judge({**results, ("symptom-quote", "findings"): sprayer}, paid)
     assert any("'symptom-quote' (findings) passes G1 and G2 together" in f for f in failures)
 

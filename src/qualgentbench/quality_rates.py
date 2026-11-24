@@ -196,7 +196,10 @@ def _defect_yield(defects: list[tuple[int, str]],
     is left undecided by an unknown answer) or MISSED (no report matched it, or every
     report of it failed a gate). An unknown defect is in neither side, exactly as an
     unknown report is in neither side of the rate: `n` counts the decided defects, and
-    `present` all of them. `{k, n, rate, ci, present, unknown}`."""
+    `present` all of them. `{k, n, rate, ci, present, unknown}`.
+
+    A report that still WAITS for a gate does not make its defect unknown: while one
+    waits, the row is not measured and gives no yield at all."""
     gates = list(gates)
     covered = unknown = 0
     for ep, defect in defects:
@@ -204,7 +207,7 @@ def _defect_yield(defects: list[tuple[int, str]],
                   if r.get("matched") == defect]
         if READY in states:
             covered += 1
-        elif UNKNOWN in states or WAITING in states:
+        elif UNKNOWN in states:
             unknown += 1
     return {**_rate(covered, len(defects) - unknown),
             "present": len(defects), "unknown": unknown}

@@ -187,6 +187,57 @@ def test_an_agents_report_renders_its_steps_text_and_missing_fields():
     assert "Expected result: (not given)" in text and "Failed at" not in text
 
 
+def test_an_agents_report_is_replayed_with_the_steps_the_customer_sees(tmp_path):
+    """QUA-3607. A report-tool bug with no code investigation stores the summary as its
+    `steps` text and the agent's step list as `repro_steps`. The replayer gets the list:
+    given the text, a report with three correct steps is replayed as the summary alone,
+    which is the evidence-removed control."""
+    args = {"status": "FAIL", "summary": "Statistics shows the wrong average weight",
+            "steps": ["Launch openScale.", "2. Tap Open menu at the top left.",
+                      {"description": "Tap Statistics.", "status": "failed"}],
+            "expected": "Avg: 79 kg", "actual": "Avg: 76 kg", "failure_step": "Step 3"}
+    shaped = rq.customer_report_from_tool(args)
+    assert shaped.steps == args["summary"]                       # the control's text
+    fields = qr.replay_fields(shaped.as_dict())
+    assert fields["steps"] == ["Launch openScale.", "2. Tap Open menu at the top left.",
+                               "Tap Statistics."]
+    assert set(fields) == set(qr._REPORT_FIELDS)                 # nothing else rides along
+    text = qr.render_report(fields)
+    # Numbered here, unless the agent numbered the step itself.
+    assert ("Steps to reproduce:\n  1. Launch openScale.\n  2. Tap Open menu at the top "
+            "left.\n  3. Tap Statistics.\nExpected result: Avg: 79 kg") in text
+    assert f"  {args['summary']}" not in text
+    # No step list: the bug's steps text, as before.
+    plain = rq.customer_report_from_tool({**args, "steps": None,
+                                          "code_investigation": "Opened the menu\nTapped Statistics"})
+    assert qr.replay_fields(plain.as_dict())["steps"] == "Opened the menu\nTapped Statistics"
+    assert qr.replay_fields({"summary": "s", "steps": "", "repro_steps": ["", " "]})["steps"] == ""
+
+    # End to end: the planned unit and the brief the replayer is sent.
+    run_dir = tmp_path / "runs"
+    ep = _journey_episode(run_dir, "ep-a", "openscale-statistics-range", [
+        _report("stats-average-drops-latest", step=3, observed="Avg: 76 kg")])
+    (ep / "agent").mkdir()
+    (ep / "agent" / "transcript.txt").write_text("\n".join([
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "t1", "name": "mcp__device__mobile_report_result",
+             "input": args}]}}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]}})]) + "\n")
+    (ref,) = qr.valid_reports(run_dir)
+    assert ref.report["steps"] == fields["steps"]
+    state = qr.ReplayState(CONFIG, [ref], [])
+    unit = replace(state._unit(qr.CEILING, ref.defect_key), kind=qr.REPORT, report=ref.report,
+                   source_episode=ref.episode, report_index=ref.index)
+    brief = qr.brief(qr.build_task(unit, _suite(), CONFIG), "emulator-5554", "mcp")
+    assert "  3. Tap Statistics." in brief and "Failed at: Step 3" in brief
+    # The reference and the control arms are what they were.
+    control = qr.render_report(_ref(*SIDE).customer_report(with_steps=False))
+    assert "Steps to reproduce: (the report gives none)" in control
+    # A replay under the new brief is another measurement than one under the old.
+    assert qr.REPLAY_VERSION == 2 and CONFIG.fingerprint()["replay_version"] == 2
+
+
 # ── a replay episode is never a journey episode ────────────────────────────────
 
 def _task_after_run(unit, *, fired, truncated=False, **spec_extra):
@@ -600,12 +651,114 @@ def test_replays_by_another_replayer_are_not_folded_in(tmp_path):
          FakeReplayer(replay_dir, _answers, other))
     state = qr.ReplayState(CONFIG, qr.valid_reports(run_dir), qr.collect(replay_dir))
     assert state.attempts == [] and state.other_replayer == 11
-    summary = qr.fold(run_dir, CONFIG, replay_dir=replay_dir, state=state)
+    assert state.other_replayer_text() == "model='another-model' (here 'fake-model')"
+    assert qr.plan_document(state)["other_replayer"] == 11
+    assert "another replayer (left out): 11" in qr.plan_text(qr.plan_document(state))
+    summary = qr.fold(run_dir, CONFIG, replay_dir=replay_dir, state=state,
+                      allow_other_replayer=True)
     assert summary["reports"] == {"pending": 4} and summary["other_replayer"] == 11
+    assert summary["other_replayer_differs"] == state.other_replayer_text()
     q = rq.score_episode(eps["side-good"])
     # Pending is "did not run": no `unknown` key, so the arm stays not measured.
     assert q["reports"][0]["gates"]["G4"] == {
         "pass": None, "reason": "ceiling not measured yet (0 of 3 replays)"}
+
+
+def _files(root: Path) -> dict[str, str]:
+    return {str(p.relative_to(root)): p.read_text() for p in sorted(root.rglob("*.json"))}
+
+
+def test_a_fold_under_another_replayer_is_refused_and_writes_nothing(tmp_path, capsys):
+    """QUA-3607. Replays saved under a provider, folded with the command the document
+    used to give (no `--provider`): every episode belongs to another fingerprint. Folded
+    anyway, each saved G4 answer went from pass to "not measured"."""
+    run_dir, replay_dir, eps = _board(tmp_path)
+    ran = replace(CONFIG, provider="bedrock")
+    state = qr.ReplayState(ran, qr.valid_reports(run_dir), [])
+    _run(state, FakeReplayer(replay_dir, _answers, ran))
+    qr.fold(run_dir, ran, replay_dir=replay_dir, state=state)
+    assert rq.score_episode(eps["side-good"])["reports"][0]["gates"]["G4"]["pass"] is True
+    before = _files(run_dir)
+
+    with pytest.raises(qr.ReplayError) as refused:
+        qr.fold(run_dir, CONFIG, replay_dir=replay_dir)
+    message = str(refused.value)
+    assert "11 saved replay episode(s)" in message and "Nothing was written" in message
+    assert "provider='bedrock' (here None)" in message
+    assert "--provider" in message and "--allow-other-replayer" in message
+    assert _files(run_dir) == before
+
+    # The command: non-zero exit, the message on stderr, nothing written.
+    replayer = ["--agent", "fake-agent", "--model", "fake-model"]
+    assert qr.main(["fold", str(run_dir), *replayer]) == 2
+    assert "provider='bedrock' (here None)" in capsys.readouterr().err
+    assert _files(run_dir) == before
+    # With the replayer the episodes were run under, it folds, and changes nothing.
+    assert qr.main(["fold", str(run_dir), *replayer, "--provider", "bedrock",
+                    "--tooling", "mcp"]) == 0
+    assert "left out" not in capsys.readouterr().out
+    assert _files(run_dir) == before
+    # Told to, it folds this replayer's (zero) episodes and says what it left out.
+    assert qr.main(["fold", str(run_dir), *replayer, "--allow-other-replayer"]) == 0
+    assert "left out: 11 saved replay episode(s) of another replayer" in capsys.readouterr().out
+    assert rq.score_episode(eps["side-good"])["reports"][0]["gates"]["G4"]["pass"] is None
+
+
+def test_a_fold_keeps_the_columns_it_did_not_compute(tmp_path):
+    """QUA-3607. An episode scored with the G5 side column keeps it through a fold; one
+    scored without it does not gain it."""
+    run_dir, replay_dir, eps = _board(tmp_path)
+    rq.write_quality(eps["side-good"], judge=True)
+    rq.write_quality(eps["side-bad"])
+    saved = json.loads((eps["side-good"] / rq.QUALITY_FILE).read_text())
+    assert "steps_accuracy" in saved["totals"]
+    state = qr.ReplayState(CONFIG, qr.valid_reports(run_dir), [])
+    _run(state, FakeReplayer(replay_dir, _answers))
+    qr.fold(run_dir, CONFIG, replay_dir=replay_dir, state=state)
+    folded = json.loads((eps["side-good"] / rq.QUALITY_FILE).read_text())
+    assert folded["totals"]["steps_accuracy"] == saved["totals"]["steps_accuracy"]
+    assert folded["reports"][0]["steps_accuracy"] == saved["reports"][0]["steps_accuracy"]
+    assert folded["reports"][0]["gates"]["G4"]["pass"] is True          # and G4 is in
+    other = json.loads((eps["side-bad"] / rq.QUALITY_FILE).read_text())
+    assert "steps_accuracy" not in other["totals"]
+    # Everything a plain rescore writes is there, byte for byte.
+    assert (eps["side-bad"] / rq.QUALITY_FILE).read_text() == rq.render(
+        rq.score_episode(eps["side-bad"]))
+
+
+def test_a_ceiling_that_was_given_up_is_unavailable_not_pending(tmp_path):
+    """QUA-3607. The reference replay of a defect failed to run more often than the
+    retries allow. Nothing is left to wait for, so its reports are "could not be run"
+    (unknown), not "not run yet": read as pending, one such report kept the whole arm
+    not measured for ever."""
+    run_dir, replay_dir, eps = _board(tmp_path)
+
+    def answers(unit):
+        if unit.defect_id == SIDE[1] and unit.kind == qr.CEILING:
+            return "staging"                               # never runs
+        return _answers(unit)
+
+    state = qr.ReplayState(CONFIG, qr.valid_reports(run_dir), [])
+    fake = FakeReplayer(replay_dir, answers)
+    _run(state, fake)
+    ceiling = [k for k in fake.calls if k.startswith(f"{qr.CEILING}:{APP}/{SIDE[0]}")]
+    assert len(ceiling) == CONFIG.max_retries + 1 and state.next_units() == []
+    assert state.worst_case()["total"] == 0
+    summary = qr.fold(run_dir, CONFIG, replay_dir=replay_dir, state=state)
+    assert summary["reports"] == {"unavailable": 2, "excluded": 2}
+    for name in ("side-good", "side-bad"):
+        entry = json.loads((eps[name] / qr.REPLAY_FILE).read_text())["reports"][0]
+        assert entry["status"] == "unavailable" and entry["excluded"] is None
+        assert entry["reason"] == "the reference replay could not be run: no ceiling"
+        gate = rq.score_episode(eps[name])["reports"][0]["gates"]["G4"]
+        assert gate == {"pass": None, "unknown": True, "reason": entry["reason"]}
+    # The arm is measured: its reports are unknown beside the rate, not waited for.
+    (row,) = quality_rates.block([_record(ep) for ep in eps.values()])["rows"]
+    assert row["gates_missing"] == [] and row["customer_ready"]["measured"] is True
+    assert (row["customer_ready"]["waiting"], row["customer_ready"]["unknown"]) == (0, 4)
+    # A control that was given up after the ceiling passed is the same.
+    assert qr.baseline_status(_facts(), [_attempt(True), _attempt(True)], [], CONFIG,
+                              gave_up=True)["need"] is None
 
 
 def test_a_replay_that_did_not_run_is_retried_once_and_then_given_up(tmp_path):

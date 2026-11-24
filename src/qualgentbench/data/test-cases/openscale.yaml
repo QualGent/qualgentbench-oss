@@ -106,8 +106,7 @@ test_cases:
           summary: The Overview screen title is misspelled
           steps:
             - Launch openScale.
-            - Tap Add new measurement in the top bar.
-            - Go back to the Overview.
+            - Open the Overview, the screen the app starts on.
           expected: The top bar of the first screen reads Overview.
           actual: The top bar reads Overveiw.
           failure_step: 'Step 1: Open the app to the Overview'

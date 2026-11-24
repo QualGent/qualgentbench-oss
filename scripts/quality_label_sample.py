@@ -200,29 +200,43 @@ class Candidate:
         return f"{self.board}/{self.episode}#{self.index}"
 
 
-def stratum_of(build: str, gates: dict[str, Any]) -> str:
+def stratum_of(build: str, gates: dict[str, Any], *, name_not_run: bool = False) -> str:
     """`clean` for a clean build; else the headline gates the report failed, as
     `fail:G1+G3`, or `pass` when it failed none. A gate that ran and could not decide
     (`unknown: true`) is neither a pass nor a failure, so it is named on its own:
     `unknown:G2`, `fail:G3,unknown:G2`. A gate that did not run (`pass` null without
-    `unknown`, or absent from this quality version) is not named at all."""
+    `unknown`, or absent from this quality version) is not named at all, so `pass`
+    holds both "passed G4" and "G4 never ran".
+
+    `name_not_run` (QUA-3607, off by default: `rq-v1` was drawn without it) names such a
+    gate for a report that failed nothing, as `not_run:G4`: `pass` is then only a report
+    that passed every headline gate. A report that failed a gate keeps its stratum,
+    because no later gate was owed to it."""
     if build != "seeded":
         return STRATUM_CLEAN
     answers = {g: gates.get(g) or {} for g in rq.HEADLINE_GATES}
     failed = [g for g, a in answers.items() if a.get("pass") is False]
     unknown = [g for g, a in answers.items() if a.get("pass") is None and a.get("unknown")]
+    not_run = [g for g, a in answers.items()
+               if a.get("pass") is None and not a.get("unknown")]
     parts = [f"fail:{'+'.join(failed)}"] if failed else []
     if unknown:
         parts.append(f"unknown:{'+'.join(unknown)}")
+    if name_not_run and not_run and not failed:
+        parts.append(f"not_run:{'+'.join(not_run)}")
     return ",".join(parts) or STRATUM_PASS
 
 
 def render_step(step: Any) -> str:
     """One entry of the agent's step list as one line of text. A string keeps its words
-    (whitespace collapsed); anything else is shown as compact JSON with sorted keys."""
+    (whitespace collapsed); anything else is shown as compact JSON with sorted keys.
+    The line is sanitised as every other field of the customer-shaped report is
+    (`report_quality.sanitize_text`: a credential after `Bearer`, the value of
+    `password: ...`), so a secret an agent typed does not reach a labeller (QUA-3607).
+    No step of the drawn `rq-v1` sample holds such text; its bytes are unchanged."""
     if not isinstance(step, str):
         step = json.dumps(step, sort_keys=True, ensure_ascii=False, separators=(", ", ": "))
-    return " ".join(step.split())
+    return rq.sanitize_text(" ".join(step.split()))
 
 
 def render_steps(agent_steps: Any) -> list[str]:
@@ -303,7 +317,8 @@ def _report_fields(customer: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def collect(boards: Iterable[tuple[str, Path]], *, reference: ReferenceLookup,
-            exclude_heldout: bool = False) -> tuple[list[Candidate], dict[str, Any]]:
+            exclude_heldout: bool = False, name_not_run: bool = False
+            ) -> tuple[list[Candidate], dict[str, Any]]:
     """Every report that can be drawn from `boards` ((name, run directory) pairs), and
     what was read and left out. Reports of one app with the same text are one candidate:
     the one whose place sorts first, with the others in `same_text`."""
@@ -347,7 +362,8 @@ def collect(boards: Iterable[tuple[str, Path]], *, reference: ReferenceLookup,
                 cand = Candidate(
                     board=board, episode=episode, index=index, app_id=app_id,
                     case_id=case_id, build=build, heldout=heldout, matched=matched,
-                    stratum=stratum_of(build, entry.get("gates") or {}), report=report)
+                    stratum=stratum_of(build, entry.get("gates") or {},
+                                       name_not_run=name_not_run), report=report)
                 steps = render_steps(customer.get("agent_steps"))
                 if (build == "seeded" and matched and _text_list(steps)
                         and customer.get("report_source") == rq.SOURCE_REPORT_TOOL):
@@ -463,13 +479,14 @@ def render(doc: dict[str, Any]) -> str:
 def build(boards: Iterable[tuple[str, Path]], *, seed: int = DEFAULT_SEED,
           total: int = DEFAULT_TOTAL, clean: int = DEFAULT_CLEAN, steps: int = DEFAULT_STEPS,
           exclude_heldout: bool = False, reference: ReferenceLookup | None = None,
-          app_names: AppNames | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+          app_names: AppNames | None = None, name_not_run: bool = False
+          ) -> tuple[dict[str, Any], dict[str, Any]]:
     """(sample, key) for `boards`. Pure but for reading the episodes and the case files:
     no clock, no host name, no absolute path in either document."""
     boards = sorted(boards)
     lookup = CorpusLookup()
     pool, info = collect(boards, reference=reference or lookup.reference_steps,
-                         exclude_heldout=exclude_heldout)
+                         exclude_heldout=exclude_heldout, name_not_run=name_not_run)
     chosen, with_steps = draw(pool, seed=seed, total=total, clean=clean, steps=steps)
     name_of = app_names or lookup.app_name
 
@@ -499,7 +516,10 @@ def build(boards: Iterable[tuple[str, Path]], *, seed: int = DEFAULT_SEED,
         "format": KEY_FORMAT, "version": FORMAT_VERSION, "set_id": SET_ID,
         "sample_sha256": hashlib.sha256(render(sample).encode("utf-8")).hexdigest(),
         "seed": seed,
-        "targets": {"total": total, "clean": clean, "step_subset": steps},
+        # `name_not_run` is recorded only when it was asked for, so a draw without it
+        # writes the key it always wrote.
+        "targets": {"total": total, "clean": clean, "step_subset": steps,
+                    **({"name_not_run": True} if name_not_run else {})},
         "boards": [name for name, _ in boards],
         "quality_versions": info["quality_versions"],
         "read": info["read"],
@@ -546,6 +566,11 @@ def main(argv: list[str] | None = None) -> int:
                     help="of which carry step labels")
     ap.add_argument("--exclude-heldout", action="store_true",
                     help="leave out episodes of held-out apps")
+    ap.add_argument("--name-not-run", action="store_true",
+                    help="put a report that failed nothing and still waits for a gate in "
+                         "its own stratum (`not_run:G4`), apart from `pass`. Off by "
+                         "default: rq-v1 was drawn without it, and with it the same "
+                         "episodes give other bytes")
     args = ap.parse_args(argv)
 
     if not 1 <= args.total <= MAX_ITEMS or args.clean < 0 or args.steps < 0:
@@ -568,7 +593,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     sample, key = build(boards, seed=args.seed, total=args.total, clean=args.clean,
-                        steps=args.steps, exclude_heldout=args.exclude_heldout)
+                        steps=args.steps, exclude_heldout=args.exclude_heldout,
+                        name_not_run=args.name_not_run)
     read, drawn = key["read"], key["drawn"]
     if not sample["items"]:
         print("error: no report to draw. "

@@ -509,13 +509,22 @@ def gate_reproducible(episode: Episode, report: dict[str, Any], index: int) -> G
 #          and a device result on the step holds that text; or
 #        * the defect is a crash or a hang, which leaves no text of its own: the device
 #          showed the `observed` text on the step, on a screen an action of the agent's
-#          left (not the screen the case starts on); or
+#          left (not the screen the case starts on), and the agent read one of the
+#          step's own screens there; or
 #        * the defect only REMOVES text: a screen the agent read on the step, left by
-#          an action of its own, lacks the text only the clean build shows.
+#          an action of its own, lacks the text only the clean build shows, and is the
+#          screen the truth shows the defect on.
 #
 #      A quote the device did show on the step, but which is no truth text of the
 #      defect, proves nothing either way: unknown. So does a report on missing text
 #      with no such screen (QUA-3604).
+#
+#      "The step's own screens" (QUA-3607): the truth row keeps the texts of the screen
+#      after every route step. A screen listing is one of step N's when it holds a text
+#      recorded on a screen that is up during step N and not on the screen the case
+#      starts on (`step_screen_texts`). An agent's own action, and its saying "Step N:",
+#      do not put it on step N; a screen with none of the step's texts can be any
+#      screen, and lacks every text there is.
 #
 # The scorer's `grounded` asks only whether the quote appeared anywhere in the episode.
 # This gate adds the "where". It reads the saved transcript, the case file and the truth
@@ -1238,12 +1247,13 @@ def step_screen_texts(case: CaseTruth, step: int,
 def _at_step(seen: list[_Seen], step: int, texts: tuple[re.Pattern[str], ...],
              lacking: Iterable[re.Pattern[str]] = ()) -> bool:
     """Did the agent read, on `step` and after an action of its own, a screen listing
-    that holds one of `texts` (and none of `lacking`)? This is what ties a screen to
-    the truth's step: a listing with none of the step's texts can be any screen."""
+    that holds one of `texts` (and, when `lacking` is given, lacks one of those)? This
+    is what ties a screen to the truth's step: a listing with none of the step's texts
+    can be any screen."""
     lacking = tuple(lacking)
     return any(s.surely(step) and s.acted and s.screen
                and any(p.search(s.text) for p in texts)
-               and not any(p.search(s.text) for p in lacking) for s in seen)
+               and not (lacking and all(p.search(s.text) for p in lacking)) for s in seen)
 
 
 # ── which step each device result belongs to ───────────────────────────────────
@@ -1454,14 +1464,17 @@ def gate_located(episode: Episode, report: dict[str, Any], index: int) -> GateRe
                   holds it
       a death     a crash or a hang has no text of its own unless Android puts up a
                   dialog. Without one: the device showed `observed` on the step, on a
-                  screen an action of the agent's left
+                  screen an action of the agent's left, and the agent read one of the
+                  step's own screens (`step_screen_texts`, clean pass) on that step
       an absence  the defect removes text. A screen the agent read on the step, left by
-                  an action of its own, lacks the text only the clean build shows
+                  an action of its own, lacks the text only the clean build shows, and
+                  is the screen the truth shows the defect on (`_absence_seen`)
 
     Unknown (never a pass, never a fail) when the truth has no step for the defect, when
     the transcript does not say which step the calls belong to, when the device showed
-    the quote on the step but it is no truth text of the defect, and when a report on
-    missing text has no screen that settles it."""
+    the quote on the step but it is no truth text of the defect, when a report on
+    missing text has no screen that settles it, and when nothing the agent read on the
+    step is one of the step's own screens where the rule asks for one."""
     defect = report.get("matched")
     if not defect:
         return GateResult(None, "not run: the report matched no seeded defect")
@@ -1587,6 +1600,11 @@ def _absence_seen(case: CaseTruth, seen: list[_Seen], step: int, route_steps: li
                   missing: list[re.Pattern[str]]) -> bool:
     """Did the agent read, on `step` and after an action of its own, the screen the
     truth shows the missing text on, without that text?
+
+    "Without that text": the screen lacks one or more of the texts the report names as
+    missing (`missing`). Not every one has to be gone: a defect that drops the bottom
+    tabs `Overview`, `Medicine` and `Analysis` leaves `Medicine settings` on the screen,
+    and that still holds the word.
 
     A listing with none of the case's texts lacks every text there is, and so does the
     start screen, and so does the screen the step STARTS on (the step has not put the

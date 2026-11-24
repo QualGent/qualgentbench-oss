@@ -405,6 +405,9 @@ def test_a_defect_that_removes_text_is_located_by_a_screen_without_it(tmp_path, 
     for i, observed in enumerate(("", "The list has no row for the note", "New ntoe")):
         g = _g2(tmp_path, SAVE_RUN, _report(3, observed), name=f"ep{i}")
         assert g == passed, observed
+    # A report that names two texts as missing is located by the screen that lacks one.
+    g = _g2(tmp_path, SAVE_RUN, _report(3, "", expected="Milk"), name="one")
+    assert g == passed
     # The screen on that step still shows the text: nothing is missing there. Unknown,
     # never a fail, and never a pass.
     kept = [*SAVE_RUN[:3], _tap("Save", "Notes", "Milk", "New note")]
