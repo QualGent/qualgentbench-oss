@@ -74,7 +74,7 @@ from typing import Any
 
 import yaml
 
-from qualgentbench import journey, reference_reports
+from qualgentbench import journey, quality_rates, reference_reports
 from qualgentbench import report_quality as rq
 
 _HERE = Path(__file__).resolve().parent
@@ -411,7 +411,7 @@ def run(task, mode: str, root: Path, channel: str = "findings",
     (ep / "agent").mkdir(parents=True, exist_ok=True)
     (ep / rq.RESULT_FILE).write_text(json.dumps(
         {"task_id": task.id, "task_type": journey.TASK_TYPE, "condition": "mcp",
-         "metrics": metrics}), encoding="utf-8")
+         "agent": mode, "model": "synthetic", "metrics": metrics}), encoding="utf-8")
     (ep / rq.TRANSCRIPT_FILE).write_text(transcript, encoding="utf-8")
     (ep / rq.BRIEF_FILE).write_text(journey.brief(scored, "emulator-5554", "mcp"),
                                     encoding="utf-8")
@@ -449,20 +449,33 @@ def ready_claims(quality: Any, _path: str = "") -> list[str]:
     return found
 
 
+#: In a `customer_ready*` mapping (a row of the rates block, `quality_rates.block`), the
+#: entries that say a report IS ready. The rest are denominators, intervals, and counts
+#: of reports that are not ready, unknown or waiting for a gate.
+_READY_KEYS = ("k", "ready", "rate", "passed")
+
+
 def _positive(value: Any, path: str) -> list[str]:
-    """Where a `customer_ready*` value is true or above zero. In a mapping the `n`,
-    `evaluated`, `total` and `unknown` entries are denominators, not claims."""
+    """Where a `customer_ready*` value is true or above zero."""
     if value is True or (isinstance(value, (int, float)) and not isinstance(value, bool)
                          and value > 0):
         return [f"{path} = {value!r}"]
     if isinstance(value, dict):
-        return [hit for k, v in value.items()
-                if k not in ("n", "evaluated", "total", "unknown", "scored", "reports")
-                and not str(k).endswith("unknown")
-                for hit in _positive(v, f"{path}.{k}")]
-    if isinstance(value, list):
-        return [hit for i, v in enumerate(value) for hit in _positive(v, f"{path}[{i}]")]
+        return [hit for k in _READY_KEYS if k in value
+                for hit in _positive(value[k], f"{path}.{k}")]
     return []
+
+
+def rates_claims(records: list[dict]) -> tuple[list[str], int]:
+    """The rates block (`quality_rates.block`) over one agent's episodes, read two ways:
+    `(customer-ready claims, reports ready on the gates that exist)`. The second is the
+    block's `ready_on_available`: every registered headline gate passed. It is above
+    zero for an agent that passes G1, G2 and G3 on one report, whether or not G4 is
+    registered, which makes it the live form of the customer-ready rate today."""
+    block = quality_rates.block(records)
+    claims = [f"rates block: {c}" for c in ready_claims(block)]
+    return claims, sum(int((row.get("ready_on_available") or {}).get("k") or 0)
+                       for row in block.get("rows") or [])
 
 
 @dataclasses.dataclass
@@ -477,9 +490,13 @@ class Tally:
     ready: list = dataclasses.field(default_factory=list)     # customer-ready claims
     reasons: dict = dataclasses.field(default_factory=dict)   # G2 not-a-pass reason -> count
     misses: list = dataclasses.field(default_factory=list)    # each G1/G2 answer not a pass
+    records: list = dataclasses.field(default_factory=list)   # rates-block episode records
+    available: int = 0                     # rates block: ready on the gates that exist
 
-    def add(self, task_id: str, quality: dict) -> None:
+    def add(self, task_id: str, quality: dict, result: dict | None = None) -> None:
         self.episodes += 1
+        if result is not None:
+            self.records.append(quality_rates.episode_record(result, quality))
         for r in quality["reports"]:
             if r["neutral"]:
                 continue
@@ -536,7 +553,10 @@ def tally(mode: str, root: Path, channel: str = "findings",
     for task, seeded in tasks_for(mode, app_ids, clean):
         result = run(task, mode, root / ("clean" if clean else "arm"), channel, seeded)
         if result is not None:
-            out.add(task.id, result[1])
+            out.add(task.id, result[1], {"agent": mode, "model": "synthetic",
+                                         "condition": "mcp", "metrics": result[0]})
+    claims, out.available = rates_claims(out.records)
+    out.ready += claims
     return out
 
 
@@ -569,6 +589,10 @@ def judge(results: dict, paid: dict) -> tuple[list[str], list[str]]:
         if mode in GUESSERS:
             if not t.reports:
                 failures.append(f"{who} wrote no report; its zero proves nothing")
+            if t.available and mode not in KNOWN_DEFECTS:
+                failures.append(f"{who} has {t.available} report(s) that pass every "
+                                f"registered headline gate (rates block, "
+                                f"`ready_on_available`)")
             if t.both and mode in KNOWN_DEFECTS:
                 known.append(f"{who} passes G1 (valid) and G2 (located) together on "
                              f"{len(t.both)} report(s): {KNOWN_DEFECTS[mode]}" + some(t.both))
@@ -612,15 +636,17 @@ def judge(results: dict, paid: dict) -> tuple[list[str], list[str]]:
 
 def table(results: dict, paid: dict) -> str:
     rows = [(f"{'agent':22s}{'channel':13s}{'episodes':>9s}{'reports':>9s}{'G1':>11s}"
-             f"{'G2':>10s}{'G2 unk':>8s}{'G3':>11s}{'G1+G2':>7s}{'ready':>7s}")]
+             f"{'G2':>10s}{'G2 unk':>8s}{'G3':>11s}{'G1+G2':>7s}{'avail':>7s}{'ready':>7s}")]
     for label, tallies in (("", results), (" @clean", paid)):
         for (mode, channel), t in tallies.items():
             rows.append(f"{mode + label:22s}{channel:13s}{t.episodes:>9d}{t.reports:>9d}"
                         f"{t.cell('G1'):>11s}{t.cell('G2'):>10s}{t.unknown:>8d}"
-                        f"{t.cell('G3'):>11s}{len(t.both):>7d}{len(t.ready):>7d}")
+                        f"{t.cell('G3'):>11s}{len(t.both):>7d}{t.available:>7d}{len(t.ready):>7d}")
     rows.append("\nG1 / G3 = reports that passed / reports the gate ran on · G2 = passed / "
-                "(ran + unknown) · G1+G2 = reports that passed both · ready = customer-ready "
-                "claims anywhere in the quality block · @clean = a priced adversary on the "
+                "(ran + unknown) · G1+G2 = reports that passed both · avail = reports that "
+                "passed every registered headline gate (the rates block's "
+                "`ready_on_available`) · ready = customer-ready claims in any quality "
+                "block or in the rates block · @clean = a priced adversary on the "
                 "clean build")
     return "\n".join(rows)
 

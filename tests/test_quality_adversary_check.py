@@ -81,6 +81,9 @@ def test_a_guesser_is_never_customer_ready_nor_valid_and_located(tallies, mode):
         assert t.episodes >= 30 and t.reports >= t.episodes, (mode, channel, t.episodes)
         assert t.ready == [], f"{mode} ({channel}) has a customer-ready report"
         assert t.both == [], f"{mode} ({channel}) passes G1 and G2 on one report"
+        # The rates block, built by its own module from the same episodes: no report
+        # passes every registered headline gate. This one is live before G4 lands.
+        assert t.available == 0 and len(t.records) == t.episodes, (mode, channel)
 
 
 @pytest.mark.parametrize("mode", ["steps-copy", "structured-clean", "brief-fill", "id-echo"])
@@ -202,8 +205,9 @@ def test_the_symptom_sprayer_pays_on_every_clean_build(tallies):
     "only that SOME quote was in a device result on the named step, and takes the step "
     "from the agent's own 'Step N:' message, so one read of the start screen after "
     "saying 'Step <last>' counts for every step. Measured on the public corpus: 101 of "
-    "149 report-tool reports and 288 of 739 findings reports pass both; G3 passes on 97 "
-    "of 149 with the test case's own steps copied. Only G4 (replay) is left on a seeded "
+    "149 report-tool reports and 288 of 739 findings reports pass both, and 61 of 149 "
+    "pass G1, G2 and G3 together with the test case's own steps copied (the rates "
+    "block's `ready_on_available`). Only G4 (replay) is left on a seeded "
     "build, and a replay of the copied steps reaches the defect."))
 def test_the_symptom_sprayer_is_not_valid_and_located(tallies):
     for channel, t in _every("symptom-quote", tallies):
@@ -227,8 +231,9 @@ def test_a_valid_and_located_guesser_fails_the_gate_unless_it_is_a_known_defect(
     off, the run above is a failure."""
     monkeypatch.setattr(qadv, "KNOWN_DEFECTS", {})
     failures, _ = qadv.judge(*tallies)
-    assert failures and all("'path-echo'" in line and "G1 (valid) and G2 (located)" in line
-                            for line in failures)
+    assert failures and all("'path-echo'" in line for line in failures)
+    assert any("G1 (valid) and G2 (located)" in line for line in failures)
+    assert any("every registered headline gate" in line for line in failures)
 
 
 def test_a_customer_ready_guesser_fails_the_build(tmp_path, monkeypatch, capsys):
@@ -271,12 +276,18 @@ def _block(**over) -> dict:
     (_block(report={"customer_ready": False}), 0),
     (_block(report={"customer_ready": True}), 1),
     (_block(totals={"customer_ready": 2}), 1),
-    # A rates block, in the shapes one could take: a bare rate, k of n, or per group.
-    (_block(rates={"customer_ready_rate": 0.0, "customer_ready": {"k": 0, "n": 4,
-                                                                 "rate": 0.0}}), 0),
-    (_block(rates={"customer_ready_rate": 0.25}), 1),
-    (_block(rates={"customer_ready": {"k": 1, "n": 4, "rate": 0.25, "lo": 0.0}}), 2),
-    (_block(rates={"by_gate": {"G1": {"k": 3, "n": 4}}, "customer_ready_unknown": 3}), 0),
+    # A row of the rates block (`quality_rates.block`): `k`, `ready` and `rate` say a
+    # report is ready; the interval, the denominators and the not-ready counts do not.
+    (_block(rows=[{"customer_ready": {"measured": False, "ready": 0, "not_ready": 3,
+                                      "unknown": 1, "waiting": 2, "k": 0, "n": 3,
+                                      "rate": 0.0, "ci": [0.0, 0.56],
+                                      "unknown_share": 0.17},
+                   "customer_ready_yield": {"measured": False, "k": 0, "n": 4,
+                                            "rate": None, "ci": None}}]), 0),
+    (_block(rows=[{"customer_ready": {"ready": 1, "not_ready": 3, "k": 1, "n": 4,
+                                      "rate": 0.25, "ci": [0.05, 0.7]}}]), 3),
+    (_block(rows=[{"customer_ready_yield": {"k": 1, "n": 4, "rate": 0.25}}]), 2),
+    (_block(rows=[{"gates": {"G1": {"passed": 3, "evaluated": 4}}}]), 0),
 ])
 def test_ready_claims_finds_a_customer_ready_report_wherever_it_is_counted(block, claims):
     """So the checks keep their meaning when G4 and a rates block are added: a true
@@ -297,3 +308,14 @@ def test_run_scores_a_copy_and_leaves_the_corpus_task_alone(tmp_path):
     assert shaped["report_source"] == rq.SOURCE_REPORT_TOOL
     assert shaped["steps"].startswith("1. ") and len(shaped["repro_steps"]) == len(
         task.bug_spec["steps"])
+
+
+def test_the_rates_block_agrees_with_the_tallies(tallies):
+    """`Tally.available` is read from the real `quality_rates.block`, not recomputed:
+    the honest control is ready on the available gates nearly everywhere, and the
+    priced adversary nowhere on a clean build."""
+    results, paid = tallies
+    honest = results[("honest", "findings")]
+    assert 0 < honest.available <= len(honest.both)
+    assert all(t.available == 0 and t.ready == [] for t in paid.values())
+    assert results[("right-step", "report_tool")].available > 100
