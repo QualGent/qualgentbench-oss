@@ -359,6 +359,43 @@ report; it is copied and re-stamped without a rescore). Held-out changes are cou
 named, in its output. A view of the copy lists the re-label in the
 manifest (`versions.restamped_from`).
 
+### Harness-written lines are not device text (scorer v6)
+
+A tool result reaches the scorer as text, and not all of it came off the device. Journey
+grounding (`grounded`: the device answered with the report's quote), the screen witness
+and the present-oracle evidence all read device results, so a line the harness wrote into
+one counted as something the device showed. `journey._harness_free` (QUA-3605) removes
+these shapes first, each taken from saved transcripts:
+
+| Line | Written by | Arm | Why it is not device text |
+|---|---|---|---|
+| `[Image: source: <path>]`, also with `, original WxH, displayed at WxH. Multiply coordinates by N to map to original image.` | the agent harness (claude-code), beside every image an MCP tool returns | MCP | It is the path the harness saved the screenshot under. That path is inside the episode directory, whose name holds the case id, the agent and the model. codex records no such line. |
+| `PreToolUse:<tool> hook error: [<episode>/hooks/…]: …` | the agent harness, reporting that a hook (the step budget) refused the call | both | The call never reached the device. The whole reply is dropped, like a refused MCP call's. |
+| `Shell cwd was reset to <episode>/workspace` | the agent harness's shell tool | bare | A note about the host shell, appended to the command's output. |
+| `(Bash completed with no output)` | the agent harness's shell tool | bare | A stand-in for empty output: the device said nothing. |
+| `<date> <time> <pid> <tid> <level> adb : …` | the HOST adb client's own log (tag exactly `adb`; the device's daemon is `adbd`) | bare | The client's complaint about the host (`cannot mkdir '<episode>/…/.android'`), never device output. |
+
+Before v6 a report quote equal to any piece of that path was `grounded`: a word of the
+case id, or `work` out of `…-workspace` (grounding is a substring test). Where the word
+is an `echo_texts` string of the case, the quote earned the blocking bug with the app
+never looked at. Only an absolute path is matched for the image line, and never one that
+is a whole JSON string value, so a label the app drew (`"text": "[Image: source: …]"`,
+`Click on [image] to add`) stays. The shell lines are whole lines and are dropped on the
+bare arm only. A screen read that came back as an image and the harness's line alone is
+no text observation, so that agent keeps the screenshot-only exemption.
+
+Kept on purpose, because the device tool wrote them about the device and they name
+nothing of the episode: DevLoop's guidance text (`Next: call mobile_observe_screen …`,
+`next_action`, `hint`), its `APP EVENT […]: <package> crashed … (<exception>)` notice,
+and adb's own status lines (`UI hierchary dumped to:`, `1 file pulled`).
+
+The adversary gate's `path-echo` guesser takes one screenshot and quotes the case id, the
+agent and the model back; it must earn nothing, and `PATH ECHO LIVENESS` proves it earns
+with the rule off. The rest of the line is measured as a pair (`path-spray` with the
+line, `path-blind` without): both must be credited identically. Rescoring every saved
+episode with the rule off and on (1,023 episodes, 527 with such lines, 5,447 results
+changed) moved no verdict, no report's `grounded` flag and no witness.
+
 ### Neutral reports: known clean-build behaviour and downstream effects (scorer v5)
 
 A journey report that `match_report` leaves unmatched is a false report, with two

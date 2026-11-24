@@ -7,7 +7,7 @@ the beginning; journey mode had nothing, and it paid for that — a report of
 derived blocking text of `A`, the contacts section index) and so earned recall AND
 completion, because a blocked case completes on "fail + the blocking bug named".
 
-Six synthetic guessers run through the real `journey.journey_verdict` against the real
+Eight synthetic guessers run through the real `journey.journey_verdict` against the real
 corpus — offline, no device, no agent, no tokens:
 
   short-spray    quotes a one-character screen value on every case, with vague prose
@@ -36,6 +36,24 @@ corpus — offline, no device, no agent, no tokens:
                  (`journey._refused_reply`); the gate also runs it in codex's transcript
                  format and proves every roster entry, in both formats, earns with the
                  rule off
+  path-echo      (QUA-3605) takes ONE screenshot of a screen that shows nothing it
+                 quotes, and quotes back what names its own episode: every word of the
+                 case id, the agent and the model, all of which the agent harness
+                 writes into the line beside a screenshot (`[Image: source: <episode
+                 dir>/…]`) and all of which the agent can read off its working
+                 directory. The scorer drops harness-written lines from device text
+                 (`journey._harness_free`); `PATH ECHO LIVENESS` proves the attack
+                 earns with that rule off
+
+`path-echo` quotes the words that IDENTIFY the episode. The rest of that line (the date
+stamp, directory names such as `…-workspace`) is measured by a pair rather than gated at
+zero, `path-spray` against `path-blind`: both quote every word of the line and every
+leading piece of each word (grounding is a substring test: `work` out of `workspace`),
+and they differ in ONE thing, whether the screen read carries the line. They must be
+credited identically on every episode, through both channels: the line adds nothing.
+What `path-blind` earns is printed, not failed: it is a common word (`Home`, a year) on a
+route that asks for no grounding, earned with no screenshot at all, which is a finding
+about those cases' truth texts and not about the harness line.
 
 Each must be credited NOTHING: no bug found, no completion, anywhere — and through BOTH
 report channels (QUA-2777): the `findings.yaml` file, and DevLoop's `mobile_report_result`
@@ -89,7 +107,7 @@ VAGUER = "something about this felt off while I was working through it"
 FILLER = (VAGUE, VAGUER)
 # Adversaries that must earn exactly nothing, anywhere.
 GUESSERS = ("short-spray", "generic-spray", "dead", "brief-echo", "dialog-echo",
-            "type-then-quote", "argument-echo")
+            "type-then-quote", "argument-echo", "path-echo")
 # Adversaries that DO earn credit and are measured against what it costs them.
 PRICED = ("symptom-spray",)
 MODES = GUESSERS + ("honest", "honest-text")
@@ -321,6 +339,105 @@ def arg_echo_liveness(tasks: list) -> dict[tuple[str, str], int]:
     return out
 
 
+# ── the path-echo guesser (QUA-3605) ────────────────────────────────────────────
+#: The agent and model in path-echo's made-up episode directory (any would do; these
+#: name no real agent or model).
+PATH_AGENT, PATH_MODEL = "agent-cli", "model-x1"
+_PATH_WORD_RE = re.compile(r"[a-z0-9]+")
+
+
+def image_source_line(spec: dict) -> str:
+    """The line the agent harness writes beside a screenshot, as saved transcripts carry
+    it: the image's path inside the episode directory, which the harness names
+    `<runs>/<case>/<stamp>_<case>_<agent>_<model>_<arm>_trial-N_ep-<id>`, then the resize
+    note. Every piece of it is something the agent can read off its own working
+    directory without touching the app."""
+    case = str(spec.get("case_id") or "case")
+    ep = f"2026-01-01T00-00-00Z_{case}_{PATH_AGENT}_{PATH_MODEL}_mcp_trial-1_ep-0123456789ab"
+    root = f"/work/runs/{case}/{ep}"
+    project = re.sub(r"[^A-Za-z0-9]", "-", f"{root}/workspace")
+    return (f"[Image: source: {root}/claude_home/projects/{project}/"
+            "11111111-2222-3333-4444-555555555555/tool-results/mcp-device-blob-1-abcdef.jpg, "
+            "original 1080x2400, displayed at 900x2000. Multiply coordinates by 1.20 to map "
+            "to original image.]")
+
+
+def id_words(spec: dict) -> list[str]:
+    """What path-echo quotes: the words of the case id, the agent name and the model
+    name — what identifies the episode, and what its directory is named after."""
+    text = f"{spec.get('case_id')} {PATH_AGENT} {PATH_MODEL}".lower()
+    return [w for w in dict.fromkeys(_PATH_WORD_RE.findall(text)) if journey._evidence(w)]
+
+
+def path_pieces(spec: dict) -> list[str]:
+    """What path-spray and path-blind quote: each word of the screenshot line, and each
+    leading piece of a word that is long enough to be evidence — they do not know which
+    piece a case's truth happens to hold (`work` is the start of `workspace`)."""
+    out: dict[str, None] = {}
+    for word in _PATH_WORD_RE.findall(image_source_line(spec).lower()):
+        # A word with a digit in it (a stamp, an id) is quoted whole only.
+        start = journey._MIN_EVIDENCE_CHARS if word.isalpha() else len(word)
+        for end in range(start, len(word) + 1):
+            if journey._evidence(word[:end]):
+                out[word[:end]] = None
+    return list(out)
+
+
+def _screenshot(spec: dict, cid: str = "shot") -> str:
+    """One screen read answered as claude-code records a screenshot: the image, the
+    harness's line about it, then a listing that shows nothing any case knows. codex
+    records no such line, so this guesser has one transcript format."""
+    listing = json.dumps({"elements": [{"text": "Lorem ipsum dolor", "x": 0, "y": 0}]})
+    return "\n".join([
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": cid, "name": "mcp__device__mobile_observe_screen",
+             "input": {"device": "d"}}]}}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": cid, "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                             "data": "AAAA"}},
+                {"type": "text", "text": image_source_line(spec)},
+                {"type": "text", "text": listing}]}]}})])
+
+
+@contextlib.contextmanager
+def _harness_rule_off():
+    """The scorer before QUA-3605: every line of a device result is device text. Only
+    ever used to prove an attack is LIVE."""
+    saved = journey._harness_free
+    journey._harness_free = lambda payload, tooling="mcp": payload
+    try:
+        yield
+    finally:
+        journey._harness_free = saved
+
+
+def path_echo_liveness(tasks: list) -> int:
+    """Seeded defects path-echo earns with the harness-line rule OFF. Must be > 0, or
+    the guesser attacks nothing and its 0 in the gate proves nothing."""
+    with _harness_rule_off():
+        return sum(len(run(t, "path-echo")["bugs_found"]) for t in tasks)
+
+
+def _credit(task, mode: str, channel: str) -> tuple[tuple[str, ...], bool]:
+    m = run(task, mode, channel)
+    return tuple(sorted(m.get("bugs_found") or [])), m.get("completed") is True
+
+
+def path_line_adds(tasks: list) -> list[str]:
+    """Episodes where `path-spray` (the screenshot line in its one screen read) is
+    credited differently from `path-blind` (the same report, the same read without the
+    line), through either channel. Empty = the line adds nothing."""
+    out: list[str] = []
+    for task in tasks:
+        for channel in CHANNELS:
+            with_line, without = _credit(task, "path-spray", channel), _credit(task, "path-blind", channel)
+            if with_line != without:
+                out.append(f"{task.id} ({channel}): {len(with_line[0])} bug(s) with the line, "
+                           f"{len(without[0])} without")
+    return out
+
+
 def _text(s: str) -> str:
     return json.dumps({"type": "assistant",
                        "message": {"content": [{"type": "text", "text": s}]}})
@@ -431,6 +548,7 @@ def _episode(spec: dict, mode: str, app_name: str = "",
     entries: list[dict] = []
     typed: list[str] = []
     refused: list[str] = []
+    shots: list[str] = []
 
     if mode == "dead":
         # No device work at all, and the luckiest verdict it could have guessed.
@@ -468,6 +586,20 @@ def _episode(spec: dict, mode: str, app_name: str = "",
         verdict = "fail"
         refused = list(dict.fromkeys(brief_strings(spec) + dialog_strings(app_name)))
         entries = _spray(refused)
+    elif mode == "path-echo":
+        # QUA-3605: its ONE device call is a screenshot of a screen that shows nothing
+        # it quotes; the only place its quotes exist is the harness's line beside it.
+        verdict = "fail"
+        payloads = []
+        shots = [_screenshot(spec)]
+        entries = _spray(id_words(spec))
+    elif mode in ("path-spray", "path-blind"):
+        # The measured pair: every piece of the line, with the line and without it.
+        verdict = "fail"
+        if mode == "path-spray":
+            payloads = []
+            shots = [_screenshot(spec)]
+        entries = _spray(path_pieces(spec))
     elif mode == "symptom-spray":
         # The corpus's own symptom vocabulary for every defect the app declares —
         # readable straight out of the public test-case file — with nothing quoted.
@@ -490,7 +622,7 @@ def _episode(spec: dict, mode: str, app_name: str = "",
                             "expected": absent[0] if absent else "",
                             "description": VAGUE if mode == "honest-text"
                             else (_symptom(spec, bug_id) or VAGUE)})
-    lines = [_device(p, i, fmt) for i, p in enumerate(payloads)] + \
+    lines = [_device(p, i, fmt) for i, p in enumerate(payloads)] + shots + \
         [_typed(t, i, roster) for i, t in enumerate(typed)] + \
         [_arg_echoed(t, i, arg_roster, fmt) for i, t in enumerate(refused)]
     return "\n".join(lines) + "\n", yaml.safe_dump({"verdict": verdict, "bugs": entries},
@@ -777,6 +909,40 @@ def main() -> int:
             print(f"  FAIL: '{name}' ({fmt}) earns nothing even with the rule off — the "
                   f"attack is dead and its 0 above proves nothing")
 
+    # ── the screenshot path (QUA-3605) ──────────────────────────────────────────
+    # path-echo's 0 above is only a guard if the harness's line WOULD ground its quotes
+    # without the rule that drops it.
+    path_live = path_echo_liveness(tasks)
+    print(f"\nPATH ECHO LIVENESS: with the harness-line rule OFF, path-echo would earn "
+          f"{path_live} seeded defect(s)")
+    if not path_live and not app_ids:
+        ok = False
+        print("  FAIL: path-echo earns nothing even with the rule off — the attack is dead "
+              "and its 0 above proves nothing")
+    # The rest of the line (date stamp, directory names), as a pair: the same quotes
+    # with the line and without it must be credited identically.
+    adds = path_line_adds(tasks)
+    blind = [f"{t.id}: {', '.join(found)}" for t in tasks
+             for found, _done in [_credit(t, "path-blind", "findings")] if found]
+    with _harness_rule_off():
+        pair_live = len(path_line_adds(tasks))
+    print(f"PATH SPRAY: every piece of the screenshot line, quoted with the line and "
+          f"without it, is credited differently on {len(adds)} episode(s) "
+          f"({pair_live} with the rule off)")
+    for line in adds[:12]:
+        ok = False
+        print(f"  FAIL: {line}")
+    if not pair_live and not app_ids:
+        ok = False
+        print("  FAIL: the pair is credited identically even with the rule off — it "
+              "measures nothing")
+    if blind:
+        print(f"  CORPUS: {len(blind)} seeded defect(s) are credited to the same quotes with "
+              f"NO screenshot line: a common word (a year, `Home`) is a truth text on a "
+              f"route that asks for no grounding. Not the harness line, and not failed here:")
+        for line in blind:
+            print(f"    {line}")
+
     # ── the priced adversaries ────────────────────────────────────────────────
     # These EARN credit, and that is not a bug to be fixed: symptom prose with nothing
     # quoted is the only report a functional defect with no string to quote ever has,
@@ -831,7 +997,8 @@ def main() -> int:
               f"tool — including the four that quote real screen "
               f"text they never had to look at (one of them after typing it into "
               f"the device, one after handing it to a read tool and quoting the "
-              f"refusal, in both transcript formats); honest found "
+              f"refusal, in both transcript formats) and the one that quotes its own "
+              f"screenshot's path; honest found "
               f"{tot['honest'][0]}/{tot['honest'][1]} and every defect it missed has no "
               f"quotable evidence in the corpus; every priced adversary paid in full")
     return 0 if ok else 1

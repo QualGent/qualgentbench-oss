@@ -75,6 +75,7 @@ def test_the_closure_reaches_the_helpers_and_the_other_scoring_modules():
     items = set(Closure().items())
     for want in [("journey", n) for n in (
                      "journey_verdict", "match_report", "_witness", "_refused_reply",
+                     "_harness_free", "_IMAGE_SOURCE_LINE_RE",
                      "_quote_rules_out", "_witness_capable", "_evidence", "parse_report",
                      "_device_text", "_device_texts", "_observation_texts", "defect_stamp",
                      "report_from_tool", "Report", "BugReport", "_MIN_EVIDENCE_CHARS",
