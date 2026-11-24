@@ -424,7 +424,7 @@ test_cases:
             - Tap SAVE in the duration dialog.
           expected: The Session goal's Duration reads 1h, the value picked.
           actual: The Session goal's Duration reads "2h". It also reads 2h when the saved activity is reopened.
-          failure_step: 'Step 2: Tap More, open Goal, and set the Session goal''s duration to 1h.'
+          failure_step: 'Step 3: Save the activity.'
 
   # DISPLAY side bug (widget-inventory). The case's own outcome is the stored activity and
   # its record, which hold on both arms; the seeded Add screen of the not-yet-saved

@@ -502,7 +502,19 @@ def gate_reproducible(episode: Episode, report: dict[str, Any], index: int) -> G
 #
 #   1. it names a step of the test case;
 #   2. the truth file shows the matched defect's symptom at that step;
-#   3. the device showed the report's `observed` text while the agent was on that step.
+#   3. the device shows the symptom on that step, in a result tied to it by what the
+#      agent DID on the device (an announced "Step N:" alone ties nothing):
+#        * the report's `observed` text holds a text the truth measured for the defect,
+#          and a device result on the step holds that text; or
+#        * the defect is a crash or a hang, which leaves no text of its own: the device
+#          showed the `observed` text on the step, on a screen an action of the agent's
+#          left (not the screen the case starts on); or
+#        * the defect only REMOVES text: a screen the agent read on the step, left by
+#          an action of its own, lacks the text only the clean build shows.
+#
+#      A quote the device did show on the step, but which is no truth text of the
+#      defect, proves nothing either way: unknown. So does a report on missing text
+#      with no such screen (QUA-3604).
 #
 # The scorer's `grounded` asks only whether the quote appeared anywhere in the episode.
 # This gate adds the "where". It reads the saved transcript, the case file and the truth
@@ -580,6 +592,14 @@ _STEP_SAID_RE = re.compile(r"\bstep\s+(\d+)\s*:", re.IGNORECASE)
 _RAW_ACTION_RE = re.compile(r"\binput\s+\S|\bam\s+(?:start|force-stop)\b|\bmonkey\b")
 _RAW_TYPED_RE = re.compile(r"\binput\s+(?:\w+\s+)?text\s+(?:'([^']*)'|\"([^\"]*)\"|(\S+))")
 _CRASH_STEP_RE = re.compile(r"^\s*step\s+(\d+)\s*:", re.IGNORECASE)
+# What Android puts on screen when an app dies or hangs, and the `check.expect` keys
+# that say a case's seeded build does (the scorer's lists; a test compares them).
+_CRASH_DIALOG_TEXTS = ("keeps stopping", "has stopped", "stopped working",
+                       "closed unexpectedly")
+_ANR_DIALOG_TEXTS = ("isn't responding", "is not responding", "not responding")
+_LIVENESS_KEYS = ("stuck", "anr", "crash")
+# Where a truth text has a date the deriver did not keep; a report quotes the real one.
+_DATE_SLOT = "<date>"
 
 
 def _norm_text(value: Any) -> str:
@@ -608,6 +628,19 @@ def _has_name(needle: str, text: str) -> bool:
 
 
 _ARTICLE_RE = re.compile(r"(?<![a-z0-9_])(?:the|an|a)\s+(?=[a-z0-9\"'])")
+
+
+@functools.lru_cache(maxsize=4096)
+def _text_re(text: str) -> re.Pattern[str] | None:
+    """A truth text as it is looked for, in a report's field and in a device result
+    alike: normalised, on token boundaries (the scorer's `_word`), the deriver's
+    `<date>` slot matching whatever stands there. None when the text is too short to
+    identify anything."""
+    needle = _needle(text)
+    if len(needle.replace(_DATE_SLOT, "").strip()) < MIN_EVIDENCE_CHARS:
+        return None
+    parts = [re.escape(part) for part in needle.split(_DATE_SLOT)]
+    return re.compile(r"(?<![a-z0-9])" + r".+?".join(parts) + r"(?![a-z0-9])")
 
 
 def _plain(text: str) -> str:
@@ -827,6 +860,8 @@ class CaseTruth:
     brief: tuple[str, ...]
     route: tuple[Any, ...]
     row: dict[str, Any]
+    #: The case's `check.expect`: it names how a seeded build dies (`crash:`, `anr:`).
+    expect: dict[str, Any] = field(default_factory=dict, compare=False, hash=False)
 
 
 def load_case_truth(app_id: str, case_id: str) -> CaseTruth | str:
@@ -850,7 +885,9 @@ def load_case_truth(app_id: str, case_id: str) -> CaseTruth | str:
     brief = case.get("steps")
     if not isinstance(route, list) or not route or not isinstance(brief, list) or not brief:
         return "the case has no steps or no route"
-    return CaseTruth(tuple(str(s) for s in brief), tuple(route), row)
+    expect = case["check"].get("expect")
+    return CaseTruth(tuple(str(s) for s in brief), tuple(route), row,
+                     dict(expect) if isinstance(expect, dict) else {})
 
 
 def _route_values(step: Any) -> list[str]:
@@ -1022,6 +1059,52 @@ def symptom_brief_steps(case: CaseTruth, route_steps: list[int]) -> list[int]:
     return sorted(shown)
 
 
+@dataclass(frozen=True)
+class SymptomTexts:
+    """The texts the truth measured for one defect.
+
+    `shown`  what the seeded build shows: a side bug's marker and measured texts, the
+             strings a blocking bug ADDS to the screen, or for a crash or a hang the
+             exception the case names and Android's own dialog wording. A report quotes
+             one in `observed`.
+    `lost`   what only the clean build shows: the strings a blocking bug REMOVES.
+             A report cannot quote them from the device; it names them in `expected`."""
+    shown: tuple[str, ...] = ()
+    lost: tuple[str, ...] = ()
+
+
+def symptom_texts(case: CaseTruth, defect: str) -> SymptomTexts:
+    """The truth texts of `defect` on this case, whatever step they were measured at:
+    WHERE the device showed one is the transcript's to say, not the truth's (a string
+    the diff records at one route step is often on screen before and after it)."""
+    kind, _ = symptom_route_steps(case.row, defect)
+    if kind == "side":
+        entry = next(s for s in case.row.get("side") or []
+                     if isinstance(s, dict) and s.get("bug") == defect)
+        return SymptomTexts(tuple(sorted({str(t) for t in [entry.get("marker") or "",
+                                                           *(entry.get("texts") or [])]
+                                          if _text_re(str(t))})))
+    if kind == "crash":
+        named = [k for k in _LIVENESS_KEYS if case.expect.get(k)]
+        texts = {v for v in (case.expect.get(k) for k in ("crash", "anr"))
+                 if isinstance(v, str)}
+        if "crash" in named or not named:
+            texts.update(_CRASH_DIALOG_TEXTS)
+        if "anr" in named or "stuck" in named or not named:
+            texts.update(_ANR_DIALOG_TEXTS)
+        return SymptomTexts(tuple(sorted(t for t in texts if _text_re(t))))
+    if kind != "blocking":
+        return SymptomTexts()
+    shown: set[str] = set()
+    lost: set[str] = set()
+    for diff in case.row.get("unclaimed_diff") or []:
+        if not isinstance(diff, dict):
+            continue
+        shown.update(str(t) for t in diff.get("added") or [] if _text_re(str(t)))
+        lost.update(str(t) for t in diff.get("removed") or [] if _text_re(str(t)))
+    return SymptomTexts(tuple(sorted(shown)), tuple(sorted(lost)))
+
+
 # ── which step each device result belongs to ───────────────────────────────────
 
 @dataclass(frozen=True)
@@ -1033,12 +1116,23 @@ class _Seen:
     first: int
     sure_last: int
     last: int
+    #: An action of the agent's on the device left this screen, and the transcript ties
+    #: that action to a step. False for the screen the case starts on, and for one left
+    #: by an action no step could be given to.
+    acted: bool = False
+    #: Below `first`: a step the agent announced and has not acted on (possible only).
+    low: int | None = None
 
     def surely(self, step: int) -> bool:
         return self.first <= step <= self.sure_last
 
     def possibly(self, step: int) -> bool:
-        return self.first <= step <= self.last
+        return min(self.first, self.low or self.first) <= step <= self.last
+
+    @property
+    def screen(self) -> bool:
+        """A screen listing (a tap's bare acknowledgement lacks every text)."""
+        return '"elements"' in self.text or "<node " in self.text
 
 
 @dataclass
@@ -1048,6 +1142,7 @@ class _Where:
     first: int
     last: int
     sure: bool
+    acted: bool = False       # an action on the device, not the screen the case starts on
 
 
 def attribute_steps(events: list[_Event], case: CaseTruth) -> list[_Seen]:
@@ -1061,7 +1156,12 @@ def attribute_steps(events: list[_Event], case: CaseTruth) -> list[_Seen]:
         several steps fit, the first one at or after the current step is taken, and
         that step is now the current one;
       * the agent announced it: its last message had exactly one "Step N:" in it. The
-        next action is step N's, and N is the current step;
+        next action is step N's, and N is the current step from that action on. Until
+        the agent acts, the announcement moves no screen: a read after it still shows
+        what the last action left, possibly step N's and not surely (QUA-3604: one
+        read of the start screen after saying "Step 9:" used to count for every step
+        up to 9). It does bound the actions BEFORE it that no step could be given to:
+        they were done by step N;
       * neither: it could be the current step or any later step that has an action, up
         to the step of the next action that does fit or is announced. Not sure, unless
         no such later step exists: then it was the current step's;
@@ -1082,12 +1182,13 @@ def attribute_steps(events: list[_Event], case: CaseTruth) -> list[_Seen]:
     not a step; where the route does restart the app, it fits those steps)."""
     steps = step_map(case)
     current, announced = 1, False
+    pending: int | None = None         # a step announced and not acted on yet
     start = last_action = _Where(1, 1, True)
     acting = steps.acting(1, steps.steps)
     start_last = acting[0] if acting else steps.steps
     waiting: list[_Where] = []         # actions whose step the next mark will bound
     screen = ""                        # the last screen listing, as the device sent it
-    results: list[tuple[str, _Where, int]] = []
+    results: list[tuple[str, _Where, int, int | None]] = []
 
     def mark(step: int) -> None:
         """A later action is known to be `step`: bound the actions that were not."""
@@ -1101,12 +1202,15 @@ def attribute_steps(events: list[_Event], case: CaseTruth) -> list[_Seen]:
             said = {int(n) for n in _STEP_SAID_RE.findall(event.said)}
             said = {n for n in said if 1 <= n <= steps.steps}
             if len(said) == 1:
-                current, announced = said.pop(), True
-                mark(current)
+                pending = said.pop()
+                mark(pending)       # what was done before it was done by this step
             continue
         if not event.device:
             continue
         if event.acts and not event.refused and (steps.restarts or not event.lifecycle):
+            if pending is not None:
+                current, announced, pending = pending, True, None
+                mark(current)
             targets = event.targets
             if event.point is not None and screen:
                 targets = tuple(t for t in (_label_at(screen, event.point),) if t)
@@ -1116,22 +1220,22 @@ def attribute_steps(events: list[_Event], case: CaseTruth) -> list[_Seen]:
             if ahead:
                 current = ahead[0]
                 mark(current)
-                last_action = _Where(current, current, True)
+                last_action = _Where(current, current, True, acted=True)
             elif announced:
-                last_action = _Where(current, current, True)
+                last_action = _Where(current, current, True, acted=True)
             elif fits:
-                last_action = _Where(fits[-1], current, True)
+                last_action = _Where(fits[-1], current, True, acted=True)
             else:
-                last_action = _Where(current, steps.steps, False)
+                last_action = _Where(current, steps.steps, False, acted=True)
                 waiting.append(last_action)
             announced = False
         if event.grounds and event.result is not None:
-            results.append((event.result, last_action, current))
+            results.append((event.result, last_action, current, pending))
         if '"elements"' in event.reply:
             screen = event.reply
     mark(steps.steps)
     seen = []
-    for text, where, at in results:
+    for text, where, at, said in results:
         first, last = min(where.first, at), steps.through(max(where.last, at))
         if where is start:
             last = max(start_last, at)
@@ -1141,7 +1245,10 @@ def attribute_steps(events: list[_Event], case: CaseTruth) -> list[_Seen]:
             sure_last = last
         else:                                   # went back: the earlier step's screen
             sure_last = steps.through(where.first)
-        seen.append(_Seen(text, first, sure_last, last))
+        low = None
+        if said is not None:                    # announced, not acted on: possible only
+            last, low = max(last, steps.through(said)), min(first, said)
+        seen.append(_Seen(text, first, sure_last, last, acted=where.acted and where.sure, low=low))
     return seen
 
 
@@ -1190,10 +1297,25 @@ def _located_context(episode: Episode) -> tuple[CaseTruth | str, list[_Seen]]:
 
 def gate_located(episode: Episode, report: dict[str, Any], index: int) -> GateResult:
     """G2, located: the report names a step, the truth shows the matched defect's
-    symptom at that step, and the device showed the report's `observed` text while the
-    agent was on it. Runs only on a report the scorer matched to a seeded defect.
-    Unknown (never a pass) when the truth has no step for the defect or the transcript
-    does not say which step the calls that showed the text belong to."""
+    symptom at that step, and the device shows that symptom on it, in a result the
+    agent's own device actions tie to the step. Runs only on a report the scorer matched
+    to a seeded defect.
+
+    What "shows the symptom" asks depends on what the defect leaves on the screen:
+
+      a text      `observed` holds a truth text of the defect (the whole
+                  sentence need not be on the device) and a device result on the step
+                  holds it
+      a death     a crash or a hang has no text of its own unless Android puts up a
+                  dialog. Without one: the device showed `observed` on the step, on a
+                  screen an action of the agent's left
+      an absence  the defect removes text. A screen the agent read on the step, left by
+                  an action of its own, lacks the text only the clean build shows
+
+    Unknown (never a pass, never a fail) when the truth has no step for the defect, when
+    the transcript does not say which step the calls belong to, when the device showed
+    the quote on the step but it is no truth text of the defect, and when a report on
+    missing text has no screen that settles it."""
     defect = report.get("matched")
     if not defect:
         return GateResult(None, "not run: the report matched no seeded defect")
@@ -1216,15 +1338,59 @@ def gate_located(episode: Episode, report: dict[str, Any], index: int) -> GateRe
     if step not in shown:
         return GateResult(False, f"the report names step {step}; the truth {where} "
                                  f"{defect} at step {_list(shown)}")
+    texts = symptom_texts(case, str(defect))
     quote = _needle(report.get("observed"))
+    quoted = [p for p in map(_text_re, texts.shown) if p is not None and p.search(quote)]
+    if quoted:
+        # The report quotes truth texts: the device must have shown THOSE texts here,
+        # each of them (one of several may be a word that is on every screen). A quoted
+        # text the device never showed at all is the report's prose, not a sighting.
+        each = [hits for hits in ([s for s in seen if p.search(s.text)] for p in quoted)
+                if hits]
+        if each and all(any(s.surely(step) for s in hits) for hits in each):
+            return GateResult(True, f"step {step}: the truth {where} {defect} there and "
+                                    "the device showed the observed text on that step")
+        if any(s.surely(step) for hits in each for s in hits):
+            return _unknown(f"the device showed part of the observed text on step {step} "
+                            "and the rest only on other steps")
+        return _not_on_step([s for hits in each for s in hits], step)
+    hits = [s for s in seen if quote and quote in s.text]
+    on_step = [s for s in hits if s.surely(step)]
+    if kind == "crash" and any(s.acted for s in on_step):
+        return GateResult(True, f"step {step}: the truth crashes {defect} there, the agent "
+                                "acted on that step and the device showed the observed "
+                                "text on it")
+    # A defect that removes text has nothing to quote. The report says what is missing
+    # in `expected`; a defect that shows no text at all here can only be reported so.
+    expected = _norm_text(report.get("expected"))
+    lost = [p for p in map(_text_re, texts.lost) if p is not None]
+    missing = [p for p in lost if p.search(expected)] or ([] if texts.shown else lost)
+    # Where the defect also SHOWS text, a quote the device never showed on this step
+    # is judged as a quote (below); the absence does not excuse it.
+    if missing and (not texts.shown or not quote or any(s.possibly(step) for s in hits)):
+        if any(s.surely(step) and s.acted and s.screen
+               and not any(p.search(s.text) for p in missing) for s in seen):
+            return GateResult(True, f"step {step}: the truth shows {defect} there as "
+                                    "missing text, and a screen the agent read on that "
+                                    "step lacks it")
+        return _unknown(f"the truth shows {defect} at step {step} as missing text; no "
+                        "screen the agent read on that step, after acting on it, settles "
+                        "whether the text is missing")
     if not quote:
         return GateResult(False, "the report quotes no observed text")
-    hits = [s for s in seen if quote in s.text]
+    if on_step and kind == "crash":
+        return _unknown(f"the device showed the observed text on step {step}, but no "
+                        "device action of the agent's is tied to that step")
+    if on_step:
+        return _unknown(f"the device showed the observed text on step {step}, but it is "
+                        f"none of the texts the truth measured for {defect}")
+    return _not_on_step(hits, step)
+
+
+def _not_on_step(hits: list[_Seen], step: int) -> GateResult:
+    """The answer when no device result that holds the text is surely on `step`."""
     if not hits:
         return GateResult(False, "the observed text is in no device output")
-    if any(s.surely(step) for s in hits):
-        return GateResult(True, f"step {step}: the truth {where} {defect} there and the "
-                                "device showed the observed text on that step")
     if any(s.possibly(step) for s in hits):
         return _unknown("the device showed the observed text, but the transcript does not "
                         f"say whether those calls were step {step}")
