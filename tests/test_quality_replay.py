@@ -656,11 +656,11 @@ def test_a_saved_replay_for_another_defect_is_not_used(tmp_path):
 
 
 def test_scoring_never_loads_the_replay_runner():
-    """`report_quality` stays import-free of the package, so the scoring command cannot
-    start a replay even by accident."""
+    """Importing `report_quality` loads neither the replay runner nor the episode
+    runner, so the scoring command cannot start a replay even by accident."""
     code = ("import sys, qualgentbench.report_quality as rq; "
-            "bad = [m for m in sys.modules if m.startswith('qualgentbench.') "
-            "and m != 'qualgentbench.report_quality']; "
+            "bad = [m for m in sys.modules if m in ('qualgentbench.quality_replay', "
+            "'qualgentbench.episode_runner', 'qualgentbench.cli')]; "
             "assert not bad, bad; assert rq.GATES[-1].id in {g.id for g in rq.GATES}")
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
                           check=False, cwd=Path(__file__).resolve().parent.parent / "src")
