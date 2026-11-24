@@ -4,8 +4,10 @@ The journey scorer answers one question about a bug report: did it catch a seede
 defect? It does not say whether a developer could act on the report. Report quality is a
 separate block that answers that second question, one yes/no **gate** at a time.
 
-- Code: `src/qualgentbench/report_quality.py`
-- Output: `quality.json`, written beside each episode's `result.json`
+- Code: `src/qualgentbench/report_quality.py` (one episode) and
+  `src/qualgentbench/quality_rates.py` (a run, per arm)
+- Output: `quality.json`, written beside each episode's `result.json`; the
+  [Report quality block](#the-report-quality-block) adds those files up
 - Version: `QUALITY_VERSION` (currently `1`)
 
 ## It is not a ranking key
@@ -380,16 +382,33 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
   "quality_version": 1,
   "reports": [
     {
+      "complete": {
+        "agent_steps": true,
+        "agent_steps_reason": "3 entries, 3 UI actions",
+        "complete_if_steps_carried": true,
+        "expected": true,
+        "observed": true,
+        "steps": false,
+        "steps_reason": "entry 1 of 2 is not a UI action: '<the first sentence>'"
+      },
       "consequence_of": null,
-      "customer_ready": null,
+      "customer_ready": false,
       "customer_report": {
         "actual": "<what the device showed>",
-        "agent_steps": [],
+        "agent_steps": [
+          "<the agent's first step>",
+          "<its second step>",
+          "<its third step>"
+        ],
         "expected": "<what should have happened>",
         "failure_step": "Step 4",
         "paired_by": "only_report",
         "report_source": "report_tool",
-        "repro_steps": [],
+        "repro_steps": [
+          "<the agent's first step>",
+          "<its second step>",
+          "<its third step>"
+        ],
         "steps": "<the call's code_investigation>",
         "summary": "<the bug's title>"
       },
@@ -402,6 +421,10 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
           "pass": null,
           "reason": "the truth records no screen step for <defect id>",
           "unknown": true
+        },
+        "G3": {
+          "pass": false,
+          "reason": "steps: entry 1 of 2 is not a UI action: '<the first sentence>'"
         }
       },
       "index": 0,
@@ -414,8 +437,17 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
   "scorer_report_source": "findings_file",
   "scorer_version": 5,
   "totals": {
+    "complete": {
+      "agent_steps": 1,
+      "complete": 0,
+      "complete_if_steps_carried": 1,
+      "evaluated": 1,
+      "expected": 1,
+      "observed": 1,
+      "steps": 0
+    },
     "customer_ready": 0,
-    "customer_ready_unknown": 1,
+    "customer_ready_unknown": 0,
     "gates": {
       "G1": {
         "evaluated": 1,
@@ -427,6 +459,11 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
         "name": "located",
         "passed": 0,
         "unknown": 1
+      },
+      "G3": {
+        "evaluated": 1,
+        "name": "complete",
+        "passed": 0
       }
     },
     "neutral": 0,
@@ -455,6 +492,178 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
 | `totals.customer_ready` / `customer_ready_unknown` | scored reports that are ready, and those not yet decidable |
 
 An episode with no report has an empty `reports` list and zero totals.
+
+In the example the report is valid (G1), G2 could not decide, and G3 failed, so
+`customer_ready` is `false`: one failed headline gate decides it. A report that failed
+nothing stays `null` until every headline gate has answered. G4 is not in the file
+because no code registers it yet; a reader must treat a gate that is absent from
+`gates` the same as one that did not run.
+
+`quality.json` does not copy `bugs_present`. A figure that needs the seeded defects of
+the episode (the yield below) reads them from `result.json`.
+
+## The Report quality block
+
+`quality.json` is one episode. The block adds the files up over a run and prints one
+paragraph per **arm**: agent, model and condition, the same grouping as a board row.
+Held-out episodes are their own row. Code: `src/qualgentbench/quality_rates.py`.
+
+It is never a ranking key. Rows are listed in name order (public rows, then held-out
+rows), never by a quality number. No scoring or ranking module imports the module, and
+the scorer pin does not move when it changes.
+
+### Where it is printed
+
+```bash
+# Print the block. Scores every episode in memory; writes nothing.
+uv run python -m qualgentbench.quality_rates <runs dir> [--run RUN_ID]... [--json]
+
+# The same from the quality.json files already saved (an episode without one has none).
+uv run python -m qualgentbench.quality_rates <runs dir> --saved
+```
+
+- `qualgent-bench show` prints the block after the journey board, its Rates block and
+  its notes, when at least one episode on the board has a saved `quality.json`. With no
+  such file it prints what it always printed. Everything above the block is the same
+  bytes in both cases.
+- `qualgent-bench view` scores each journey episode in memory and adds a **Report
+  quality** section under the boards of the run page, with a table of where reports are
+  lost. Each episode page gets a table with one row per report and one cell per gate,
+  with the gate's reason. The saved run is not written. This is the local view only:
+  a `--portable` view, the kind that is published, carries no report quality yet.
+- The view also stores each episode's quality block in its summary (`ep/<key>.json`,
+  key `quality`) and the run's block in `manifest.json` (`runs[].report_quality`). Both
+  keys are left out when no episode has a quality block, and from every portable view. `view --index-from` rebuilds
+  the section and the manifest from the summaries byte for byte.
+
+The view and the command read the recorded `result.json` of each episode, not a
+rescored verdict.
+
+### Who is counted
+
+- **Episodes.** Every journey episode of the arm that has a quality block and that the
+  board does not exclude (`failures.is_excluded`: environment or infrastructure failure,
+  contamination, unclean MCP session, rate limit). Excluded episodes and episodes with
+  no quality block are counted (`episodes_excluded`, `episodes_without_quality`) and
+  are in no other number.
+- **Reports.** Neutral reports are counted (`neutral`) and are in no rate. `scored` is
+  the number of non-neutral reports.
+- Trials are counted as they are, as in the Rates block: two trials of one case are two
+  episodes. The intervals treat them as independent draws.
+
+### The numbers and their denominators
+
+Each rate is `k/n p% [lo–hi]` with a 95% Wilson interval (`rates.wilson`). A rate with
+nothing in its denominator prints `0/0 —` and is `null` in the data, never 0.
+
+```
+gate pass rate (G1..G4)  = reports the gate passed
+                           / reports the gate answered pass or fail for
+                           (a gate that did not run for a report, or answered unknown,
+                           is in neither side; unknown answers are printed beside the
+                           rate with their share of the reports the gate answered)
+customer_ready_rate      = reports that passed EVERY headline gate (G1, G2, G3, G4)
+                           / reports with a decided answer: ready, or failed a gate
+                           (a report left undecided by an unknown answer is in neither
+                           side; the count and its share of scored reports are printed)
+customer_ready_yield     = seeded DEFECTS with >= 1 customer-ready report
+                           / seeded defects present
+                           (per defect per episode, the denominator of catch_rate:
+                           `bugs_present` of each counted episode's result.json)
+reports_per_defect       = matched reports / defects found
+                           (a ratio, not a rate: 1.00 means no defect was reported
+                           twice. A defect found in two episodes counts twice.
+                           `repeats` = matched reports beyond the first for their
+                           defect / matched reports, with an interval)
+complete_if_steps_carried = reports that would pass G3 if the bug stored the agent's
+                           own step list / scored reports (a side figure, never a gate)
+```
+
+One failed headline gate makes a report not ready, whatever the other gates say. This
+is the same rule as `reports[].customer_ready`.
+
+### Which gates were available
+
+A rate over four gates and a rate over three are different numbers. Every row names the
+gates it had:
+
+- `gates_available`: the headline gates that ran for the arm.
+- `gates_missing`: the others. A headline gate is missing when a counted episode's
+  `quality.json` does not have it, or when at least one report that failed nothing still
+  waits for it.
+
+While a gate is missing, `customer_ready_rate` and `customer_ready_yield` are **not
+measured**: `measured` is false and `rate` is `null`. They are not 0. This holds even
+when every report of the arm already failed some other gate. Until replay (G4) has run,
+every row reads "not measured".
+
+For that time the row also carries `ready_on_available`: the same two figures over the
+available gates only, labelled with those gates (for example "passing G1+G2+G3 only").
+It is an upper bound on the customer-ready figures. Compare it only between rows with
+the same `gates_available`.
+
+A gate that is in the file, ran for no report, and has no report waiting for it is
+available: every report failed an earlier gate. The rate is then a measured `0/n`. A
+report made only of guesses reaches this case once G4 is registered.
+
+### The funnel
+
+```
+all scored reports -> valid (G1) -> located (G2) -> complete (G3) -> reproducible (G4)
+```
+
+Each stage takes the reports that passed every gate before it (`entered`) and counts
+what its gate did with them: `passed`, `failed`, `unknown`, `not_run`. Only `passed`
+reports enter the next stage. A stage whose gate is missing is not measured (`measured`
+false, counts `null`), and neither is any stage after it.
+
+The funnel is cumulative, and a gate's own pass rate is not. G3 runs on every scored
+report, so its pass rate has every scored report in the denominator, and the `complete`
+stage has only the located ones.
+
+### Per report source
+
+`by_report_source` repeats the gate rates, the customer-ready counts, the side figure
+and the funnel for each `customer_report.report_source` (`report_tool`, `findings`,
+`scorer_report`). Read G3 there. A findings entry has no steps field, so it cannot pass
+G3, and an arm that reports mostly through the findings file has a low G3 rate for that
+reason.
+
+### Precision against coverage
+
+One signal is published: how many of the deterministic gates G2 and G3 a report passed
+(0, 1 or 2). It is known before any replay. For each cut "at least N gates" the row
+gives `kept` (reports at or above the cut), `coverage` (`kept` / scored reports),
+`valid` (kept reports that passed G1 / kept) and `customer_ready` (ready / decided,
+among the kept reports). `customer_ready` is `null` while a headline gate is missing.
+
+### The block as data
+
+`quality_rates.block(records)` returns the block; `--json` prints it, and the view puts
+it in the manifest. `records` come from `quality_rates.episode_record(result, quality)`.
+
+| Key | Meaning |
+|---|---|
+| `format` | `BLOCK_FORMAT`, currently 1 |
+| `headline_gates`, `signal_gates` | `["G1","G2","G3","G4"]` and `["G2","G3"]` |
+| `rows[]` | one per arm, in name order |
+| `rows[].agent`, `model`, `condition`, `heldout` | the arm; `model` without its routing prefix, as on the board |
+| `rows[].quality_versions` | the distinct `quality_version` values, as strings. More than one: the row is mixed and not comparable |
+| `rows[].episodes`, `episodes_excluded`, `episodes_without_quality` | see "Who is counted" |
+| `rows[].reports`, `neutral`, `scored` | all reports, neutral ones, the rest |
+| `rows[].gates_available`, `gates_missing` | see "Which gates were available" |
+| `rows[].gates.<id>` | `name`, `available`, `evaluated`, `passed`, `unknown`, `not_run`, `rate`, `ci` |
+| `rows[].customer_ready` | `measured`, `ready`, `not_ready`, `unknown`, `waiting`, `k` (= `ready`), `n` (= `ready` + `not_ready`), `rate`, `ci`, `unknown_share` (= `unknown` / `scored`) |
+| `rows[].customer_ready_yield` | `measured`, `k`, `n`, `rate`, `ci` |
+| `rows[].ready_on_available` | `gates`, `k`, `n`, `rate`, `ci`, `unknown`, and `yield` = `{k, n, rate, ci}` |
+| `rows[].reports_per_defect` | `matched_reports`, `defects_found`, `value`, `repeats` = `{k, n, rate, ci}` |
+| `rows[].complete_if_steps_carried` | `{k, n, rate, ci}` |
+| `rows[].funnel[]` | one stage per headline gate: `gate`, `name`, `measured`, `entered`, `passed`, `failed`, `unknown`, `not_run` |
+| `rows[].precision_coverage` | `signal` (`gates_passed`), `signal_gates`, `points[]` = `{min_gates, kept, coverage, valid, customer_ready}` |
+| `rows[].by_report_source.<source>` | `scored`, `gates`, `customer_ready`, `complete_if_steps_carried`, `funnel`, in the same form |
+
+`rate` is rounded to four places and `ci` is `[lo, hi]`; both are `null` when `n` is 0
+or the figure is not measured. `ready + not_ready + unknown + waiting = scored`.
 
 ## The version rule
 
