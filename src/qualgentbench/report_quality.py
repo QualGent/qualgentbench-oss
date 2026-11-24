@@ -464,8 +464,13 @@ def saved_replay(episode: Episode) -> dict[str, Any] | None:
 def gate_reproducible(episode: Episode, report: dict[str, Any], index: int) -> GateResult:
     """G4, reproducible: a second agent given only the customer-shaped report made the
     matched defect happen again. This gate starts nothing: it reads the answer the
-    replay runner saved beside the episode. No saved answer, an answer for another
-    defect, or a defect that is excluded from replay gives "did not run"."""
+    replay runner saved beside the episode.
+
+    "Did not run" (`pass` None): the report is not valid, no answer is saved, the saved
+    answer is for another defect, or the replay is still pending. "Unknown" (`pass` None
+    and `unknown`): replay was looked at and can give no verdict for this report, because
+    its defect is excluded from replay (ceiling, control, no canary, ...) or the replay
+    could not be run."""
     matched = report.get("matched")
     if not matched:
         return GateResult(None, "runs only on a valid report")
@@ -479,10 +484,13 @@ def gate_reproducible(episode: Episode, report: dict[str, Any], index: int) -> G
                                 f"not {matched}")
     reason = str(entry.get("reason") or "")
     if entry.get("excluded"):
-        return GateResult(None, f"defect excluded from replay ({entry['excluded']}): {reason}")
+        return GateResult(None, f"defect excluded from replay ({entry['excluded']}): {reason}",
+                          unknown=True)
     reproduced = entry.get("reproduced")
     if not isinstance(reproduced, bool):
-        return GateResult(None, reason or "the replay gave no verdict")
+        if entry.get("status") == "pending":
+            return GateResult(None, reason or "not replayed yet")
+        return GateResult(None, reason or "the replay gave no verdict", unknown=True)
     return GateResult(reproduced, ("reproduced from the report: " if reproduced
                                    else "not reproduced from the report: ") + reason)
 
@@ -1466,7 +1474,7 @@ GATES: tuple[Gate, ...] = (
     Gate("G1", "valid", gate_valid),
     Gate("G2", "located", gate_located, reports_unknown=True),
     Gate("G3", "complete", gate_complete),
-    Gate("G4", "reproducible", gate_reproducible),
+    Gate("G4", "reproducible", gate_reproducible, reports_unknown=True),
 )
 
 

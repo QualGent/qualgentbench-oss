@@ -23,7 +23,15 @@ import pytest
 from click.testing import CliRunner
 from test_bugs import _obs, _transcript
 
-from qualgentbench import bugs, cli, episode_runner, journey, reference_reports, rescore
+from qualgentbench import (
+    bugs,
+    cli,
+    episode_runner,
+    journey,
+    quality_rates,
+    reference_reports,
+    rescore,
+)
 from qualgentbench import quality_replay as qr
 from qualgentbench import report_quality as rq
 from qualgentbench.result import RunResult
@@ -538,13 +546,18 @@ def test_a_run_measures_the_baselines_first_and_replays_only_usable_defects(tmp_
     q, gate = g4("side-good")
     assert gate["pass"] is True and gate["reason"].startswith("reproduced from the report")
     assert q["replay"] == {"replay_version": qr.REPLAY_VERSION, "replayer": CONFIG.stamp()}
-    assert q["totals"]["gates"]["G4"] == {"name": "reproducible", "evaluated": 1, "passed": 1}
+    assert q["totals"]["gates"]["G4"] == {"name": "reproducible", "evaluated": 1,
+                                          "passed": 1, "unknown": 0}
     assert q["reports"][1]["gates"]["G4"] == {"pass": None,
                                               "reason": "runs only on a valid report"}
     assert g4("side-bad")[1]["pass"] is False
     q, gate = g4("screen", 1)
     assert gate["pass"] is None and "excluded from replay (ceiling)" in gate["reason"]
-    assert q["totals"]["gates"]["G4"]["evaluated"] == 0
+    # Excluded is "looked at, no verdict possible": unknown, not "did not run".
+    assert gate["unknown"] is True
+    assert q["totals"]["gates"]["G4"] == {"name": "reproducible", "evaluated": 0,
+                                          "passed": 0, "unknown": 1}
+    assert g4("other")[1]["unknown"] is True
     assert q["reports"][0]["neutral"] and q["reports"][0]["gates"] == {}
     assert "excluded from replay (control)" in g4("other")[1]["reason"]
 
@@ -590,8 +603,9 @@ def test_replays_by_another_replayer_are_not_folded_in(tmp_path):
     summary = qr.fold(run_dir, CONFIG, replay_dir=replay_dir, state=state)
     assert summary["reports"] == {"pending": 4} and summary["other_replayer"] == 11
     q = rq.score_episode(eps["side-good"])
-    assert q["reports"][0]["gates"]["G4"]["pass"] is None
-    assert "ceiling not measured yet" in q["reports"][0]["gates"]["G4"]["reason"]
+    # Pending is "did not run": no `unknown` key, so the arm stays not measured.
+    assert q["reports"][0]["gates"]["G4"] == {
+        "pass": None, "reason": "ceiling not measured yet (0 of 3 replays)"}
 
 
 def test_a_replay_that_did_not_run_is_retried_once_and_then_given_up(tmp_path):
@@ -620,6 +634,7 @@ def test_a_replay_that_did_not_run_is_retried_once_and_then_given_up(tmp_path):
     assert "env_failure" in entry["reason"] and len(entry["attempts"]) == 2
     gate = rq.score_episode(eps["side-bad"])["reports"][0]["gates"]["G4"]
     assert gate["pass"] is None and "could not be run" in gate["reason"]
+    assert gate["unknown"] is True                         # ran, no verdict
 
 
 def test_an_executor_that_saves_nothing_does_not_loop(tmp_path):
@@ -637,7 +652,8 @@ def test_without_saved_replays_the_gate_did_not_run_and_quality_json_has_no_stam
     assert "replay" not in q
     assert q["reports"][0]["gates"]["G4"] == {"pass": None,
                                               "reason": "no replay saved for this report"}
-    assert q["totals"]["gates"]["G4"] == {"name": "reproducible", "evaluated": 0, "passed": 0}
+    assert q["totals"]["gates"]["G4"] == {"name": "reproducible", "evaluated": 0,
+                                          "passed": 0, "unknown": 0}
     # Scoring wrote nothing but quality.json and started nothing.
     rq.write_quality(eps["side-good"])
     assert sorted(p.name for p in eps["side-good"].iterdir()) == ["quality.json", "result.json"]
@@ -651,8 +667,73 @@ def test_a_saved_replay_for_another_defect_is_not_used(tmp_path):
             {"index": 0, "defect": "some-other-bug", "reproduced": True, "excluded": None}]}))
     gate = rq.score_episode(eps["side-good"])["reports"][0]["gates"]["G4"]
     assert gate["pass"] is None and "some-other-bug" in gate["reason"]
+    assert "unknown" not in gate
     (eps["side-good"] / qr.REPLAY_FILE).write_text("not json")
     assert rq.score_episode(eps["side-good"])["reports"][0]["gates"]["G4"]["pass"] is None
+
+
+# ── G4 in the Report quality block (`quality_rates`) ──────────────────────────
+
+def _record(ep: Path, *, earlier_gates_pass: bool = True) -> dict:
+    """One episode as the rates block reads it. G4 is whatever the real gate answers
+    from the files on disk; G2 and G3 are set to pass here (their rules are not under
+    test), so the report's state depends on G4 alone."""
+    quality = rq.score_episode(ep)
+    if earlier_gates_pass:
+        for report in quality["reports"]:
+            if not report["neutral"] and report["gates"]["G1"]["pass"]:
+                report["gates"]["G2"] = {"pass": True, "reason": "set by the test"}
+                report["gates"]["G3"] = {"pass": True, "reason": "set by the test"}
+    result = json.loads((ep / "result.json").read_text())
+    result.update({"agent": "an-agent", "model": "a-model", "condition": "mcp"})
+    result["metrics"]["bugs_present"] = [r["matched"] for r in result["metrics"]["reports"]
+                                         if r["matched"]]
+    return quality_rates.episode_record(result, quality)
+
+
+def test_a_board_with_no_saved_replays_reads_customer_ready_as_not_measured(tmp_path):
+    """G4 is registered, so every quality.json has it. With no replay saved, a report
+    that passed G1 to G3 waits on G4: the rate is "not measured", never 0."""
+    _, _, eps = _board(tmp_path)
+    (row,) = quality_rates.block([_record(eps["side-good"]), _record(eps["side-bad"])])["rows"]
+    assert row["gates_missing"] == ["G4"] and row["gates_available"] == ["G1", "G2", "G3"]
+    ready = row["customer_ready"]
+    assert ready["measured"] is False and ready["rate"] is None and ready["ci"] is None
+    assert (ready["waiting"], ready["unknown"], ready["ready"]) == (2, 0, 0)
+    assert row["customer_ready_yield"]["measured"] is False
+    assert row["gates"]["G4"]["available"] is False and row["gates"]["G4"]["rate"] is None
+    assert row["funnel"][-1]["gate"] == "G4" and row["funnel"][-1]["measured"] is False
+    assert any("not measured (G4 reproducible has not run)" in line
+               for line in quality_rates.lines(quality_rates.block(
+                   [_record(eps["side-good"]), _record(eps["side-bad"])])))
+
+
+def test_replayed_excluded_and_pending_reports_in_the_rates_block(tmp_path):
+    run_dir, replay_dir, eps = _board(tmp_path)
+    state = qr.ReplayState(CONFIG, qr.valid_reports(run_dir), [])
+    _run(state, FakeReplayer(replay_dir, _answers))
+    qr.fold(run_dir, CONFIG, replay_dir=replay_dir, state=state)
+    # One reproduced, one not, two whose defect is excluded (ceiling, control).
+    (row,) = quality_rates.block([_record(ep) for ep in eps.values()])["rows"]
+    assert row["gates_missing"] == [] and row["gates_available"] == ["G1", "G2", "G3", "G4"]
+    ready = row["customer_ready"]
+    # Decided: the reproduced report (ready), the one that did not reproduce and ep-a's
+    # false report (not ready). The two reports of excluded defects are UNKNOWN: beside
+    # the rate, in neither side of it, and they do not stop it from being measured.
+    assert ready["measured"] is True and (ready["k"], ready["n"]) == (1, 3)
+    assert (ready["ready"], ready["not_ready"], ready["unknown"], ready["waiting"]) == (
+        1, 2, 2, 0)
+    g4 = row["gates"]["G4"]
+    assert (g4["evaluated"], g4["passed"], g4["unknown"]) == (2, 1, 2)
+
+    # A replay still pending for one report puts the whole arm back to "not measured".
+    entry = json.loads((eps["side-bad"] / qr.REPLAY_FILE).read_text())
+    entry["reports"][0].update({"status": "pending", "reproduced": None,
+                                "reason": "not replayed yet"})
+    (eps["side-bad"] / qr.REPLAY_FILE).write_text(json.dumps(entry))
+    (row,) = quality_rates.block([_record(ep) for ep in eps.values()])["rows"]
+    assert row["gates_missing"] == ["G4"] and row["customer_ready"]["measured"] is False
+    assert row["customer_ready"]["waiting"] == 1
 
 
 def test_scoring_never_loads_the_replay_runner():
