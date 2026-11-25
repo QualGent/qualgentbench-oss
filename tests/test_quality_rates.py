@@ -580,7 +580,7 @@ def test_the_documented_quality_json_has_the_keys_the_code_writes(tmp_path):
     real_keys = {k.replace("/defects/delete-bug", "/defects/<defect id>") for k in _keys(real)}
     assert set(_keys(example)) - {skip} == real_keys - {skip}
     assert real["defects"] == {"delete-bug": {"coverable": False, "located_never": "no_truth",
-                                              "replay_excluded": None}}
+                                              "replay_excluded": None, "replay_steps_needed": None}}
     assert list(example["totals"]["gates"]) == [g.id for g in rq.GATES]
     assert example["quality_version"] == rq.QUALITY_VERSION
     # Every key of the block that the documentation's table names is in a real row.

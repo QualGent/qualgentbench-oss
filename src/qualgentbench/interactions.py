@@ -291,6 +291,38 @@ MCP_TAP_TOOLS = _names(lambda r: TAP in r.steps)
 MCP_ECHO_TOOLS = _names(lambda r: r.echo)
 
 
+# ── device ACTIONS: the replay budget's unit (QUA-3591) ──────────────────────
+# A replay-from-report episode (`quality_replay`) budgets the replayer in ACTIONS, not
+# interactions: one per call that changes the device — a tap, typing, a swipe, a key
+# press, an app launch or stop, a rotation. Screen reads, log reads and waits are not
+# actions, and a tool that acts AND reads (`mobile_tap_and_observe`) is one action. A
+# report step costs one action and one read, so an interaction budget charged reading
+# the screen as much as acting on it and left a careful replayer no slack (the G4
+# pilot: every failed replay was a budget kill). Journey and hunt episodes keep the
+# interaction budget; nothing here changes what the meter charges.
+ACTION_KINDS = (TAP, SWIPE, TYPE, PRESS, LAUNCH, TERMINATE, OTHER)
+#: Charged `other` but only READ the device: not actions.
+MCP_LOG_READ_TOOLS = frozenset({"mobile_app_logs", "mobile_device_logs", "mobile_crash_logs"})
+_ADB_LOG_READ_RE = re.compile(r"\blogcat\b")
+
+
+def mcp_actions(tool_name: str) -> int:
+    """Device actions one MCP tool call costs: 1 when it changes the device, else 0.
+    Never more than one, whatever the tool also reads."""
+    if mcp_base_name(tool_name) in MCP_LOG_READ_TOOLS:
+        return 0
+    return 1 if any(k in ACTION_KINDS for k in classify_mcp_all(tool_name)) else 0
+
+
+def adb_actions(request: str) -> int:
+    """Device actions inside one ADB request: every non-read interaction of it (a
+    chained `input tap … && input tap …` is two), a `logcat` read not counted."""
+    kinds = [k for k in classify_adb_all(request) if k in ACTION_KINDS]
+    if kinds and OTHER in kinds and _ADB_LOG_READ_RE.search(request.lower()):
+        kinds.remove(OTHER)
+    return len(kinds)
+
+
 # One shell request can chain several device commands; each is its own step.
 _CHAIN_RE = re.compile(r"\s*(?:&&|\|\||;|\||\n)\s*")
 # `adb exec-out` quotes every argument on the wire (`uiautomator 'dump' '/dev/tty'`).
@@ -481,6 +513,11 @@ def classify_mcp(tool_name: str) -> str | None:
     return kinds[0] if kinds else None
 
 
+#: The MCP tools the action-budget hook refuses BEFORE they run once the budget is
+#: spent (the hook sees only the tool's name; a shell call is judged after it ran).
+MCP_ACTION_TOOLS = tuple(sorted(n for n in MCP_TOOL_RULES if mcp_actions(n)))
+
+
 @dataclass
 class InteractionLog:
     """Append-only interaction counts, shared by both meters. Flushed after every
@@ -489,6 +526,9 @@ class InteractionLog:
     path: Path
     counts: Counter = field(default_factory=Counter)
     total: int = 0
+    # Device ACTIONS among them (`mcp_actions`/`adb_actions`): the replay budget's
+    # unit (QUA-3591). Counted beside the interactions, never instead of them.
+    actions: int = 0
     # Diagnostic side-channel (e.g. mcp_meter_bytes) — never counted, so a meter
     # reporting a plausible 0 still leaves evidence of the traffic it saw.
     meta: dict = field(default_factory=dict)
@@ -496,12 +536,14 @@ class InteractionLog:
     def record_adb(self, request: str) -> str | None:
         # Read-collapsing lives in classify_adb_all and is stateless on purpose — a
         # rule depending on ordering would score the same command differently.
+        self.actions += adb_actions(request)
         last = None
         for kind in classify_adb_all(request):
             last = self._append(kind)
         return last
 
     def record_mcp(self, tool_name: str) -> str | None:
+        self.actions += mcp_actions(tool_name)
         last = None
         for kind in classify_mcp_all(tool_name):
             last = self._append(kind)
@@ -531,6 +573,7 @@ class InteractionLog:
         return {
             "interactions": self.total,
             **{f"interactions_{k}": self.counts.get(k, 0) for k in KINDS},
+            "actions": self.actions,
             **self.meta,
         }
 
@@ -546,6 +589,15 @@ def read_total(path: Path) -> int:
 # Per-episode step budget, enforced PreToolUse; written to the run dir and run by
 # python3 so it can be tested as code. Cost comes from interactions.json — the shared
 # step unit — so every adapter budgets from this one file, with a one-call lag.
+#
+# UNIT picks the key of interactions.json the cap is held against: "interactions" (every
+# journey and hunt episode, unchanged) or "actions" (a replay-from-report episode,
+# QUA-3591). In the action unit a known device-action tool is refused BEFORE it runs once
+# the cap is reached (reads stay allowed, so the replayer can read the screen its last
+# action produced), and a shell call is judged after it ran, by the same one-call lag as
+# the interaction unit. CALL_CAP (0 = none) is a separate hard cap on every tool call the
+# agent makes, so an agent that only reads still stops; hitting it writes CALL_MARKER
+# beside the sentinel, which the harness reads as "call cap", not "budget spent".
 BUDGET_HOOK = '''#!/usr/bin/env python3
 import json, os, sys
 
@@ -553,17 +605,35 @@ COUNT = r"{count_file}"
 METER = r"{meter_file}"
 CAP = {cap}
 SENTINEL = r"{sentinel}"
+UNIT = "{unit}"
+ACTION_TOOLS = set({action_tools})
+CALL_CAP = {call_cap}
+CALLS = r"{calls_file}"
+CALL_MARKER = r"{call_marker}"
 
 
-def _interactions():
-    """The shared step unit, written by the meters below this agent. None means the
+def _spent():
+    """The spent budget in UNIT, written by the meters below this agent. None means the
     file is unreadable — broken measurement, which is not the same as a real 0."""
     try:
         with open(METER) as fh:
             data = json.load(fh)
-        return int(data.get("interactions") or 0)
+        return int(data.get(UNIT) or 0)
     except (OSError, ValueError, json.JSONDecodeError):
         return None
+
+
+def _stop(message, marker=None):
+    # HARD stop, no "write your report now" nudge — the sentinel is what base.run()
+    # kills on. A nudge would make the budget part of the treatment.
+    for path in (marker, SENTINEL):
+        if path:
+            try:
+                open(path, "a").close()
+            except OSError:
+                pass
+    sys.stderr.write(message)
+    sys.exit(2)
 
 
 try:
@@ -578,18 +648,25 @@ name = name if isinstance(name, str) else ""
 if name.endswith("qg_release_device"):
     sys.exit(0)
 
+if CALL_CAP:
+    # One byte per call, appended: concurrent hooks never lose a count.
+    try:
+        with open(CALLS, "a") as fh:
+            fh.write("1")
+        calls = os.path.getsize(CALLS)
+    except OSError:
+        calls = 0
+    if calls > CALL_CAP:
+        _stop("Tool-call cap (%d) exhausted - episode terminated.\\n" % CALL_CAP,
+              CALL_MARKER)
+
 # Read the meter's running total instead of accumulating our own — concurrent hook
 # processes clobber a read-modify-write counter. Non-device calls cost nothing.
-spent = _interactions()
+spent = _spent()
 if spent is None:
     # Fail CLOSED: an unmeasured episode with no budget would run unbounded
     # and still be scored.
-    try:
-        open(SENTINEL, "a").close()
-    except OSError:
-        pass
-    sys.stderr.write("Step meter unreadable - episode terminated (unmeasured).\\n")
-    sys.exit(2)
+    _stop("Step meter unreadable - episode terminated (unmeasured).\\n")
 
 try:
     with open(COUNT, "w") as fh:
@@ -597,14 +674,28 @@ try:
 except OSError:
     pass
 
-if spent > CAP:
-    # HARD stop, no "write your report now" nudge — the sentinel is what base.run()
-    # kills on. A nudge would make the budget part of the treatment.
-    try:
-        open(SENTINEL, "a").close()
-    except OSError:
-        pass
-    sys.stderr.write("Tool-call budget (%d) exhausted - episode terminated.\\n" % CAP)
-    sys.exit(2)
+if spent > CAP or (spent >= CAP and name.split("__")[-1] in ACTION_TOOLS):
+    _stop("Tool-call budget (%d) exhausted - episode terminated.\\n" % CAP)
 sys.exit(0)
 '''
+
+#: The budget units `render_budget_hook` accepts: keys of `InteractionLog.as_metrics`.
+BUDGET_UNITS = ("interactions", "actions")
+
+
+def render_budget_hook(*, count_file: Path, meter_file: Path, cap: int, sentinel: Path,
+                       unit: str = "interactions", call_cap: int | None = None,
+                       calls_file: Path | None = None,
+                       call_marker: Path | None = None) -> str:
+    """The budget hook script for one episode. With the defaults it budgets in
+    interactions and has no call cap: the hook every journey and hunt episode runs."""
+    if unit not in BUDGET_UNITS:
+        raise ValueError(f"budget unit must be one of {BUDGET_UNITS}, got {unit!r}")
+    if call_cap and (calls_file is None or call_marker is None):
+        raise ValueError("a call cap needs calls_file and call_marker")
+    return BUDGET_HOOK.format(
+        count_file=count_file, meter_file=meter_file, cap=int(cap), sentinel=sentinel,
+        unit=unit,
+        action_tools=repr(list(MCP_ACTION_TOOLS)) if unit == "actions" else "()",
+        call_cap=int(call_cap or 0), calls_file=calls_file or "",
+        call_marker=call_marker or "")

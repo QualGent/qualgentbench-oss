@@ -471,8 +471,9 @@ def gate_reproducible(episode: Episode, report: dict[str, Any], index: int) -> G
     "Did not run" (`pass` None): the report is not valid, no answer is saved, the saved
     answer is for another defect, or the replay is still pending. "Unknown" (`pass` None
     and `unknown`): replay was looked at and can give no verdict for this report, because
-    its defect is excluded from replay (ceiling, control, no canary, ...) or the replay
-    could not be run."""
+    its defect is excluded from replay (ceiling, no canary, ...; `control` in files of
+    replay version 2) or the replay could not be run or gave no verdict (a canary-only
+    pass it could not confirm)."""
     matched = report.get("matched")
     if not matched:
         return GateResult(None, "runs only on a valid report")
@@ -1663,7 +1664,7 @@ def _never_located(case: CaseTruth | str, defect: str) -> str | None:
 def defect_coverage(episode: Episode) -> dict[str, dict[str, Any]]:
     """For each seeded defect present in the episode (`bugs_present`): can ANY report of
     it be customer-ready under this scoring? `{defect: {coverable, located_never,
-    replay_excluded}}`.
+    replay_excluded, replay_steps_needed}}`.
 
     `located_never`   why G2 answers unknown for every report of the defect (a code
                       above), or null
@@ -1671,18 +1672,24 @@ def defect_coverage(episode: Episode) -> dict[str, dict[str, Any]]:
                       (also null while no replay of it is saved)
     `coverable`       false when either is set: the defect is in the yield's
                       denominator and can never be in its numerator
+    `replay_steps_needed`  G4's control diagnostic (replay version 3): true when the
+                      reference report did NOT reproduce with its steps deleted, false
+                      when it did, null when not measured. It decides nothing.
 
     This is the ceiling of the customer-ready yield, reported beside it (QUA-3607)."""
     case, _ = _located_context(episode)
     entries = (saved_replay(episode) or {}).get("reports")
-    excluded = {str(e.get("defect")): str(e["excluded"])
-                for e in (entries if isinstance(entries, list) else [])
-                if isinstance(e, dict) and e.get("excluded")}
+    entries = [e for e in (entries if isinstance(entries, list) else [])
+               if isinstance(e, dict)]
+    excluded = {str(e.get("defect")): str(e["excluded"]) for e in entries if e.get("excluded")}
+    needed = {str(e.get("defect")): e["steps_needed"] for e in entries
+              if isinstance(e.get("steps_needed"), bool)}
     out: dict[str, dict[str, Any]] = {}
     for defect in (str(d) for d in episode.metrics.get("bugs_present") or []):
         never = _never_located(case, defect)
         out[defect] = {"coverable": never is None and defect not in excluded,
-                       "located_never": never, "replay_excluded": excluded.get(defect)}
+                       "located_never": never, "replay_excluded": excluded.get(defect),
+                       "replay_steps_needed": needed.get(defect)}
     return out
 
 

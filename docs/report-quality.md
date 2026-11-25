@@ -547,7 +547,8 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
     "<defect id>": {
       "coverable": false,
       "located_never": "no_screen_step",
-      "replay_excluded": null
+      "replay_excluded": null,
+      "replay_steps_needed": null
     }
   },
   "quality_version": 1,
@@ -659,7 +660,7 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
 | `quality_version` | `QUALITY_VERSION` of the code that wrote the file |
 | `corpus.episode` | the `corpus_version` and `heldout_version` the episode ran on, as `result.json` recorded them |
 | `corpus.scored_with` | what G2 read when it scored, for the episode's app: `source` (`packaged`, `heldout`, or null when the corpus has no file for the app) and the first 12 hex digits of the SHA-256 of the test-case file and of the truth file. G2 reads the corpus of the checkout that scores, so this can differ from `corpus.episode`; no path and no clock is in it |
-| `defects.<id>` | one entry per seeded defect present in the episode (`bugs_present`): can any report of it be customer-ready under this scoring? `located_never` is why G2 answers unknown for every report of it, or null: `no_truth` (no usable case or truth row), `not_in_truth`, `no_screen_step` (the truth recorded no screen for it), `no_step_screen` (it only removes text, and no screen the truth recorded can settle a report). `replay_excluded` is the code a saved replay excluded the defect with, or null. `coverable` is false when either is set |
+| `defects.<id>` | one entry per seeded defect present in the episode (`bugs_present`): can any report of it be customer-ready under this scoring? `located_never` is why G2 answers unknown for every report of it, or null: `no_truth` (no usable case or truth row), `not_in_truth`, `no_screen_step` (the truth recorded no screen for it), `no_step_screen` (it only removes text, and no screen the truth recorded can settle a report). `replay_excluded` is the code a saved replay excluded the defect with, or null. `coverable` is false when either is set. `replay_steps_needed` is G4's control diagnostic: true when the reference report did not reproduce with its steps deleted, false when it did, null when not measured; it decides nothing |
 | `scorer_version` | the scorer version recorded in `result.json`; its marks are what the gates read |
 | `scorer_report_source` | where the SCORER read the episode's reports, as `result.json` records it (`findings_file`, `transcript_write`, `result_line`, `report_tool`). Named `report_source` before the customer-shaped report existed |
 | `reports[]` | one entry per report, in the order `result.json` lists them |
@@ -715,8 +716,22 @@ split in two:
   report and the control are not affected. The replayer does not get the test case, the
   truth file or the first agent's transcript. Its working directory is named
   `replay-<12 hex>`, which names neither the case nor the defect.
-- **Budget.** Tool calls: `budget_factor` (2) times the length of the case's reference
-  route, `check.steps`. A case with no recorded route keeps its journey budget.
+- **Budget.** Device actions: `budget_factor` (3) times the length of the case's
+  reference route, `check.steps`, at least `budget_floor` (10). An action is a call that
+  changes the device: a tap, typing, a swipe, a key press, an app launch or stop, a
+  rotation (`interactions.mcp_actions` / `adb_actions`). Screen reads, log reads, waits
+  and a call the budget refused are not actions, and a tool that acts and reads
+  (`mobile_tap_and_observe`) is one action. Once the budget is spent, the next action
+  tool is refused before it runs and the episode ends (`truncated`); reads after the
+  last action stay allowed, so the replayer can read the screen it produced. A separate
+  hard cap on every tool call, `call_cap_factor` (4) times the action budget and at
+  least `call_cap_floor` (60), stops a replayer that only reads (`call_capped`, not
+  `truncated`). Each replay records `steps` (= `actions`), `step_budget`,
+  `interactions` (reads included), `tool_calls` and `call_cap`. A case with no recorded
+  route keeps its journey budget, as actions. Why actions: under the version-2 rule
+  (2x the route, every interaction counted) a replayer needs one action and one read per
+  report step, so the budget had no slack; in the pilot every failed replay was a
+  budget kill, and 13 of the 19 killed replays had already reproduced the bug.
 - **Attempts.** One per report.
 - **Task type.** `result.json` carries `task_type: report_replay`, never `journey_case`,
   and its metrics have no `reports` list. The journey board, the rescore, the rates and
@@ -740,20 +755,40 @@ A replay **reproduced** the defect when both hold:
 Some defects give condition 2 nothing to look for: the truth row measured no text
 (`state`), or the defect only removes text (`absence`). These are judged on the canary
 alone and marked `basis: canary_only`, so a reader can report them apart. The setting
-`textless: exclude` leaves them out of G4 instead. In the public corpus 10 of the 150
+`textless: exclude` leaves them out of G4 instead.
+
+A canary-only pass needs a replay that **finished**: the replayer ended on its own (no
+budget or call-cap stop) and its last device action was accepted (not refused by the
+budget hook, not failed). Otherwise the pass is `unconfirmed`: `reproduced: null`, no
+verdict, never a pass. The canary of such a defect can fire before the report's last
+step (the pilot's rotation defect fires at the rotation, before Save), and no truth field
+names which route step is the key one, so the rule asks for the whole route to have run.
+An unconfirmed replay is retried like one that did not run (`max_retries`), then reads
+`unavailable` with the unconfirmed reason. A canary-and-text verdict needs no such guard:
+the symptom text on the device is the evidence the steps ran. In the public corpus 10 of the 150
 (case, defect) pairs are of this kind (6 `state`, 4 `absence`).
 
 ### Ceiling and control
 
 A failed replay only says something about a report when a good report of the same
-defect does replay, and when the defect is not found by accident. Two measurements
-decide that per (case, defect), using the hand-written reference report
-(`reference_reports.py`):
+defect does replay. One measurement decides that per (case, defect), using the
+hand-written reference report (`reference_reports.py`), and one more is reported beside
+the answer:
 
-| Measurement | What is replayed | The defect is excluded when |
+| Measurement | What is replayed | Effect |
 |---|---|---|
-| ceiling | the reference report, `ceiling_attempts` (3) times | fewer than `ceiling_min` (2) reproduce |
-| control | the reference report with its steps deleted, once | it reproduces |
+| ceiling | the reference report, `ceiling_attempts` (3) times | the defect is excluded when fewer than `ceiling_min` (2) reproduce |
+| control | the reference report with its steps deleted, once | none: a diagnostic, `steps_needed` |
+
+G4 answers "can a second agent reproduce the bug from the report as written". The
+control keeps the title, the expected and actual results and the "Failed at" line, and in
+the replay-version-2 pilot the replayers rebuilt the route from those in 17 of 18
+controls; excluding such defects left none in G4. Since version 3 the control still runs
+and is reported as `steps_needed` (true: it did not reproduce without the steps, so the
+steps were needed; false: the rest of the report was enough; null: not measured) per
+defect in `baseline.json`, per report in `quality_replay.json`, per defect in
+`quality.json` (`defects.<id>.replay_steps_needed`), as a share in the Report quality
+block (`rows[].replay_steps_needed`) and in the pilot table.
 
 An excluded defect is out of G4 for every arm: its reports get `pass: null` with
 `unknown: true` and the reason, and they are in no G4 pass rate. Every exclusion is listed with one of these
@@ -762,7 +797,7 @@ codes:
 | Code | Meaning |
 |---|---|
 | `ceiling` | the reference report reproduced fewer than 2 of 3 times |
-| `control` | the reference report reproduced with its steps deleted |
+| `control` | replay version 2 only: the reference report reproduced with its steps deleted. Version 3 never writes it; a reader still reads it as an exclusion in an older file |
 | `canary_silent` | the reference replay showed the defect's text but its canary never fired: verdict unavailable |
 | `no_canary` | the build spec has no canary call for the defect: verdict unavailable |
 | `no_reference` | the case has no reference report for the defect |
@@ -776,7 +811,8 @@ catches a build that really does not report one.
 
 To save replays, a ceiling stops as soon as it is decided (2 of 2 reproduced, or 0 of
 2), the control runs only after the ceiling passed, and a report is replayed only after
-its defect is known to be in.
+its defect is known to be in. A report does not wait for the control. A control that
+could not be run leaves `steps_needed` null and changes nothing else.
 
 ### Running it
 
@@ -795,8 +831,8 @@ uv run python -m qualgentbench.quality_replay fold <run dir> --agent <agent> --m
 ```
 
 `fold` folds only the episodes of the replayer it is given. An episode saved under
-another fingerprint (agent, model, provider, tooling, `give_test_case`, budget, `textless`
-or replay version) measured something else. When the replay directory holds such
+another fingerprint (agent, model, provider, tooling, `give_test_case`, budget and call
+cap, `textless` or replay version) measured something else. When the replay directory holds such
 episodes, `fold` writes nothing, prints how the fingerprints differ and exits 2:
 a fold under the wrong replayer would find no episode of its own and rewrite every saved
 G4 answer to "not measured". Leave `--provider` out only when the replays were run
@@ -834,7 +870,8 @@ One replayer replays every arm, so that the arms differ only in their reports.
 | `ceiling_attempts`, `ceiling_min` | 3, 2 | the ceiling |
 | `ceiling_early_stop` | true | stop a ceiling once it is decided |
 | `control_attempts` | 1 | replays of the report with its steps deleted |
-| `budget_factor`, `budget_floor` | 2, 0 | the tool-call budget |
+| `budget_factor`, `budget_floor` | 3, 10 | the action budget: factor x the reference route, at least the floor |
+| `call_cap_factor`, `call_cap_floor` | 4, 60 | the hard cap on every tool call: factor x the action budget, at least the floor |
 | `textless` | `canary_only` | how a defect with no text to find is judged |
 | `max_retries` | 1 | retries of a replay that did not run |
 
@@ -843,15 +880,20 @@ different one on the command line is refused; `--quality-replay-config` runs an
 experiment under another file. The replayer and the rules are stamped into every replay
 episode, into `quality_replay.json` and into `quality.json` (`replay`).
 
-`REPLAY_VERSION` (currently `2`) is part of the fingerprint. It moves when the brief, the
-verdict rule or the budget rule changes; version 2 is the brief that gives `repro_steps`.
-No replay was ever run under version 1.
+`REPLAY_VERSION` (currently `3`) is part of the fingerprint. It moves when the brief, the
+verdict rule or the budget rule changes; version 2 is the brief that gives `repro_steps`;
+version 3 is the action budget and call cap, the unconfirmed canary-only pass and the
+control as a diagnostic. No replay was ever run under version 1. The version-2 pilot's
+episodes are kept as a record and are never folded under version 3.
 
 `scripts/quality_replay_pilot.py` is how the replayer is chosen. For each candidate it
 replays the reference reports of the same 10 public defects (ceiling 3 times, control
 once: at most 40 episodes per candidate) and prints one line per candidate: ceiling,
-control failures, cost and wall time per replay. Without `--run` it prints the plan and
-runs nothing.
+usable defects, steps needed (the control's diagnostic), verdict unavailable, cost and
+wall time per replay, truncated, unconfirmed and not-run replays. Without `--run` it
+prints the plan and runs nothing. `--table` reads saved replays; its `usable` column
+judges a ceiling with the early stop on, whatever the pilot's own config says, so a
+cloud run that stopped after two agreeing replays reads as decided.
 
 ### `quality_replay.json`
 
@@ -860,10 +902,11 @@ per valid report:
 
 ```json
 {
-  "replay_version": 2,
+  "replay_version": 3,
   "replayer": {"agent": "<agent>", "model": "<model>", "provider": null, "tooling": "mcp",
-               "give_test_case": false, "budget_factor": 2.0, "budget_floor": 0,
-               "textless": "canary_only", "replay_version": 2, "attempts": 1,
+               "give_test_case": false, "budget_unit": "actions", "budget_factor": 3.0,
+               "budget_floor": 10, "call_cap_factor": 4.0, "call_cap_floor": 60,
+               "textless": "canary_only", "replay_version": 3, "attempts": 1,
                "ceiling_attempts": 3, "ceiling_min": 2, "control_attempts": 1},
   "reports": [
     {
@@ -876,10 +919,13 @@ per valid report:
       "excluded": null,
       "ceiling": {"reproduced": 2, "attempts": 3},
       "control": {"reproduced": 0, "attempts": 1},
+      "steps_needed": true,
       "attempts": [
         {"episode": "replay-<12 hex>/<episode dir>", "valid": true, "reproduced": true,
-         "canary_fired": true, "symptom_seen": true, "reason": "...", "steps": 11,
-         "step_budget": 14, "truncated": false, "cost_usd": 0.42, "wall_time_sec": 95.0}
+         "canary_fired": true, "symptom_seen": true, "reason": "...", "steps": 7,
+         "step_budget": 21, "truncated": false, "unconfirmed": false,
+         "interactions": 15, "tool_calls": 18, "call_capped": false,
+         "cost_usd": 0.42, "wall_time_sec": 95.0}
       ]
     }
   ]
@@ -895,10 +941,12 @@ per valid report:
 | `basis` | `canary_and_text` or `canary_only` |
 | `excluded` | null, or one of the codes above |
 | `ceiling`, `control` | reproductions and valid replays of the reference report |
-| `attempts[]` | every replay episode of this report. `episode` is relative to the replay directory. `valid: false` is a replay that did not run (staging failed, a provider limit) |
+| `steps_needed` | the control's diagnostic (see "Ceiling and control") |
+| `attempts[]` | every replay episode of this report. `episode` is relative to the replay directory. `valid: false` is a replay that did not run (staging failed, a provider limit) or an `unconfirmed` canary-only pass. `steps` and `step_budget` are device actions |
 
-`<replay dir>/baseline.json` holds the ceiling and control of every defect with the same
-fields, keyed `<app>/<case>/<defect>`, plus the corpus version.
+`<replay dir>/baseline.json` holds the ceiling, control and `steps_needed` of every defect
+with the same fields, keyed `<app>/<case>/<defect>`, plus the corpus version and
+`steps_needed` = `{measured, needed, share}` over the defects that are in G4.
 
 In `quality.json`, G4 is `reports[].gates.G4` and `totals.gates.G4` (`evaluated`,
 `passed`, `unknown`). The answer for one report is one of four:
@@ -907,9 +955,9 @@ In `quality.json`, G4 is `reports[].gates.G4` and `totals.gates.G4` (`evaluated`
 |---|---|
 | `pass: true` / `pass: false` | the report was replayed and the verdict is in |
 | `pass: null` (did not run) | the report is not valid; no replay is saved; the saved replay is for another defect; or the replay is still `pending` |
-| `pass: null`, `unknown: true` | the defect is excluded from replay, or the replay, its ceiling or its control could not be run (`unavailable`) |
+| `pass: null`, `unknown: true` | the defect is excluded from replay, or the replay or its ceiling could not be run or gave no verdict (`unavailable`, an unconfirmed canary-only pass included) |
 
-A given-up ceiling or control is `unavailable`, not `pending`. Nothing is left to wait
+A given-up ceiling is `unavailable`, not `pending`. Nothing is left to wait
 for, so its reports are unknown beside the rate; saved as pending, one such report kept
 its whole arm "not measured" for ever. To try again, delete the replay episodes that
 did not run and run the replay again.
@@ -1097,6 +1145,7 @@ it in the manifest. `records` come from `quality_rates.episode_record(result, qu
 | `rows[].gates.<id>` | `name`, `available`, `evaluated`, `passed`, `unknown`, `not_run`, `rate`, `ci` |
 | `rows[].customer_ready` | `measured`, `ready`, `not_ready`, `unknown`, `waiting`, `k` (= `ready`), `n` (= `ready` + `not_ready`), `rate`, `ci`, `unknown_share` (= `unknown` / `scored`) |
 | `rows[].customer_ready_yield` | `measured`, `k`, `n` (the defects with a decided answer: `present` − `unknown`), `rate`, `ci`, `present` (seeded defects present), `unknown`, `coverable`, `not_coverable`, `not_coverable_by` (reason → count) |
+| `rows[].replay_steps_needed` | G4's control diagnostic over the arm's distinct (case, defect) pairs: `measured`, `needed` (the control did not reproduce), `share`; in no gate, rate or yield |
 | `rows[].ready_on_available` | `gates`, `k`, `n`, `rate`, `ci`, `unknown`, and `yield` = `{k, n, rate, ci, present, unknown}` |
 | `rows[].reports_per_defect` | `matched_reports`, `defects_found`, `value`, `repeats` = `{k, n, rate, ci}` |
 | `rows[].complete_if_steps_carried` | `{k, n, rate, ci}` |

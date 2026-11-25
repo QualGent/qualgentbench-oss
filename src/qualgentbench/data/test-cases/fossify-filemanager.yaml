@@ -204,7 +204,7 @@ test_cases:
             - Tap Download.
             - Tap QGB.
             - Press and hold beta.txt.
-            - Tap More options.
+            - Tap the three-dot menu button at the right end of the selection bar, right of Delete, Properties and Rename.
             - Tap Compress.
             - Tap OK.
           expected: The archive is created and the QGB folder lists beta.zip next to beta.txt.

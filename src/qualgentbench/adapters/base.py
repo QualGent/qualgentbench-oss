@@ -144,6 +144,13 @@ class RunContext:
     # Per-episode tool-call budget, enforced for CLI agents by a PreToolUse hook
     # that denies calls past the cap. None = no cap (timeout_sec still applies).
     tool_call_cap: int | None = None
+    # The key of interactions.json the cap is held against (`interactions.BUDGET_UNITS`):
+    # "interactions" everywhere but a replay-from-report episode, which budgets device
+    # "actions" (QUA-3591).
+    budget_unit: str = "interactions"
+    # A hard cap on EVERY tool call, beside the budget (None = none). Hitting it ends
+    # the episode with `call_capped` set, not `truncated`.
+    call_cap: int | None = None
     # Text the agent receives as its developer instructions (CreateBench v2, QUA-2856:
     # the creator template, read at run time from a PRIVATE checkout and never written
     # into this repository). codex-cli renders it as `developer_instructions` in its
@@ -261,6 +268,7 @@ class AgentAdapter(ABC):
         # watching a file keeps the kill agent-agnostic.
         sentinel = context.run_dir / "truncated"
         sentinel.unlink(missing_ok=True)   # per-episode reset
+        (context.run_dir / "call_capped").unlink(missing_ok=True)
         timeout_flag = context.run_dir / "timed_out"
         timeout_flag.unlink(missing_ok=True)
 

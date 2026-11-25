@@ -563,9 +563,9 @@ def test_which_defects_no_report_can_be_located_for(tmp_path, corpus):
     (d / "result.json").write_text(json.dumps(result))
     assert rq.score_episode(d)["defects"] == {
         "save-drops-note": {"coverable": False, "located_never": "no_step_screen",
-                            "replay_excluded": None},
+                            "replay_excluded": None, "replay_steps_needed": None},
         "editor-title-typo": {"coverable": True, "located_never": None,
-                              "replay_excluded": None}}
+                              "replay_excluded": None, "replay_steps_needed": None}}
 
 
 def test_missing_text_named_in_expected_counts_where_the_defect_also_shows_text(tmp_path):

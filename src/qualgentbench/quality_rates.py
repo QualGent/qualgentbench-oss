@@ -242,6 +242,24 @@ def _coverable(counted: list[Mapping[str, Any]],
             "not_coverable_by": dict(sorted(by.items()))}
 
 
+def _steps_needed(counted: list[Mapping[str, Any]]) -> dict[str, Any]:
+    """G4's control diagnostic over the arm's seeded defects (replay version 3): of the
+    distinct (case, defect) pairs whose `quality.json` carries
+    `defects.<id>.replay_steps_needed`, how many did NOT reproduce from their reference
+    report with its steps deleted. A diagnostic only: it is in no gate, rate or yield.
+    `{measured, needed, share}`; `share` None when nothing was measured."""
+    seen: dict[tuple, bool] = {}
+    for rec in counted:
+        maps = rec["quality"].get("defects")
+        for defect, entry in (maps.items() if isinstance(maps, Mapping) else ()):
+            needed = entry.get("replay_steps_needed") if isinstance(entry, Mapping) else None
+            if isinstance(needed, bool):
+                seen.setdefault((rec.get("case"), defect), needed)
+    k = sum(1 for v in seen.values() if v)
+    return {"measured": len(seen), "needed": k,
+            "share": round(k / len(seen), 4) if seen else None}
+
+
 def _available_block(reports: list[Mapping[str, Any]], available: list[str],
                      defects: list[tuple[int, str]],
                      by_episode: Mapping[int, list[Mapping[str, Any]]]) -> dict[str, Any]:
@@ -327,6 +345,7 @@ def _row(key: tuple, records: list[Mapping[str, Any]]) -> dict[str, Any]:
         "ci": in_yield["ci"] if measured else None,
         **_coverable(counted, defects)}
     row["ready_on_available"] = _available_block(scored, available, defects, by_episode)
+    row["replay_steps_needed"] = _steps_needed(counted)
     matched = sum(1 for r in scored if r.get("matched"))
     found = len({(ep, r["matched"]) for ep, reports in by_episode.items()
                  for r in reports if r.get("matched")})

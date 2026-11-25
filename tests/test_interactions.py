@@ -14,7 +14,6 @@ from qualgentbench import interactions as ix
 from qualgentbench.interactions import InteractionLog, classify_adb, classify_adb_all, classify_mcp
 from qualgentbench.mcp_meter import McpMeter
 
-
 # ── the vocabulary ───────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("request_,kind", [
@@ -495,8 +494,9 @@ def test_an_episode_is_labelled_v3_only_if_measured_in_v3(tmp_path):
     """The budget tooling refuses to mix units and decides from this label, so it
     must key on the interaction count, not the adb count."""
     from pathlib import Path
+
     from qualgentbench import bugs
-    from qualgentbench.bugs import load_suite, exploration_task, exploration_verdict
+    from qualgentbench.bugs import exploration_task, exploration_verdict, load_suite
 
     def _score(**spec):
         task = exploration_task(load_suite(
@@ -650,3 +650,36 @@ def test_batching_cannot_compress_steps(tmp_path):
     batched.record_adb("shell:input tap 1 2 && input tap 3 4 && uiautomator dump /dev/tty")
     assert split.total == batched.total == 3
     assert split.counts == batched.counts
+
+
+def test_device_actions_are_the_replay_budget_unit(tmp_path):
+    """QUA-3591. One action per call that changes the device; reads, log reads, waits
+    and bookkeeping are none; an act-and-observe tool is ONE action."""
+    from qualgentbench.interactions import (
+        MCP_ACTION_TOOLS,
+        InteractionLog,
+        adb_actions,
+        mcp_actions,
+    )
+
+    for tool in ("mobile_tap", "mobile_tap_and_observe", "mobile_type_text", "mobile_swipe",
+                 "mobile_press_button", "mobile_launch_app", "mobile_set_orientation",
+                 "mcp__device__mobile_long_press"):
+        assert mcp_actions(tool) == 1, tool
+    for tool in ("mobile_observe_screen", "mobile_find_views", "mobile_await_element",
+                 "mobile_await_screen_idle", "mobile_app_logs", "mobile_crash_logs",
+                 "mobile_report_result", "qg_release_device", "ToolSearch", "Bash"):
+        assert mcp_actions(tool) == 0, tool
+    assert "mobile_tap" in MCP_ACTION_TOOLS and "mobile_observe_screen" not in MCP_ACTION_TOOLS
+    assert adb_actions("shell:input tap 1 2 && uiautomator dump /dev/tty") == 1
+    assert adb_actions("shell:input tap 1 2; input tap 3 4") == 2
+    assert adb_actions("shell:logcat -d -t 50") == 0
+    assert adb_actions("shell:settings put system user_rotation 1") == 1
+    assert adb_actions("shell:screencap -p") == 0
+
+    log = InteractionLog(tmp_path / "interactions.json")
+    log.record_mcp("mobile_tap_and_observe")
+    log.record_mcp("mobile_observe_screen")
+    log.record_mcp("mobile_app_logs")
+    data = json.loads((tmp_path / "interactions.json").read_text())
+    assert data["interactions"] == 4 and data["actions"] == 1
