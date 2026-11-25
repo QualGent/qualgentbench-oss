@@ -181,7 +181,9 @@ def _counts(reports: list[Mapping[str, Any]], names: Mapping[str, str],
     carried = sum(1 for r in reports
                   if (r.get("complete") or {}).get("complete_if_steps_carried"))
     return {"scored": len(reports), "gates": gates, "customer_ready": customer_ready,
-            # A side figure, never a gate: G3 if the bug carried the agent's step list.
+            # A side figure, never a gate. It was "G3 if the bug carried the agent's step
+            # list"; G3 now reads that list, so in a quality.json written since then it
+            # equals G3. Kept because saved files and the lab viewer read it.
             "complete_if_steps_carried": _rate(carried, len(reports)),
             "funnel": _funnel(reports, names, missing)}
 
@@ -513,7 +515,7 @@ def lines(block: Mapping[str, Any]) -> list[str]:
         for gate in block["headline_gates"]:
             g = row["gates"][gate]
             out.append(f"    {gate} {g['name']:<13} {_gate_cell(g)}")
-        out.append("    G3 if the agent's steps were carried (side figure)  "
+        out.append("    G3 with the agent's steps carried (= G3 in new files)  "
                    + _fmt(row["complete_if_steps_carried"]))
         rpd = row["reports_per_defect"]
         out.append("    reports per defect    "

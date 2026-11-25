@@ -314,9 +314,7 @@ def replay_fields(report: dict[str, Any]) -> dict[str, Any]:
     is the summary repeated: replaying that text for a report that DID list its steps
     would be the evidence-removed control, and G4 would fail every arm (QUA-3607)."""
     fields = report_fields(report)
-    repro = [str(s) for s in report.get("repro_steps") or [] if str(s).strip()]
-    if repro:
-        fields["steps"] = repro
+    fields["steps"] = rq.customer_steps(report)[0]    # the steps G3 judges
     return fields
 
 
