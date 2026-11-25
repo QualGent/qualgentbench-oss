@@ -2056,8 +2056,8 @@ def _quality_replay_cmd(run_dir: Path, *, mode: str, agent: str, models: str | N
         return
     if not config.pinned:
         raise click.ClickException(
-            "no replayer: pass --agent and --models (the packaged replay config pins "
-            "none yet), or a --quality-replay-config that names one")
+            "no replayer: pass --agent and --models (this replay config pins "
+            "none), or a --quality-replay-config that names one")
     if not doc["runnable_now"]:
         summary = qr.fold(run_dir, config, replay_dir=replay_dir, state=state,
                           allow_other_replayer=True)

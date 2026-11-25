@@ -143,7 +143,8 @@ class ReplayError(ValueError):
 class ReplayConfig:
     """Every knob of the replay. The defaults are the spec's decisions; the packaged
     `data/quality-replay.json` is the pinned copy a board is replayed under."""
-    #: The replayer (D5): one agent and model for every arm. None until the pilot picks.
+    #: The replayer (D5): one agent and model for every arm. None here; the packaged
+    #: config names the one the pilot chose.
     agent: str | None = None
     model: str | None = None
     provider: str | None = None

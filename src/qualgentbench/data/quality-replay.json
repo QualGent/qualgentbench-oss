@@ -1,8 +1,8 @@
 {
-  "_about": "The replay-from-report pin (report quality gate G4). One replayer for every arm. agent/model stay null until the pilot picks them; see docs/report-quality.md. Budget (replay version 3): device ACTIONS, budget_factor x the reference route, at least budget_floor; every tool call is also capped at call_cap_factor x that, at least call_cap_floor.",
-  "agent": null,
-  "model": null,
-  "provider": null,
+  "_about": "The replay-from-report pin (report quality gate G4). One replayer for every arm, chosen by the replayer pilot (replay version 3); see docs/report-quality.md. The model is the id the harness records, as in every saved replay episode. Budget (replay version 3): device ACTIONS, budget_factor x the reference route, at least budget_floor; every tool call is also capped at call_cap_factor x that, at least call_cap_floor.",
+  "agent": "claude-code",
+  "model": "us.anthropic.claude-opus-5-5",
+  "provider": "bedrock",
   "tooling": "mcp",
   "give_test_case": false,
   "attempts": 1,

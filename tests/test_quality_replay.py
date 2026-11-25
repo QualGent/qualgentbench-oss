@@ -512,14 +512,52 @@ def test_the_pilot_selection_is_fixed_and_spread():
 
 # ── configuration ──────────────────────────────────────────────────────────────
 
-def test_the_packaged_config_is_the_spec_defaults_with_no_replayer_yet():
+def _unpinned(tmp_path: Path) -> list[str]:
+    """`--config` for a replay config that pins no replayer, so a test names its own
+    fake one on the command line (the packaged pin refuses any other)."""
+    path = tmp_path / "unpinned-replay-config.json"
+    path.write_text(json.dumps({"agent": None, "model": None, "provider": None}))
+    return ["--config", str(path)]
+
+
+PILOT_REPLAYER = Path(__file__).parent / "fixtures" / "quality_replay" / "pilot-episode-replayer.json"
+
+
+def test_the_packaged_config_is_the_spec_defaults_with_the_pilots_replayer():
     cfg = qr.load_config()
-    assert cfg == qr.ReplayConfig()                 # D3 report only, D4 one attempt
+    # D3 report only, D4 one attempt: every rule is the spec default; only the
+    # replayer (D5, chosen by the pilot) is set.
+    assert replace(cfg, agent=None, model=None, provider=None) == qr.ReplayConfig()
     assert (cfg.give_test_case, cfg.attempts, cfg.ceiling_attempts, cfg.ceiling_min,
             cfg.control_attempts, cfg.budget_factor, cfg.budget_floor) == (
         False, 1, 3, 2, 1, 3.0, 10)
     assert (cfg.call_cap_factor, cfg.call_cap_floor) == (4.0, 60)
-    assert not cfg.pinned                           # D5: chosen from the pilot
+    assert cfg.pinned and cfg.provider and cfg.tooling == "mcp"
+
+
+def test_the_pin_is_the_fingerprint_the_pilots_cloud_episodes_were_saved_under():
+    """The pin names the replayer exactly as a saved replay episode records it (the
+    model id the harness stamps, not the lab arm's short name), so a fold of the
+    pilot's episodes under the packaged config needs no `--allow-other-replayer`."""
+    saved = json.loads(PILOT_REPLAYER.read_text())["replayer"]
+    assert qr.load_config().fingerprint() == saved
+    assert saved["replay_version"] == qr.REPLAY_VERSION
+
+
+def test_episodes_of_the_pinned_replayer_fold_under_the_packaged_config(tmp_path):
+    run_dir, replay_dir, eps = _board(tmp_path)
+    pin = qr.load_config()
+    state = qr.ReplayState(pin, qr.valid_reports(run_dir), [])
+    _run(state, FakeReplayer(replay_dir, _answers, pin))
+    saved = {json.dumps(a.replayer, sort_keys=True) for a in qr.collect(replay_dir)}
+    assert saved == {json.dumps(json.loads(PILOT_REPLAYER.read_text())["replayer"],
+                                sort_keys=True)}
+    # A fresh fold, as the lab runs it: the packaged pin, no replayer flags.
+    assert qr.main(["fold", str(run_dir), "--replay-dir", str(replay_dir)]) == 0
+    summary = qr.fold(run_dir, qr.load_config(), replay_dir=replay_dir)
+    assert summary["other_replayer"] == 0 and summary["reports"]["replayed"] == 3
+    good = json.loads((eps["side-good"] / qr.REPLAY_FILE).read_text())
+    assert good["replayer"] == pin.stamp()
 
 
 def test_config_errors_are_named(tmp_path):
@@ -739,7 +777,8 @@ def test_the_saved_episodes_are_the_state_so_a_run_resumes_and_folds_anywhere(tm
     first = {n: (p / qr.REPLAY_FILE).read_bytes() for n, p in eps.items()}
     assert qr.fold(run_dir, CONFIG, replay_dir=replay_dir) == live
     assert first == {n: (p / qr.REPLAY_FILE).read_bytes() for n, p in eps.items()}
-    assert qr.main(["fold", str(run_dir), "--agent", "fake-agent", "--model", "fake-model"]) == 0
+    assert qr.main(["fold", str(run_dir), *_unpinned(tmp_path),
+                    "--agent", "fake-agent", "--model", "fake-model"]) == 0
 
 
 def test_one_unit_can_be_run_alone_for_a_cloud_fan_out(tmp_path):
@@ -796,7 +835,7 @@ def test_a_fold_under_another_replayer_is_refused_and_writes_nothing(tmp_path, c
     assert _files(run_dir) == before
 
     # The command: non-zero exit, the message on stderr, nothing written.
-    replayer = ["--agent", "fake-agent", "--model", "fake-model"]
+    replayer = [*_unpinned(tmp_path), "--agent", "fake-agent", "--model", "fake-model"]
     assert qr.main(["fold", str(run_dir), *replayer]) == 2
     assert "provider='bedrock' (here None)" in capsys.readouterr().err
     assert _files(run_dir) == before
@@ -1136,11 +1175,17 @@ def test_the_replay_command_refuses_before_it_spends(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_gate_runs_dir", lambda *a, **k: None)
     monkeypatch.setattr(cli, "_gate_agent_auth", lambda *a, **k: None)
 
-    # No replayer is pinned yet, so one must be named.
-    res = _cli("--quality-replay", str(run_dir))
+    monkeypatch.delenv("QGB_PROVIDER", raising=False)
+    # The packaged pin refuses another replayer.
+    res = _cli("--quality-replay", str(run_dir), "--agent", "claude-code", "--models", "m")
+    assert res.exit_code != 0 and "pinned" in res.output
+    # Under a config that pins no replayer, one must be named.
+    unpinned = _unpinned(tmp_path)[1]
+    res = _cli("--quality-replay", str(run_dir), "--quality-replay-config", unpinned)
     assert res.exit_code != 0 and "no replayer" in res.output
     # Not a terminal and no --yes: the plan is printed and nothing starts.
-    res = _cli("--quality-replay", str(run_dir), "--agent", "claude-code", "--models", "m")
+    res = _cli("--quality-replay", str(run_dir), "--quality-replay-config", unpinned,
+               "--agent", "claude-code", "--models", "m")
     assert res.exit_code != 0 and "Not started" in res.output
     # One replayer for every arm.
     res = _cli("--quality-replay", str(run_dir), "--agent", "claude-code", "--models", "a,b")
