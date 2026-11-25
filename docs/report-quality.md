@@ -863,7 +863,7 @@ One replayer replays every arm, so that the arms differ only in their reports.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `agent`, `model`, `provider` | null | the replayer; null until the pilot picks one |
+| `agent`, `model`, `provider` | the pilot's replayer | the replayer (D5), chosen by the replay-version-3 pilot: agent `claude-code`, provider `bedrock`, and the model id as a saved replay episode records it (`metrics.report_replay.replayer.model`, the provider's inference-profile id), so a fold of those episodes needs no replayer flags. `ReplayConfig()` itself leaves all three null |
 | `tooling` | `mcp` | how the replayer drives the device (`mcp` or `raw`) |
 | `give_test_case` | false | true adds the case's name, steps and expected outcome to the brief |
 | `attempts` | 1 | replays per report; reproduced when any reproduces |
@@ -875,10 +875,12 @@ One replayer replays every arm, so that the arms differ only in their reports.
 | `textless` | `canary_only` | how a defect with no text to find is judged |
 | `max_retries` | 1 | retries of a replay that did not run |
 
-While the pin names no replayer, `--agent` and `--models` must name one. Once it does, a
-different one on the command line is refused; `--quality-replay-config` runs an
-experiment under another file. The replayer and the rules are stamped into every replay
-episode, into `quality_replay.json` and into `quality.json` (`replay`).
+The pin names a replayer, so a different one on the command line (`--agent`/`--models` for
+a run, `--agent`/`--model`/`--provider`/`--tooling` for `quality_replay fold`) is refused;
+`--quality-replay-config` (or `fold --config`) runs or folds under another file, and under
+a file whose replayer is null `--agent` and `--models` must name one. A run under the pin
+passes `--mcp-server` (tooling `mcp`). The replayer and the rules are stamped into every
+replay episode, into `quality_replay.json` and into `quality.json` (`replay`).
 
 `REPLAY_VERSION` (currently `3`) is part of the fingerprint. It moves when the brief, the
 verdict rule or the budget rule changes; version 2 is the brief that gives `repro_steps`;

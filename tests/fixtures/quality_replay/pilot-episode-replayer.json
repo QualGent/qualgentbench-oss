@@ -1,0 +1,17 @@
+{
+  "_about": "The replayer block of a saved cloud replay episode of the replay-version-3 pilot (metrics.report_replay.replayer). The packaged pin must fold such episodes as its own.",
+  "replayer": {
+    "agent": "claude-code",
+    "budget_factor": 3.0,
+    "budget_floor": 10,
+    "budget_unit": "actions",
+    "call_cap_factor": 4.0,
+    "call_cap_floor": 60,
+    "give_test_case": false,
+    "model": "us.anthropic.claude-opus-5-5",
+    "provider": "bedrock",
+    "replay_version": 3,
+    "textless": "canary_only",
+    "tooling": "mcp"
+  }
+}
