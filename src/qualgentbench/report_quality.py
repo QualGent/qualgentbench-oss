@@ -264,6 +264,30 @@ class CustomerReport:
                 "report_source": self.report_source, "paired_by": self.paired_by}
 
 
+#: Where the steps G3 judges and G4 replays came from (`complete.steps_source`).
+STEPS_FROM_REPRO = "repro_steps"   # the agent's step list, as the bug stores it
+STEPS_FROM_TEXT = "steps"          # the bug's `steps` text
+
+
+def customer_steps(report: CustomerReport | dict[str, Any]) -> tuple[Any, str]:
+    """The reproduction steps the customer sees on the bug, and where they came from.
+
+    The bug's `repro_steps` (the agent's own step list, as the product stores it and
+    shows it as the bug's reproduction steps) when the report has any non-blank entry;
+    otherwise the bug's `steps` text, which for a report-tool bug with no code
+    investigation is the summary repeated. G3 judges these steps and G4 replays them
+    (`quality_replay.replay_fields`), so the two gates cannot read different steps.
+    Takes a `CustomerReport` or its `as_dict()` form."""
+    if isinstance(report, CustomerReport):
+        repro, text = report.repro_steps, report.steps
+    else:
+        repro, text = report.get("repro_steps"), report.get("steps")
+    shown = [str(s) for s in repro or () if str(s).strip()]
+    if shown:
+        return shown, STEPS_FROM_REPRO
+    return text, STEPS_FROM_TEXT
+
+
 def customer_report_from_tool(args: dict[str, Any], index: int = 0,
                               paired_by: str | None = None) -> CustomerReport | None:
     """The bug the product files from one accepted `mobile_report_result` call, or None
@@ -1717,11 +1741,15 @@ def _list(steps: list[int]) -> str:
 #
 #   observed   `actual` is not empty
 #   expected   `expected` is not empty
-#   steps      the bug's `steps` text is a list of reproduction steps (below)
+#   steps      the reproduction steps the customer sees are a list of steps (below):
+#              the bug's `repro_steps` (the agent's own step list, as the product
+#              stores and shows it) when the report has them, else the bug's `steps`
+#              text (`customer_steps`, the same rule G4's replay brief uses)
 #
-# The same steps rule is also run on `agent_steps`, the step list the agent sent and
-# the bug does not carry, to give `complete_if_steps_carried`: what G3 would be if the
-# product stored that list as the bug's steps. It is a side figure, never a gate.
+# The same steps rule is also run on `agent_steps`, the raw step list the agent sent,
+# as a side figure. `complete_if_steps_carried` was "what G3 would be if the product
+# stored that list"; since G3 reads the stored list it equals G3's answer and is kept
+# only because saved files and the lab viewer read the key. Never a gate of its own.
 #
 # "Steps that are steps": at least two entries; every entry opens with a verb from the
 # fixed lists below (a UI action, or an observation such as "verify"); at least two
@@ -1773,6 +1801,9 @@ def _verb_forms(verbs: tuple[str, ...]) -> frozenset[str]:
         if verb in _IRREGULAR_FORMS:
             forms.update(_IRREGULAR_FORMS[verb])
             continue
+        if verb[-1] == "y" and verb[-2] not in "aeiou":       # verify: verifies, verified
+            forms.update((verb[:-1] + "ies", verb[:-1] + "ied", verb + "ing"))
+            continue
         forms.add(verb + ("es" if verb.endswith(("s", "sh", "ch", "x")) else "s"))
         if verb.endswith("e"):
             forms.update((verb + "d", verb[:-1] + "ing"))
@@ -1786,9 +1817,14 @@ _ACTION_FORMS = _verb_forms(ACTION_VERBS)
 _OBSERVE_FORMS = _verb_forms(OBSERVE_VERBS)
 
 # What may stand before an entry's text: a bullet, a number, "Step 3:", a tick or cross.
+# A pass/fail mark is the agent's verdict on the step, not part of its text: the steps
+# rule reads the entry without it (the stored `repro_steps` keep it). An emoji mark may
+# carry a variation selector (U+FE0E/U+FE0F). A letter after a step number ("Step 3a:",
+# "3b.") is numbering too.
 _STEP_MARKER_RE = re.compile(
-    r"^(?:[-*•·–—>]+|\(?\d+[.):]\)?|step\s*\d+\s*[:.)-]?|\[[ xX✓✗]?\]"
-    r"|[✓✗✔✘☑☐✅❌])\s*", re.IGNORECASE)
+    r"^(?:[-*•·–—>]+|\(?\d+[a-z]?[.):]\)?|step\s*\d+[a-z]?\b\s*[:.)-]?"
+    r"|\[[ xX✓✗✔✘]?\][\ufe0e\ufe0f]?|[✓✗✔✘✕✖☑☒☐✅❌❎][\ufe0e\ufe0f]?)\s*",
+    re.IGNORECASE)
 _STEP_HEADING_RE = re.compile(
     r"^(?:steps?|repro\w*|reproduction|how)\b[^:]*:$", re.IGNORECASE)
 _INLINE_NUMBER_RE = re.compile(r"(?:^|\s)\(?\d{1,2}[.)]\s+")
@@ -1889,8 +1925,9 @@ def steps_are_steps(steps: Any, summary: str = "") -> tuple[bool, str]:
     kinds = [step_kind(entry) for entry in entries]
     if None in kinds:
         at = kinds.index(None)
-        return False, (f"entry {at + 1} of {len(entries)} is not a UI action: "
-                       f"{entries[at][:60]!r}")
+        what = ("names a source file or function call" if _CODE_RE.search(entries[at])
+                else "is not a UI action")
+        return False, f"entry {at + 1} of {len(entries)} {what}: {entries[at][:60]!r}"
     actions = kinds.count("action")
     if actions < MIN_STEP_ENTRIES:
         return False, (f"{actions} of {len(entries)} entries are UI actions; needs at "
@@ -1900,9 +1937,12 @@ def steps_are_steps(steps: Any, summary: str = "") -> tuple[bool, str]:
 
 def complete_checks(report: CustomerReport) -> dict[str, Any]:
     """G3's sub-checks for one customer-shaped report, as `quality.json` stores them
-    under `complete`. `steps` judges the bug's own steps text; `agent_steps` judges the
-    step list the agent sent and the bug does not carry."""
-    steps, steps_reason = steps_are_steps(report.steps, report.summary)
+    under `complete`. `steps` judges the steps the customer sees (`customer_steps`:
+    `repro_steps` when the report has them, else the bug's `steps` text) and
+    `steps_source` says which; `agent_steps` judges the raw step list the agent sent.
+    `complete_if_steps_carried` equals G3's answer (kept for saved files and readers)."""
+    shown, source = customer_steps(report)
+    steps, steps_reason = steps_are_steps(shown, report.summary)
     carried, carried_reason = steps_are_steps(report.agent_steps, report.summary)
     observed, expected = bool(report.actual), bool(report.expected)
     return {
@@ -1910,9 +1950,10 @@ def complete_checks(report: CustomerReport) -> dict[str, Any]:
         "expected": expected,
         "steps": steps,
         "steps_reason": steps_reason,
+        "steps_source": source,
         "agent_steps": carried,
         "agent_steps_reason": carried_reason,
-        "complete_if_steps_carried": observed and expected and carried,
+        "complete_if_steps_carried": observed and expected and steps,
     }
 
 

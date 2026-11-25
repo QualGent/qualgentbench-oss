@@ -363,17 +363,32 @@ valid or not, so the share of reports that are complete can be read on its own.
 |---|---|
 | `observed` | the bug's `actual` is not empty |
 | `expected` | the bug's `expected` is not empty |
-| `steps` | the bug's `steps` text is a list of reproduction steps (below) |
+| `steps` | the reproduction steps the customer sees are a list of steps (below) |
 
 G3 passes when all three pass. The bug keeps `expected` and `actual` only as a pair, so
 for a report that came from the report tool the first two sub-checks agree.
 
-**Steps that are steps.** The `steps` text is cut into entries and every rule must hold:
+**Which steps.** The steps the customer sees: the bug's `repro_steps` (the agent's own
+step list, as the bug stores it and shows it as the reproduction steps) when the report
+has at least one non-blank entry, else the bug's `steps` text. This is the same choice
+G4's replay brief makes (`replay_fields`); both call `report_quality.customer_steps`, so
+G3 never judges steps that G4 did not replay. `complete.steps_source` says which was read
+(`repro_steps` or `steps`). A report that has `repro_steps` is judged on them even when
+its `steps` text (a code investigation) would pass the rule.
+
+**Steps that are steps.** The steps are cut into entries and every rule must hold:
 
 1. There are at least two entries. Each line is an entry. A single line is cut at inline
-   numbers (`1. … 2. …`), else at arrows or semicolons, else at sentence ends. Bullets,
-   numbers, `Step 3:` and tick or cross marks before an entry are ignored, and so is a
-   heading line such as `Steps to reproduce:`.
+   numbers (`1. … 2. …`), else at arrows or semicolons, else at sentence ends. A list
+   (`repro_steps`) gives one entry per item. Bullets, numbers (`3.`, `3a.`), `Step 3:` or
+   `Step 3a:`, and tick or cross marks before an entry are ignored, and so is a heading
+   line such as `Steps to reproduce:`.
+   *Marks.* Agents mark each entry with its outcome (`✓ Step 1: Opened …`, `✗ Tapped
+   Save …`). The mark is the agent's verdict, not part of the step, so the rule reads the
+   entry without it: `✓ ✗ ✔ ✘ ✕ ✖ ☑ ☒ ☐ ✅ ❌ ❎`, with or without an emoji variation
+   selector, and `[ ]`, `[x]`, `[✓]`. The mark is removed for the check only; the stored
+   `repro_steps` and the replay brief keep it. A note after the number is not a mark:
+   `Step 3 (retry): Tapped Save` fails rule 2, because its first word is `retry`.
 2. Every entry opens with a verb from one of two fixed lists in the code: a UI action
    (`ACTION_VERBS`: tap, type, open, swipe, press, select, launch, go back, scroll and
    others) or an observation (`OBSERVE_VERBS`: verify, observe, check, wait and others).
@@ -384,6 +399,13 @@ for a report that came from the report tool the first two sub-checks agree.
    That is a code investigation, not a step a person can follow on a device.
 5. The text is not the summary repeated (letter case, spacing and punctuation ignored).
 
+The reason names the first entry that breaks rule 2 or 4: `entry 3 of 4 is not a UI
+action: '…'` or `entry 3 of 4 names a source file or function call: '…'`. The rule is
+strict on purpose. A closing sentence that states the outcome ("The note was not
+saved"), a menu path (`More options > Add to favorites`) and a stack frame pasted into a
+step (`… crashed (NoteEditor.kt:12)`) each fail it; the report tool asks agents to put the
+outcome in `actual` and `expected` instead.
+
 The rule looks only at the first word of each entry and at these marks. It does not judge
 whether the steps are correct, complete or in the right order, and an entry whose first
 word happens to be a listed verb counts ("Opening hours are wrong"). The verb lists are
@@ -391,9 +413,10 @@ part of the rule: changing them falls under the version rule below.
 
 **What this means for each report source.**
 
-- *Report tool.* The bug's `steps` is the call's `code_investigation`, or a copy of the
-  summary when there is none. Neither is a step list, so G3 fails on almost every such
-  report. This is the measured cost of the mapping, not noise.
+- *Report tool.* The bug carries the call's step list as `repro_steps`, and G3 judges
+  it. The bug's `steps` text (the call's `code_investigation`, or a copy of the summary
+  when there is none) is read only when the call sent no step list with text; a copy of
+  the summary then fails rule 5.
 - *Findings entry.* A rendered findings entry has `observed` and `expected` but an empty
   `steps` and no step list at all: the findings file has no field for them. G3 fails
   with the reason `steps: no steps`, and `complete_if_steps_carried` is false as well.
@@ -401,13 +424,16 @@ part of the rule: changing them falls under the version rule below.
   complete whatever its source. Read the G3 rate per `report_source` when comparing
   agents that report in different ways.
 
-**`complete_if_steps_carried`.** The same steps rule is also run on `agent_steps`, the
-step list the agent sent with its report and the bug does not carry. Each list item is
-one entry (a string, or a mapping's `description`, `action`, `text`, `instruction`,
-`title`, `name` or `step` text). `complete_if_steps_carried` is true when `observed`,
-`expected` and this check pass: it is what G3 would be if the bug stored the agent's
-step list as its steps. It is a side figure. It is not a gate and never changes
-`customer_ready`.
+**`agent_steps` and `complete_if_steps_carried`.** The same steps rule is also run on
+`agent_steps`, the raw step list the agent sent (before sanitising and bounds). Each
+list item is one entry (a string, or a mapping's `description`, `action`, `text`,
+`instruction`, `title`, `name` or `step` text). It is a side figure.
+
+`complete_if_steps_carried` was "what G3 would be if the bug stored the agent's step
+list". The bug now stores it and G3 reads it, so the key equals G3's answer (`observed`,
+`expected` and `steps` all pass) for every report. It is kept because saved files and
+readers (the rates block, the lab viewer) read it; new readers should read `gates.G3`.
+It is not a gate of its own and never changes `customer_ready`.
 
 In `quality.json` every scored report has a `complete` block (`null` for a neutral one),
 and the totals count each sub-check:
@@ -419,8 +445,9 @@ and the totals count each sub-check:
   "complete_if_steps_carried": true,
   "expected": true,
   "observed": true,
-  "steps": false,
-  "steps_reason": "the steps repeat the summary"
+  "steps": true,
+  "steps_reason": "3 entries, 3 UI actions",
+  "steps_source": "repro_steps"
 }
 ```
 
@@ -428,12 +455,12 @@ and the totals count each sub-check:
 "totals": {
   "complete": {
     "agent_steps": 1,
-    "complete": 0,
+    "complete": 1,
     "complete_if_steps_carried": 1,
     "evaluated": 1,
     "expected": 1,
     "observed": 1,
-    "steps": 0
+    "steps": 1
   }
 }
 ```
@@ -468,9 +495,9 @@ pass or fail mark included; an entry sent as an object gives its first text fiel
 trimmed, sanitised like the other fields and cut to 500 characters; blank entries and
 entries that are not text are dropped; at most 50 are kept. A closing sentence that
 states the outcome instead of an action stays as the last entry. The bug's `steps` text
-is not changed by this, and G3's `steps` check still reads that text;
-`complete_if_steps_carried` reads the raw list (`agent_steps`), whose entries are the
-same ones `repro_steps` keeps.
+is not changed by this. G3's `steps` check and G4's brief read `repro_steps` when there
+are any (see G3, "Which steps"); the `agent_steps` side check reads the raw list, whose
+entries are the same ones `repro_steps` keeps.
 
 `customer_report(episode)` returns one `CustomerReport` per report, in the order of
 `result.json`'s `metrics.reports`, so entry `i` belongs to report `i`:
@@ -555,13 +582,14 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
   "reports": [
     {
       "complete": {
-        "agent_steps": true,
-        "agent_steps_reason": "3 entries, 3 UI actions",
-        "complete_if_steps_carried": true,
+        "agent_steps": false,
+        "agent_steps_reason": "entry 3 of 3 is not a UI action: '<its third step>'",
+        "complete_if_steps_carried": false,
         "expected": true,
         "observed": true,
         "steps": false,
-        "steps_reason": "entry 1 of 2 is not a UI action: '<the first sentence>'"
+        "steps_reason": "entry 3 of 3 is not a UI action: '<its third step>'",
+        "steps_source": "repro_steps"
       },
       "consequence_of": null,
       "customer_ready": false,
@@ -596,7 +624,7 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
         },
         "G3": {
           "pass": false,
-          "reason": "steps: entry 1 of 2 is not a UI action: '<the first sentence>'"
+          "reason": "steps: entry 3 of 3 is not a UI action: '<its third step>'"
         },
         "G4": {
           "pass": null,
@@ -614,9 +642,9 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
   "scorer_version": 5,
   "totals": {
     "complete": {
-      "agent_steps": 1,
+      "agent_steps": 0,
       "complete": 0,
-      "complete_if_steps_carried": 1,
+      "complete_if_steps_carried": 0,
       "evaluated": 1,
       "expected": 1,
       "observed": 1,
@@ -669,7 +697,7 @@ Keys are sorted, the indent is two spaces, and the file ends with one newline.
 | `reports[].neutral` | true for a neutral report (see above) |
 | `reports[].gates` | gate id → `{pass, reason}`. `pass` is `true`, `false`, or `null` when the gate did not run for this report or answered unknown. An unknown answer also carries `"unknown": true` |
 | `reports[].customer_report` | the customer-shaped report of this report, neutral ones included: `summary`, `steps`, `expected`, `actual`, `failure_step`, `agent_steps`, `repro_steps`, `report_source`, `paired_by` (see above) |
-| `reports[].complete` | G3's sub-checks for this report: `observed`, `expected`, `steps` and `steps_reason`; the same steps rule on the agent's own list as `agent_steps` and `agent_steps_reason`; and `complete_if_steps_carried`. `null` for a neutral report (see G3, complete) |
+| `reports[].complete` | G3's sub-checks for this report: `observed`, `expected`, `steps` and `steps_reason` (on the steps the customer sees), `steps_source` (`repro_steps` or `steps`: which were read); the same steps rule on the agent's raw list as `agent_steps` and `agent_steps_reason`; and `complete_if_steps_carried`, which equals G3's answer. `null` for a neutral report (see G3, complete) |
 | `reports[].customer_ready` | `false` when a headline gate failed, `true` when all passed, `null` otherwise and for neutral reports |
 | `totals.reports` / `neutral` / `scored` | all reports, neutral ones, and the rest (`scored` is the denominator) |
 | `totals.gates.<id>` | `evaluated`: scored reports the gate answered pass or fail for; `passed`: how many passed; `unknown` (only on a gate that can answer unknown): how many it could not decide |
@@ -1047,8 +1075,12 @@ reports_per_defect       = matched reports / defects found
                            twice. A defect found in two episodes counts twice.
                            `repeats` = matched reports beyond the first for their
                            defect / matched reports, with an interval)
-complete_if_steps_carried = reports that would pass G3 if the bug stored the agent's
-                           own step list / scored reports (a side figure, never a gate)
+complete_if_steps_carried = reports whose `complete_if_steps_carried` is true / scored
+                           reports (a side figure, never a gate). It was "would pass G3
+                           if the bug stored the agent's step list"; G3 now reads that
+                           list, so for a quality.json written since then it equals the
+                           G3 pass rate. A file written before keeps the old meaning
+                           until it is rewritten
 ```
 
 One failed headline gate makes a report not ready, whatever the other gates say. This
@@ -1451,7 +1483,12 @@ drawn without it and with it the same episodes give other bytes (the key then re
 `targets.name_not_run`). Up to 40 carry
 step labels: the agent's own step list beside the case's steps up to the step the
 defect's reference report names. Order and choice come from SHA-256 of `--seed` and each
-report's place, so the same seed and episodes give the same bytes. The script refuses to
+report's place, so the same seed and episodes give the same bytes. The strata read the
+gates saved in each `quality.json`, not the gate code. Since G3 reads `repro_steps`
+(QUA-3587), rewriting a board's `quality.json` moves a report-tool report whose step
+list passes the steps rule out of a `fail:G3` stratum (7 reports of the boards `rq-v1`
+was drawn from, all 7 drawn into it); a draw from files that were not rewritten keeps
+its bytes, and the drawn `rq-v1` files are unchanged. The script refuses to
 write inside this repository, because a sample can hold held-out report text
 (`--exclude-heldout` leaves those episodes out).
 

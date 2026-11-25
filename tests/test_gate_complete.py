@@ -1,7 +1,8 @@
 """Gate G3, complete (QUA-3587): the customer-shaped report has an observed result, an
-expected result and reproduction steps that are steps. Each sub-check is tested alone,
-then the gate, the `complete_if_steps_carried` side figure and what `quality.json`
-records."""
+expected result and reproduction steps that are steps. The steps are the ones the
+customer sees: the bug's `repro_steps` (the agent's step list) when it has them, else the
+bug's `steps` text. Each sub-check is tested alone, then the gate, the
+`complete_if_steps_carried` key (now equal to G3) and what `quality.json` records."""
 
 from __future__ import annotations
 
@@ -66,6 +67,12 @@ def test_observed_and_expected_are_separate_sub_checks(actual, expected, observe
     "On the Cart screen, tap Pay\nThen the user selects Card\nFinally, press Confirm",
     AGENT_STEPS,
     ["✓ Opened the Analysis tab.", "✗ Tapped Tabular view; the charts stayed visible."],
+    # Pass/fail marks are stripped for the check, emoji forms and variation selectors too.
+    ["✔️ Opened the notes list", "✅ Tapped Add", "❌ Tapped Save", "[✓] Verified the list"],
+    ["✖ Opened the app", "☒ Tapped Add", "❎ Pressed Save"],
+    # A letter after a step number is numbering.
+    ["✓ Step 1: Opened the app", "✓ Step 2a: Tapped Add", "✗ Step 2b: Tapped Save"],
+    "1. Open the app\n2a. Tap Add\n2b) Tap Save",
 ])
 def test_an_action_list_is_steps(steps):
     passed, reason = rq.steps_are_steps(steps, SUMMARY)
@@ -77,7 +84,7 @@ def test_an_action_list_is_steps(steps):
     ("The save handler commits late.\nThe list then reloads from stale rows.",
      "entry 1 of 2 is not a UI action"),
     ("Open NotesRepository.kt\nSearch for the save call\nRead the insert",
-     "entry 1 of 3 is not a UI action"),                          # names a source file
+     "entry 1 of 3 names a source file or function call"),        # names a source file
     ("Open the editor\nCall viewModel.save()", "entry 2 of 2"),   # names a function call
     (SUMMARY, "repeat the summary"),
     (f"  {SUMMARY.upper()}. ", "repeat the summary"),
@@ -102,9 +109,11 @@ def test_the_verb_lists_are_fixed_and_inflected():
             "scroll"} <= set(rq.ACTION_VERBS)
     assert not set(rq.ACTION_VERBS) & set(rq.OBSERVE_VERBS)
     for entry in ("tap Save", "Taps Save", "Tapped Save", "Tapping Save", "Went back",
-                  "Double-tap the row", "Long press the row", "Chose Task", "3. Typed Milk"):
+                  "Double-tap the row", "Long press the row", "Chose Task", "3. Typed Milk",
+                  "Copied the link", "Copies the link", "Copying the link"):
         assert rq.step_kind(entry) == "action", entry
-    assert rq.step_kind("Waited five seconds") == "observation"
+    for entry in ("Waited five seconds", "Verified the total", "Verifies the total"):
+        assert rq.step_kind(entry) == "observation", entry
     for entry in ("The list is empty", "Savings are shown", "Opening hours are wrong?",
                   "", "42"):
         # "Opening" is a form of "open": the first word decides, by design.
@@ -114,27 +123,67 @@ def test_the_verb_lists_are_fixed_and_inflected():
 
 # ── the gate ───────────────────────────────────────────────────────────────────
 
-def test_the_product_mapping_fails_g3_and_the_carried_steps_would_pass(tmp_path):
-    """The bug's `steps` is the code investigation (or the summary), so G3 fails; the
-    agent's own step list, which the bug drops, would have passed."""
-    for name, investigation, why in (("with", INVESTIGATION, "1 entry"),
-                                     ("without", None, "repeat the summary")):
+def test_g3_reads_the_agents_step_list_the_bug_carries(tmp_path):
+    """The bug's `steps` text is the code investigation (or the summary repeated), but
+    the bug also carries the agent's step list as `repro_steps` and shows it as the
+    reproduction steps: G3 judges that list, as G4 replays it."""
+    for name, investigation in (("with", INVESTIGATION), ("without", None)):
         q = _scored(tmp_path, _fail(code_investigation=investigation, steps=AGENT_STEPS),
                     name=name)
         (report,) = q["reports"]
         assert report["customer_report"]["report_source"] == "report_tool"
-        assert report["gates"]["G3"]["pass"] is False
-        assert why in report["gates"]["G3"]["reason"]
+        assert report["customer_report"]["repro_steps"] == [
+            "Open the notes list", "Tap the add button", "Save the note"]
+        assert report["gates"]["G3"] == {
+            "pass": True, "reason": "observed, expected and steps (3 entries, 3 UI actions)"}
         assert report["complete"] == {
-            "observed": True, "expected": True, "steps": False,
-            "steps_reason": report["complete"]["steps_reason"],
+            "observed": True, "expected": True, "steps": True,
+            "steps_reason": "3 entries, 3 UI actions", "steps_source": "repro_steps",
             "agent_steps": True, "agent_steps_reason": "3 entries, 3 UI actions",
             "complete_if_steps_carried": True}
-        assert report["customer_ready"] is False
-        assert q["totals"]["gates"]["G3"] == {"name": "complete", "evaluated": 1, "passed": 0}
+        assert report["customer_ready"] is not True     # G2 and G4 are not known here
+        assert q["totals"]["gates"]["G3"] == {"name": "complete", "evaluated": 1, "passed": 1}
         assert q["totals"]["complete"] == {
-            "evaluated": 1, "observed": 1, "expected": 1, "steps": 0, "complete": 0,
+            "evaluated": 1, "observed": 1, "expected": 1, "steps": 1, "complete": 1,
             "agent_steps": 1, "complete_if_steps_carried": 1}
+
+
+def test_a_carried_list_that_is_not_steps_fails_even_over_good_text(tmp_path):
+    """`repro_steps` win over the `steps` text whenever they exist, so a carried list
+    that breaks the rule fails G3 although the investigation text would pass: the
+    customer reads the list."""
+    q = _scored(tmp_path, _fail(code_investigation=NUMBERED, steps=[
+        "Opened the notes list", "Tapped Save", "The note was not saved"]))
+    (report,) = q["reports"]
+    assert report["complete"]["steps_source"] == "repro_steps"
+    assert report["gates"]["G3"] == {
+        "pass": False,
+        "reason": "steps: entry 3 of 3 is not a UI action: 'The note was not saved'"}
+    assert report["complete"]["complete_if_steps_carried"] is False
+
+
+def test_a_list_with_no_text_falls_back_to_the_steps_text(tmp_path):
+    """Step entries with no text give no `repro_steps`; the customer then sees only the
+    `steps` text, which is the summary repeated."""
+    q = _scored(tmp_path, _fail(code_investigation=None, steps=[{"step": 1, "status": "failed"}]))
+    (report,) = q["reports"]
+    assert report["customer_report"]["repro_steps"] == []
+    assert report["complete"]["steps_source"] == "steps"
+    assert report["gates"]["G3"]["pass"] is False
+    assert "repeat the summary" in report["gates"]["G3"]["reason"]
+
+
+def test_g3_and_the_replay_brief_read_the_same_steps():
+    """One helper picks the steps for G3 and for G4's brief, so they cannot drift."""
+    from qualgentbench import quality_replay as qr
+    for repro, text in ((["Open the app", "Tap Save"], "the summary"),
+                        ([], NUMBERED), (["  ", ""], NUMBERED)):
+        report = _report(steps=text, repro_steps=tuple(repro))
+        shown, _ = rq.customer_steps(report)
+        assert qr.replay_fields(report.as_dict())["steps"] == shown
+        assert rq.customer_steps(report.as_dict()) == rq.customer_steps(report)
+    assert rq.customer_steps(_report(repro_steps=("Tap Save",)))[1] == rq.STEPS_FROM_REPRO
+    assert rq.customer_steps(_report())[1] == rq.STEPS_FROM_TEXT
 
 
 def test_a_report_whose_bug_carries_an_action_list_passes(tmp_path):
@@ -142,8 +191,10 @@ def test_a_report_whose_bug_carries_an_action_list_passes(tmp_path):
     (report,) = q["reports"]
     assert report["gates"]["G3"] == {
         "pass": True, "reason": "observed, expected and steps (4 entries, 4 UI actions)"}
+    assert report["complete"]["steps_source"] == "steps"
     assert report["complete"]["agent_steps"] is False
-    assert report["complete"]["complete_if_steps_carried"] is False
+    # `complete_if_steps_carried` now equals G3's answer.
+    assert report["complete"]["complete_if_steps_carried"] is True
     # G3 passed and G1 passed, but G2 and G4 are not known here: never "ready".
     assert report["customer_ready"] is not True
 
