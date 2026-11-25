@@ -241,6 +241,58 @@ def test_claude_code_tool_call_cap_hook(tmp_path):
     assert (tmp_path / "hooks" / "count").read_text().strip() == "71"
 
 
+@pytest.mark.parametrize("adapter_cls", [ClaudeCodeAdapter, CodexCliAdapter])
+def test_a_replay_budgets_device_actions_with_a_hard_call_cap(tmp_path, adapter_cls):
+    """QUA-3591. A replay-from-report episode holds its budget against device ACTIONS:
+    reads stay free, an action tool is refused BEFORE it runs once the budget is spent,
+    and every tool call counts toward a separate hard cap whose stop is marked as such."""
+    import subprocess
+
+    ctx = _context(run_dir=tmp_path, tool_call_cap=3, budget_unit="actions", call_cap=6)
+    adapter = adapter_cls()
+    adapter.prepare(ctx)
+    if adapter_cls is CodexCliAdapter:
+        adapter.command("", ctx)                       # config.toml writes the hook
+    (script,) = list(tmp_path.rglob("hooks/tool_cap.py"))
+    body = script.read_text()
+    assert 'UNIT = "actions"' in body and "CALL_CAP = 6" in body
+    meter = tmp_path / "interactions.json"
+
+    def run_hook(tool: str) -> int:
+        return subprocess.run([str(script)], input=json.dumps({"tool_name": tool}),
+                              text=True).returncode
+
+    meter.write_text(json.dumps({"interactions": 9, "actions": 2}))
+    assert run_hook("mcp__device__mobile_tap") == 0               # 2 of 3 spent
+    meter.write_text(json.dumps({"interactions": 11, "actions": 3}))
+    assert run_hook("mcp__device__mobile_observe_screen") == 0    # reads stay free
+    assert run_hook("mcp__device__mobile_app_logs") == 0          # so do log reads
+    assert not (tmp_path / "truncated").exists()
+    assert run_hook("mcp__device__mobile_tap_and_observe") == 2   # refused before it runs
+    assert (tmp_path / "truncated").exists() and not (tmp_path / "call_capped").exists()
+    assert (script.parent / "count").read_text().strip() == "3"
+
+    # The call cap: every call counts, reads included, and its stop has its own marker.
+    (tmp_path / "truncated").unlink()
+    meter.write_text(json.dumps({"interactions": 0, "actions": 0}))
+    assert run_hook("ToolSearch") == 0 and run_hook("mcp__device__mobile_observe_screen") == 0
+    assert run_hook("ToolSearch") == 2                            # call 7 of 6
+    assert (tmp_path / "call_capped").exists() and (tmp_path / "truncated").exists()
+    assert run_hook("mcp__device__qg_release_device") == 0        # always exempt
+
+
+def test_a_journey_hook_has_no_call_cap_and_budgets_interactions(tmp_path):
+    from qualgentbench.interactions import render_budget_hook
+
+    body = render_budget_hook(count_file=tmp_path / "c", meter_file=tmp_path / "m", cap=5,
+                              sentinel=tmp_path / "t")
+    assert 'UNIT = "interactions"' in body and "CALL_CAP = 0" in body
+    assert "ACTION_TOOLS = set(())" in body
+    with pytest.raises(ValueError):
+        render_budget_hook(count_file=tmp_path / "c", meter_file=tmp_path / "m", cap=5,
+                           sentinel=tmp_path / "t", unit="taps")
+
+
 def test_the_budget_charges_interactions_not_the_command_string(tmp_path):
     """A wrapped driver script carries no literal `adb `, so the cost must come
     from the ADB socket meter, not the command string."""

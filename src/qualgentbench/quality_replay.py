@@ -16,13 +16,28 @@ The verdict (`decide`), deterministic
     reported that it ran) AND one of the defect's truth texts appeared in what the device
     answered the replayer. The model is the actor only; nothing it says is scored.
 
-Two controls decide which defects G4 can speak about at all (`baseline_status`)
+One baseline decides which defects G4 can speak about at all (`baseline_status`)
     ceiling   the defect's hand-written reference report is replayed the same way,
               `ceiling_attempts` times. Below `ceiling_min` reproductions the defect is
               excluded from G4 for every arm: a failed replay of an agent's report would
               say nothing about that report.
-    control   the reference report is replayed with its steps deleted. If that still
-              reproduces, the defect is too easy to stumble on and is excluded too.
+and one diagnostic is reported beside the answer, never deciding it
+    control   the reference report is replayed with its steps deleted (title, expected,
+              actual and "Failed at" kept). `steps_needed` says whether that failed to
+              reproduce: true = the report's steps were needed, false = the rest of the
+              report was enough. G4 answers "can a second agent reproduce the bug from
+              the report as written", so a defect whose control reproduces stays in
+              (replay version 3; the pilot's controls rebuilt the route from the other
+              fields in 17 of 18 replays, so excluding them left no defect in G4).
+
+The budget (replay version 3)
+    The replayer is budgeted in device ACTIONS (`interactions.mcp_actions`: a tap,
+    typing, a swipe, a key press, a launch, a rotation; not a screen read, a log read, a
+    wait or a refused call; an act-and-observe tool is one action), `budget_factor` x
+    the reference route, at least `budget_floor`. A separate hard cap on every tool call
+    (`call_cap_factor` x the action budget, at least `call_cap_floor`) stops a replayer
+    that only reads. `truncated` means the action budget ran out; `call_capped` means
+    the call cap did.
 
 What is saved
     `<replay dir>/<opaque id>/<episode>/result.json`  one per replay episode, task type
@@ -74,7 +89,13 @@ from .transcript import TranscriptParser
 #:      (`repro_steps`) when the report has them, not the bug's `steps` text, which is
 #:      the summary repeated for a report with no code investigation (QUA-3607). No
 #:      replay was run under version 1.
-REPLAY_VERSION = 2
+#:   3  after the version-2 pilot (QUA-3591): the budget counts device actions, not
+#:      interactions, at 3x the route with a floor, plus a hard cap on tool calls; a
+#:      `canary_only` pass needs a replay that ended on its own with its last device
+#:      action accepted, else it is `unconfirmed` (no verdict); the control no longer
+#:      excludes a defect. The pilot's version-2 episodes are a historical record and
+#:      are never folded under version 3.
+REPLAY_VERSION = 3
 
 #: `result.json`'s `task_type` for a replay episode. Not `journey.TASK_TYPE`, which is
 #: the one value every board, rescore and rate filters on.
@@ -95,7 +116,10 @@ NO_CANARY = "no_canary"            # the build's source has no canary call for t
 NO_TRUTH_TEXT = "no_truth_text"    # nothing to look for on screen, and policy `exclude`
 CANARY_SILENT = "canary_silent"    # the symptom was seen but the canary never fired
 BELOW_CEILING = "ceiling"          # the reference report does not replay often enough
-CONTROL_REPRODUCES = "control"     # it reproduces with the steps deleted
+#: Replay version 2 excluded a defect whose control reproduced. Version 3 never writes
+#: it; it is kept so a reader of an older `quality_replay.json`/`baseline.json` still
+#: knows the code (`report_quality` reads any `excluded` value as unknown).
+CONTROL_REPRODUCES = "control"
 #: Exclusions that mean "no verdict can be given", as opposed to "the defect is unfit".
 VERDICT_UNAVAILABLE = (NO_REFERENCE, NO_CANARY, NO_TRUTH_TEXT, CANARY_SILENT)
 
@@ -137,10 +161,14 @@ class ReplayConfig:
     ceiling_early_stop: bool = True
     #: Replays of each reference report with its steps deleted.
     control_attempts: int = 1
-    #: The replayer's tool-call budget: `budget_factor` x the case's reference route
-    #: length, never below `budget_floor`.
-    budget_factor: float = 2.0
-    budget_floor: int = 0
+    #: The replayer's ACTION budget: `budget_factor` x the case's reference route
+    #: length, never below `budget_floor`. Screen reads, log reads and waits are free.
+    budget_factor: float = 3.0
+    budget_floor: int = 10
+    #: The hard cap on every tool call: `call_cap_factor` x the action budget, never
+    #: below `call_cap_floor`. Generous on purpose: it only stops a replayer that loops.
+    call_cap_factor: float = 4.0
+    call_cap_floor: int = 60
     #: A defect with no text to find on screen: `canary_only` scores it on the canary
     #: alone; `exclude` leaves it out of G4.
     textless: str = CANARY_ONLY
@@ -158,6 +186,9 @@ class ReplayConfig:
         if self.attempts < 1 or self.control_attempts < 0 or self.budget_factor <= 0:
             raise ReplayError("attempts must be >= 1, control_attempts >= 0 and "
                               "budget_factor > 0")
+        if self.budget_floor < 0 or self.call_cap_factor < 1 or self.call_cap_floor < 0:
+            raise ReplayError("budget_floor and call_cap_floor must be >= 0 and "
+                              "call_cap_factor >= 1")
 
     def fingerprint(self) -> dict[str, Any]:
         """What a replay EPISODE was run under. Two episodes are comparable, and are
@@ -165,7 +196,10 @@ class ReplayConfig:
         return {"replay_version": REPLAY_VERSION, "agent": self.agent, "model": self.model,
                 "provider": self.provider, "tooling": self.tooling,
                 "give_test_case": self.give_test_case,
+                "budget_unit": "actions",
                 "budget_factor": self.budget_factor, "budget_floor": self.budget_floor,
+                "call_cap_factor": self.call_cap_factor,
+                "call_cap_floor": self.call_cap_floor,
                 "textless": self.textless}
 
     def stamp(self) -> dict[str, Any]:
@@ -350,13 +384,23 @@ def verdict_basis(truth_kind: str, truth_texts: Iterable[str]) -> str:
 
 def decide(*, defect_id: str, truth_kind: str, truth_texts: list[str],
            fired: list[str] | None, device_results: list[str], app_crashes: int = 0,
-           textless: str = CANARY_ONLY) -> dict[str, Any]:
+           textless: str = CANARY_ONLY, finished: bool = True,
+           unfinished_why: str = "") -> dict[str, Any]:
     """The replay verdict. Pure: what the harness read off the device after the replayer
     exited (`fired`, `app_crashes`) and what the device answered it (`device_results`,
     as `journey._device_texts(..., results_only=True)` gives them).
 
-    `reproduced` is None when no verdict can be given: the canary could not be read, or
-    the defect has no text to find and the policy is `exclude`."""
+    `finished`: the replayer ended on its own (no budget or call-cap stop) and its last
+    device action was accepted (`unfinished_why` says otherwise why not). It matters
+    only to a `canary_only` defect: there the canary is the whole verdict, and a canary
+    can fire BEFORE the report's last step (the pilot's rotation defect fires at the
+    rotation, before Save). A canary-only pass of an unfinished replay is `unconfirmed`:
+    no verdict, never a pass. A canary-and-text verdict needs no such guard: the symptom
+    text on the device is the evidence the steps ran.
+
+    `reproduced` is None when no verdict can be given: the canary could not be read, the
+    defect has no text to find and the policy is `exclude`, or a canary-only pass is
+    unconfirmed."""
     basis = verdict_basis(truth_kind, truth_texts)
     seen = [t for t in truth_texts
             if any(reference_reports._quotes(t, d) for d in device_results)]
@@ -369,7 +413,7 @@ def decide(*, defect_id: str, truth_kind: str, truth_texts: list[str],
                            "canary_fired": None if fired is None else defect_id in fired,
                            "symptom_seen": symptom if basis == CANARY_AND_TEXT else None,
                            "symptom_source": source if basis == CANARY_AND_TEXT else None,
-                           "texts_seen": seen[:5]}
+                           "texts_seen": seen[:5], "unconfirmed": False}
     if fired is None:
         return {**out, "reproduced": None, "reason": "the canary could not be read"}
     canary = defect_id in fired
@@ -377,6 +421,11 @@ def decide(*, defect_id: str, truth_kind: str, truth_texts: list[str],
         if textless != CANARY_ONLY:
             return {**out, "reproduced": None,
                     "reason": "the defect has no text to find on screen"}
+        if canary and not finished:
+            return {**out, "reproduced": None, "unconfirmed": True,
+                    "reason": "unconfirmed: the canary fired, but the replay did not finish "
+                              f"({unfinished_why or 'stopped early'}) and the defect has no "
+                              "text to confirm it"}
         return {**out, "reproduced": canary,
                 "reason": ("the canary fired (no text to find for this defect)" if canary
                            else "the canary did not fire")}
@@ -398,8 +447,9 @@ def replay_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifier
     was built with and what the harness recorded on the spec after the replayer exited.
     The saved metrics carry no `reports` list, so nothing that scores journey reports
     can read this episode as one."""
-    from .bugs import _bash_adb_events, _count_tool_calls, _device_actions
+    from .bugs import _bash_adb_events, _device_actions
     from .contamination import scan as contamination_scan
+    from .interactions import mcp_actions
 
     spec = task.bug_spec or {}
     block = spec.get(KEY) or {}
@@ -420,6 +470,17 @@ def replay_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifier
         evidence = (len(parser.observation_texts()) >= 1
                     and len(parser.successful_device_events()) >= 1)
 
+    truncated = bool(spec.get("truncated"))
+    call_capped = bool(spec.get("call_capped"))
+    # The last device ACTION the replayer called, and whether the device accepted it. A
+    # call the budget hook refused is in the transcript as an error (MCP arm; a shell
+    # action cannot be told apart from a read here, so the raw arm relies on the stop).
+    acts = [e for e in parser.events() if mcp_actions(e.name)] if tooling == "mcp" else []
+    last_action_ok = acts[-1].success if acts else None
+    unfinished = ("the action budget ran out" if truncated
+                  else "the tool-call cap was hit" if call_capped
+                  else f"its last action, {acts[-1].name}, was refused or failed"
+                  if last_action_ok is False else "")
     fired = spec.get("fired")
     answer = decide(defect_id=str(unit.get("defect_id") or ""),
                     truth_kind=str(block.get("truth_kind") or ""),
@@ -428,9 +489,18 @@ def replay_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifier
                     device_results=journey._device_texts(transcript, tooling,
                                                          results_only=True),
                     app_crashes=int(spec.get("app_crash_count") or 0),
-                    textless=str((block.get("replayer") or {}).get("textless") or CANARY_ONLY))
+                    textless=str((block.get("replayer") or {}).get("textless") or CANARY_ONLY),
+                    finished=not unfinished, unfinished_why=unfinished)
     said = _SAID_RE.findall(transcript)
-    steps = spec.get("hook_steps") or device_actions or _count_tool_calls(transcript)
+    # The budget's own unit: device actions, as the meter counted them (a refused call
+    # never reached it). Else the hook's last reading, else the transcript's count.
+    actions = spec.get("actions") if isinstance(spec.get("actions"), int) else None
+    if actions is None and spec.get("budget_unit") == "actions":
+        actions = spec.get("hook_steps")
+    if actions is None:
+        actions = sum(mcp_actions(e.name) for e in parser.events() if e.success) \
+            if tooling == "mcp" else device_actions
+    steps = actions
     budget = spec.get("step_budget")
     metrics = {
         "app_id": spec.get("app_id"),
@@ -442,20 +512,31 @@ def replay_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifier
         "fault_fired": fired,
         "app_crashes": int(spec.get("app_crash_count") or 0),
         "hook_steps": spec.get("hook_steps"),
+        # `steps` and `step_budget` are in the budget's unit, device actions; the
+        # interactions (reads included) and every tool call are recorded beside them.
+        "budget_unit": "actions",
         "steps": steps,
         "step_budget": budget,
         "budget_used": round(steps / budget, 4) if budget and steps else None,
+        "actions": actions,
+        "interactions": spec.get("interactions"),
+        "tool_calls": spec.get("tool_calls"),
+        "call_cap": spec.get("call_cap"),
+        "call_capped": call_capped,
+        "last_action_ok": last_action_ok,
         "device_actions": device_actions,
-        "truncated": bool(spec.get("truncated")),
+        "truncated": truncated,
         "timed_out": bool(spec.get("timed_out")),
         "device_serial": spec.get("device_serial"),
         "off_app": bool(spec.get("off_app")),
         "infra_failure": device_actions == 0 and not evidence,
         "env_failure": (bool(spec.get("staging_failed"))
                         or (bool(spec.get("exit_code")) and not said
-                            and not spec.get("truncated"))),
+                            and not truncated and not call_capped)),
         "staging_failed": spec.get("staging_failed") or "",
-        "reported_status": ("REPRODUCED" if answer["reproduced"] else "NOT_REPRODUCED"),
+        "reported_status": ("REPRODUCED" if answer["reproduced"]
+                            else "UNCONFIRMED" if answer.get("unconfirmed")
+                            else "NOT_REPRODUCED"),
         **contamination.as_metrics(),
         **pricing.usage_metrics(model, parser.token_usage()),
     }
@@ -472,12 +553,18 @@ def replay_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifier
 
 def step_budget(ref_steps: int | None, case_budget: int | None,
                 config: ReplayConfig) -> int:
-    """The replayer's tool-call budget: `budget_factor` x the length of the case's
+    """The replayer's ACTION budget: `budget_factor` x the length of the case's
     reference route (`check.steps`, the route the corpus derives the case on), at least
-    `budget_floor`. A case with no recorded route keeps its own journey budget."""
+    `budget_floor`. A case with no recorded route keeps its own journey budget (an
+    interaction budget, so a generous number of actions)."""
     if not ref_steps:
         return max(int(case_budget or 40), config.budget_floor)
     return max(math.ceil(config.budget_factor * int(ref_steps)), config.budget_floor, 1)
+
+
+def call_cap(budget: int, config: ReplayConfig) -> int:
+    """The hard cap on every tool call of a replay with action budget `budget`."""
+    return max(math.ceil(config.call_cap_factor * budget), config.call_cap_floor, budget)
 
 
 def _case(app_id: str, case_id: str) -> tuple[dict, dict, dict[str, dict]]:
@@ -504,6 +591,10 @@ def build_task(unit: ReplayUnit, suite: dict[str, Any], config: ReplayConfig) ->
     truth = reference_reports.truth_texts(case, defects, row, unit.defect_id, base.app_name)
     spec = dict(base.bug_spec or {})
     spec["step_budget"] = step_budget(spec.get("ref_steps"), spec.get("step_budget"), config)
+    # The budget hook holds the cap against device actions, and stops any agent past
+    # the call cap (`episode_runner` passes both to the adapter).
+    spec["budget_unit"] = "actions"
+    spec["call_cap"] = call_cap(spec["step_budget"], config)
     spec[KEY] = {"unit": unit.identity(), "report": report_fields(unit.report),
                  "replayer": config.fingerprint(), "truth_kind": truth["kind"],
                  "truth_texts": list(truth["actual"]) if truth["kind"] in TEXT_KINDS else []}
@@ -644,6 +735,11 @@ class Attempt:
     cost_usd: float | None = None
     wall_time_sec: float | None = None
     ended_at: str = ""
+    #: A canary-only pass of a replay that did not finish (version 3): no verdict.
+    unconfirmed: bool = False
+    interactions: int | None = None
+    tool_calls: int | None = None
+    call_capped: bool = False
 
     @property
     def valid(self) -> bool:
@@ -655,7 +751,9 @@ class Attempt:
                 "reason": self.invalid or self.reason, "valid": self.valid,
                 "steps": self.steps, "step_budget": self.step_budget,
                 "truncated": self.truncated, "cost_usd": self.cost_usd,
-                "wall_time_sec": self.wall_time_sec}
+                "wall_time_sec": self.wall_time_sec, "unconfirmed": self.unconfirmed,
+                "interactions": self.interactions, "tool_calls": self.tool_calls,
+                "call_capped": self.call_capped}
 
 
 def attempt_from_result(result: dict[str, Any], episode: str) -> Attempt | None:
@@ -678,7 +776,15 @@ def attempt_from_result(result: dict[str, Any], episode: str) -> Attempt | None:
         truncated=bool(metrics.get("truncated")),
         cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
         wall_time_sec=float(wall) if isinstance(wall, (int, float)) else None,
-        ended_at=str(result.get("ended_at") or ""))
+        ended_at=str(result.get("ended_at") or ""),
+        unconfirmed=bool(block.get("unconfirmed")),
+        interactions=_int(metrics.get("interactions")),
+        tool_calls=_int(metrics.get("tool_calls")),
+        call_capped=bool(metrics.get("call_capped")))
+
+
+def _int(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 def collect(replay_dir: Path | str) -> list[Attempt]:
@@ -748,13 +854,27 @@ def valid_reports(run_dir: Path | str) -> list[ReportRef]:
 
 # ── ceiling and control ────────────────────────────────────────────────────────
 
+def steps_needed(control: list[Attempt]) -> bool | None:
+    """The control's diagnostic: True when no valid control replay reproduced (the
+    report's steps were needed), False when one did (the title, expected, actual and
+    "Failed at" lines were enough), None when no control was measured."""
+    if not control:
+        return None
+    return not any(a.reproduced for a in control)
+
+
 def baseline_status(facts: DefectFacts, ceiling: list[Attempt], control: list[Attempt],
-                    config: ReplayConfig, *, gave_up: bool = False) -> dict[str, Any]:
-    """Where one defect stands: excluded (and why), included, or not decided yet.
+                    config: ReplayConfig, *, gave_up: bool = False,
+                    control_gave_up: bool = False) -> dict[str, Any]:
+    """Where one defect stands: excluded (and why), included, or not decided yet, and
+    the control's diagnostic (`steps_needed`).
 
     `ceiling` and `control` are the VALID attempts, oldest first. `need` names the next
-    replay that would move the decision (CEILING or CONTROL), or None when it is made.
-    `gave_up`: a needed replay failed to run more often than `max_retries` allows."""
+    replay to run for this defect (CEILING, or CONTROL once the defect is in), or None.
+    Only the ceiling decides: the control is run and reported, never waited on and never
+    a reason to exclude (replay version 3). `gave_up`: a needed ceiling replay failed to
+    run more often than `max_retries` allows; `control_gave_up` the same for the
+    control, which then stays unmeasured (`steps_needed` None)."""
     ceiling = ceiling[:config.ceiling_attempts]
     control = control[:config.control_attempts]
     k = sum(1 for a in ceiling if a.reproduced)
@@ -764,6 +884,7 @@ def baseline_status(facts: DefectFacts, ceiling: list[Attempt], control: list[At
         "truth_kind": facts.truth_kind, "basis": facts.basis,
         "ceiling": {"reproduced": k, "attempts": len(ceiling)},
         "control": {"reproduced": c, "attempts": len(control)},
+        "steps_needed": steps_needed(control),
         "excluded": None, "decided": True, "need": None, "reason": ""}
 
     def excluded(code: str, reason: str) -> dict[str, Any]:
@@ -794,16 +915,16 @@ def baseline_status(facts: DefectFacts, ceiling: list[Attempt], control: list[At
                             "never fired: verdict unavailable")
         return excluded(BELOW_CEILING, f"its reference report reproduced {k} of {n} times "
                                        f"(needs {floor} of {total})")
-    if len(control) < config.control_attempts:
-        if gave_up:
-            return {**out, "decided": False,
-                    "reason": "the control replay could not be run: no control"}
-        return {**out, "decided": False, "need": CONTROL,
-                "reason": "evidence-removed control not measured yet"}
-    if c:
-        return excluded(CONTROL_REPRODUCES,
-                        "it reproduces from its reference report with the steps deleted")
-    return {**out, "reason": f"ceiling {k} of {n}; control did not reproduce"}
+    need = CONTROL if len(control) < config.control_attempts and not control_gave_up else None
+    if out["steps_needed"] is None:
+        why = ("control not measured yet" if need
+               else "the control could not be run" if config.control_attempts
+               else "no control configured")
+    elif out["steps_needed"]:
+        why = "without its steps it did not reproduce"
+    else:
+        why = "it also reproduces without its steps"
+    return {**out, "need": need, "reason": f"ceiling {k} of {n}; {why}"}
 
 
 # ── the state of a replay: what is saved, what is next ─────────────────────────
@@ -864,7 +985,7 @@ class ReplayState:
         return baseline_status(
             self.facts[key], [a for a in self._of(ceiling) if a.valid],
             [a for a in self._of(control) if a.valid], self.config,
-            gave_up=self._gave_up(ceiling) or self._gave_up(control))
+            gave_up=self._gave_up(ceiling), control_gave_up=self._gave_up(control))
 
     def report_entry(self, ref: ReportRef) -> dict[str, Any]:
         """One entry of `quality_replay.json`."""
@@ -874,15 +995,15 @@ class ReplayState:
         entry: dict[str, Any] = {
             "index": ref.index, "defect": ref.defect_id, "basis": base["basis"],
             "excluded": base["excluded"], "ceiling": base["ceiling"],
-            "control": base["control"], "reproduced": None,
-            "attempts": [a.as_dict() for a in tries]}
+            "control": base["control"], "steps_needed": base["steps_needed"],
+            "reproduced": None, "attempts": [a.as_dict() for a in tries]}
         if base["excluded"]:
             return {**entry, "status": "excluded", "reason": base["reason"]}
         if not base["decided"]:
-            # No replay left to wait for (`need` is None): the ceiling or the control
-            # was given up after failing to run. That is "could not be run", not "not
-            # run yet": read as pending, one such report kept its whole arm not
-            # measured for ever (QUA-3607).
+            # No replay left to wait for (`need` is None): the ceiling was given up
+            # after failing to run. That is "could not be run", not "not run yet":
+            # read as pending, one such report kept its whole arm not measured for ever
+            # (QUA-3607).
             return {**entry, "status": "pending" if base["need"] else "unavailable",
                     "reason": base["reason"]}
         if any(a.reproduced for a in valid):
@@ -892,9 +1013,11 @@ class ReplayState:
             return {**entry, "status": "replayed", "reproduced": False,
                     "reason": valid[-1].reason}
         if self._gave_up(ref.target):
+            last = tries[-1]
             return {**entry, "status": "unavailable",
-                    "reason": "the replay could not be run: " + (tries[-1].invalid
-                                                                 or tries[-1].reason)}
+                    "reason": (last.reason if last.unconfirmed and not last.invalid
+                               else "the replay could not be run: "
+                               + (last.invalid or last.reason))}
         return {**entry, "status": "pending", "reason": "not replayed yet"}
 
     def _unit(self, kind: str, key: str) -> ReplayUnit:
@@ -937,8 +1060,7 @@ class ReplayState:
                 control += cfg.control_attempts - base["control"]["attempts"]
         for ref in self.reports:
             entry = self.report_entry(ref)
-            if entry["status"] == "pending" and not self._gave_up(f"{CEILING}:{ref.defect_key}") \
-                    and not self._gave_up(f"{CONTROL}:{ref.defect_key}"):
+            if entry["status"] == "pending" and not self._gave_up(f"{CEILING}:{ref.defect_key}"):
                 report += cfg.attempts - sum(1 for a in entry["attempts"] if a["valid"])
         return {"ceiling": ceiling, "control": control, "report": report,
                 "total": ceiling + control + report}
@@ -966,11 +1088,22 @@ def _write_json(path: Path, value: Any) -> None:
         tmp.unlink(missing_ok=True)
 
 
+def steps_needed_share(bases: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    """The control's diagnostic over defects that are IN G4: of the defects whose control
+    was measured, how many needed the report's steps. `{measured, needed, share}`."""
+    kept = [b for b in bases if not b.get("excluded") and b.get("steps_needed") is not None]
+    needed = sum(1 for b in kept if b["steps_needed"])
+    return {"measured": len(kept), "needed": needed,
+            "share": round(needed / len(kept), 4) if kept else None}
+
+
 def baseline_document(state: ReplayState) -> dict[str, Any]:
+    bases = {key: state.baseline(key) for key in sorted(state.facts)}
     return {"replay_version": REPLAY_VERSION, "replayer": state.config.stamp(),
             **corpus.stamp(),
-            "defects": {key: {k: v for k, v in state.baseline(key).items() if k != "need"}
-                        for key in sorted(state.facts)}}
+            "steps_needed": steps_needed_share(bases.values()),
+            "defects": {key: {k: v for k, v in base.items() if k != "need"}
+                        for key, base in bases.items()}}
 
 
 def _had_judge_column(episode_dir: Path) -> bool:
@@ -1030,6 +1163,7 @@ def fold(run_dir: Path | str, config: ReplayConfig, *, replay_dir: Path | str | 
         for e in entries:
             counts[e["status"]] = counts.get(e["status"], 0) + 1
     return {"episodes": written, "reports": counts, "excluded": state.excluded(),
+            "steps_needed": steps_needed_share(state.baseline(k) for k in state.facts),
             "remaining": state.worst_case(), "other_replayer": state.other_replayer,
             "other_replayer_differs": state.other_replayer_text()}
 
@@ -1146,7 +1280,10 @@ def plan_document(state: ReplayState) -> dict[str, Any]:
             "valid_reports": len(state.reports), "defects": len(state.facts),
             # Saved episodes of another replayer: counted, never folded in.
             "other_replayer": state.other_replayer,
-            "runnable_now": [{**u.identity(), "step_budget": budgets[u.key]} for u in units],
+            "runnable_now": [{**u.identity(), "step_budget": budgets[u.key],
+                              "budget_unit": "actions",
+                              "call_cap": call_cap(budgets[u.key], state.config)}
+                             for u in units],
             "worst_case_episodes": state.worst_case(),
             "excluded": state.excluded(),
             "canary_unrecorded": sorted(k for k, f in state.facts.items()
@@ -1184,8 +1321,22 @@ def _mean(values: list[float]) -> float | None:
 
 
 def pilot_row(label: str, state: ReplayState) -> dict[str, Any]:
-    """One candidate replayer's line of the pilot table, from its saved replays."""
+    """One candidate replayer's line of the pilot table, from its saved replays.
+
+    `usable` is judged under the early stop whatever the pilot's own config says: the
+    pilot turns it off to measure the ceiling as a rate, but a cloud run stops after two
+    replays that agree, and its two-replay defects ARE decided (QUA-3591: the column
+    read "0 of 10" on the first lab pilot for that reason alone)."""
     bases = [state.baseline(k) for k in sorted(state.facts)]
+    if not state.config.ceiling_early_stop:
+        stopping = replace(state.config, ceiling_early_stop=True)
+        decided = [baseline_status(
+            state.facts[k], [a for a in state._of(f"{CEILING}:{k}") if a.valid],
+            [a for a in state._of(f"{CONTROL}:{k}") if a.valid], stopping,
+            gave_up=state._gave_up(f"{CEILING}:{k}"),
+            control_gave_up=state._gave_up(f"{CONTROL}:{k}")) for k in sorted(state.facts)]
+    else:
+        decided = bases
     measured = [b for b in bases if b["ceiling"]["attempts"] > 0]
     kept = [a for a in state.attempts if a.valid]
     costs = [a.cost_usd for a in kept if a.cost_usd is not None]
@@ -1199,12 +1350,17 @@ def pilot_row(label: str, state: ReplayState) -> dict[str, Any]:
         "reference_replays": sum(b["ceiling"]["attempts"] for b in bases),
         "reference_reproduced": sum(b["ceiling"]["reproduced"] for b in bases),
         "control_measured": sum(1 for b in bases if b["control"]["attempts"] > 0),
+        # Controls that reproduced without the steps: a diagnostic since version 3.
         "control_failures": sum(1 for b in bases if b["control"]["reproduced"] > 0),
-        "verdict_unavailable": sum(1 for b in bases if b["excluded"] in VERDICT_UNAVAILABLE),
-        "usable": sum(1 for b in bases if b["decided"] and not b["excluded"]),
+        "steps_needed": steps_needed_share(decided),
+        "verdict_unavailable": sum(1 for b in decided
+                                   if b["excluded"] in VERDICT_UNAVAILABLE),
+        "usable": sum(1 for b in decided if b["decided"] and not b["excluded"]),
         "episodes": len(state.attempts),
-        "not_run": sum(1 for a in state.attempts if not a.valid),
+        "not_run": sum(1 for a in state.attempts if not a.valid and not a.unconfirmed),
+        "unconfirmed": sum(1 for a in state.attempts if a.unconfirmed),
         "truncated": sum(1 for a in kept if a.truncated),
+        "call_capped": sum(1 for a in kept if a.call_capped),
         "cost_per_replay_usd": _mean(costs),
         "cost_total_usd": sum(costs) if costs else None,
         "cost_unknown": len(kept) - len(costs),
@@ -1220,18 +1376,24 @@ def pilot_table(rows: list[dict[str, Any]]) -> str:
     def secs(v: float | None) -> str:
         return "unknown" if v is None else f"{v:.0f} s"
 
+    def needed(r: dict[str, Any]) -> str:
+        share = r.get("steps_needed") or {}
+        return (f"{share['needed']} of {share['measured']}"
+                if share.get("measured") else "not measured")
+
     head = ("| replayer | ceiling (defects at or above the bar) | reference replays "
-            "reproduced | control failures | verdict unavailable | usable defects | "
-            "cost per replay | wall time per replay | truncated | not run |")
-    out = [head, "|" + "---|" * 10]
+            "reproduced | usable defects | steps needed (control did not reproduce) | "
+            "verdict unavailable | cost per replay | wall time per replay | truncated | "
+            "unconfirmed | not run |")
+    out = [head, "|" + "---|" * 11]
     for r in rows:
         out.append(
             f"| {r['replayer']} | {r['ceiling_ok']} of {r['ceiling_measured']} "
             f"| {r['reference_reproduced']} of {r['reference_replays']} "
-            f"| {r['control_failures']} of {r['control_measured']} "
-            f"| {r['verdict_unavailable']} | {r['usable']} of {r['defects']} "
+            f"| {r['usable']} of {r['defects']} | {needed(r)} "
+            f"| {r['verdict_unavailable']} "
             f"| {money(r['cost_per_replay_usd'])} | {secs(r['wall_per_replay_sec'])} "
-            f"| {r['truncated']} | {r['not_run']} |")
+            f"| {r['truncated']} | {r.get('unconfirmed', 0)} | {r['not_run']} |")
     return "\n".join(out)
 
 

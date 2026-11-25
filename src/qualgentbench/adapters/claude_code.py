@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .base import AgentAdapter, RunContext
 from .. import credit, pricing, providers
-from ..interactions import BUDGET_HOOK
+from ..interactions import render_budget_hook
 from ..transcript import claude_code_version, claude_session_usage_line
 
 
@@ -249,12 +249,17 @@ class ClaudeCodeAdapter(AgentAdapter):
         hooks_dir.mkdir(parents=True, exist_ok=True)
         count_file = hooks_dir / "count"
         count_file.write_text("0")
+        (hooks_dir / "calls").unlink(missing_ok=True)   # the call cap's ledger
         script = hooks_dir / "tool_cap.py"
-        script.write_text(BUDGET_HOOK.format(
+        script.write_text(render_budget_hook(
             count_file=count_file,
             meter_file=context.run_dir / "interactions.json",
             cap=int(context.tool_call_cap),
             sentinel=context.run_dir / "truncated",
+            unit=context.budget_unit,
+            call_cap=context.call_cap,
+            calls_file=hooks_dir / "calls",
+            call_marker=context.run_dir / "call_capped",
         ))
         script.chmod(0o755)
         settings = {"hooks": {"PreToolUse": [

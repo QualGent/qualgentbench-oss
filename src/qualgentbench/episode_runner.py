@@ -1925,6 +1925,11 @@ async def run_episode(
         # running, so it still reports from what it saw — truncated, never voided.
         # qg_release_device stays exempt so the device lock is always returned.
         tool_call_cap=step_cap,
+        # A replay-from-report episode budgets device actions and adds a hard cap on
+        # every tool call (QUA-3591, `quality_replay.build_task`). Unset everywhere
+        # else: interactions, no call cap.
+        budget_unit=str((task.bug_spec or {}).get("budget_unit") or "interactions"),
+        call_cap=(task.bug_spec or {}).get("call_cap") or None,
         # Route the agent's adb through the meter, in BOTH arms, so the two are
         # measured identically. The meter listens on loopback, so the address is
         # pinned too — the harness itself may be pointed at a remote adb server
@@ -2099,7 +2104,12 @@ async def run_episode(
     # Record WHY the episode stopped — a 0-because-slow must stay distinguishable
     # from a 0-because-wrong or the leaderboard stops being interpretable.
     if task.bug_spec is not None:
-        task.bug_spec["truncated"] = (run_dir / "truncated").exists()
+        # The call cap (a replay episode only) drops the same sentinel to stop the
+        # agent, with its own marker: that stop is not the budget running out.
+        call_capped = (run_dir / "call_capped").exists()
+        task.bug_spec["truncated"] = (run_dir / "truncated").exists() and not call_capped
+        if task.bug_spec.get("call_cap"):
+            task.bug_spec["call_capped"] = call_capped
         # Timeout is a different stop reason from budget exhaustion: truncated means
         # the steps were spent (fair, scored on partial evidence); a timeout stopped
         # the agent with steps left — an environment limit, not a QA failure.
@@ -2165,6 +2175,14 @@ async def run_episode(
             except (OSError, ValueError):
                 pass
             break
+        if task.bug_spec.get("call_cap"):
+            # Every tool call the hook saw (one byte each), the call cap's unit.
+            for calls in run_dir.rglob("hooks/calls"):
+                try:
+                    task.bug_spec["tool_calls"] = calls.stat().st_size
+                except OSError:
+                    pass
+                break
         if task.bug_spec["truncated"]:
             logger.warning("episode '%s' hit its %d-call budget and was terminated",
                            task.id, step_cap)

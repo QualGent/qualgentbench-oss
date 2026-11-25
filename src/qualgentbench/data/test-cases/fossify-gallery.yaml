@@ -679,7 +679,7 @@ test_cases:
             - Tap QGB.
             - Tap Toggle filename visibility in the album toolbar if the photo names are not shown.
             - Press and hold QGB-Photo-One.png.
-            - Tap More options.
+            - Tap the three-dot menu button at the right end of the selection bar, right of Delete and Share.
             - Tap Select all.
             - Tap Delete.
             - Tap Yes.

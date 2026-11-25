@@ -13,7 +13,7 @@ from typing import Any
 from .base import AgentAdapter, AuthRefused, RunContext
 from .bedrock_tool_shim import BedrockToolShim, bedrock_runtime_origin
 from .. import providers
-from ..interactions import BUDGET_HOOK
+from ..interactions import render_budget_hook
 from ..transcript import CLI_VERSION, codex_state_usage_line
 
 logger = logging.getLogger(__name__)
@@ -465,14 +465,19 @@ class CodexCliAdapter(AgentAdapter):
         hooks_dir.mkdir(parents=True, exist_ok=True)
         count_file = hooks_dir / "count"
         count_file.write_text("0")
+        (hooks_dir / "calls").unlink(missing_ok=True)   # the call cap's ledger
         # ONE shared hook across adapters — per-adapter counters meant
         # incompatible step definitions and a meaningless cross-agent board.
         script = hooks_dir / "tool_cap.py"
-        script.write_text(BUDGET_HOOK.format(
+        script.write_text(render_budget_hook(
             count_file=count_file,
             meter_file=context.run_dir / "interactions.json",
             cap=int(context.tool_call_cap),
             sentinel=context.run_dir / "truncated",
+            unit=context.budget_unit,
+            call_cap=context.call_cap,
+            calls_file=hooks_dir / "calls",
+            call_marker=context.run_dir / "call_capped",
         ))
         script.chmod(0o755)
         return script

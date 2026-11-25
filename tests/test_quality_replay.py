@@ -108,6 +108,61 @@ def test_a_defect_with_no_text_to_find_is_judged_on_the_canary_alone(kind):
     assert _decide(truth_kind=kind, truth_texts=[], textless="exclude")["reproduced"] is None
 
 
+def test_a_canary_only_pass_of_an_unfinished_replay_is_unconfirmed():
+    """QUA-3591 pilot: a rotation defect's canary fires at the rotation, before the
+    report's Save. A canary-only replay that did not finish is no verdict, never a pass."""
+    cut = _decide(truth_kind="state", truth_texts=[], finished=False,
+                  unfinished_why="the action budget ran out")
+    assert cut["reproduced"] is None and cut["unconfirmed"] is True
+    assert cut["reason"].startswith("unconfirmed") and "action budget" in cut["reason"]
+    # A miss stays a miss, and a canary-and-text defect needs no such guard: the
+    # symptom on the device is the evidence its steps ran.
+    assert _decide(truth_kind="state", truth_texts=[], fired=[],
+                   finished=False)["reproduced"] is False
+    assert _decide(finished=False)["reproduced"] is True
+    assert _decide(truth_kind="state", truth_texts=[])["unconfirmed"] is False
+
+
+def _claude_call(name: str, result: str, *, refused: bool = False) -> str:
+    cid = f"r{next(_SERIAL)}"
+    return "\n".join([
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": cid, "name": f"mcp__device__{name}", "input": {}}]}}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": cid, "content": result,
+             **({"is_error": True} if refused else {})}]}})])
+
+
+def test_the_replay_verdict_confirms_a_canary_only_pass_from_the_last_action():
+    def task(**extra):
+        t = _task_after_run(_unit(), fired=[SIDE[1]], **extra)
+        t.bug_spec[qr.KEY].update({"truth_kind": "state", "truth_texts": []})
+        return t
+
+    tapped = _claude_call("mobile_tap", '{"result": "Tapped (1, 2)"}')
+    saved = _transcript(_obs("openScale Overview"), tapped, _obs("openScale Overview"))
+    assert qr.replay_verdict(saved, "m", task()).passed
+    # Killed by the action budget: unconfirmed, and so no verdict at all.
+    v = qr.replay_verdict(saved, "m", task(truncated=True))
+    block = v.metrics[qr.KEY]
+    assert not v.passed and block["reproduced"] is None and block["unconfirmed"] is True
+    assert v.metrics["reported_status"] == "UNCONFIRMED"
+    # The last action (Save) refused, even with no budget stop recorded.
+    refused = _claude_call("mobile_tap", "PreToolUse hook error: budget", refused=True)
+    v = qr.replay_verdict(_transcript(_obs("openScale Overview"), tapped, refused), "m", task())
+    assert v.metrics[qr.KEY]["unconfirmed"] is True and v.metrics["last_action_ok"] is False
+    assert "mobile_tap, was refused" in v.metrics[qr.KEY]["reason"]
+    # A read after the last accepted action does not unconfirm it.
+    v = qr.replay_verdict(_transcript(tapped, _claude_call("mobile_observe_screen", "x",
+                                                           refused=True)), "m", task())
+    assert v.passed and v.metrics["last_action_ok"] is True
+    # Saved and folded: the attempt is not valid, so it is retried, then "no verdict".
+    attempt = qr.attempt_from_result(
+        {"task_type": qr.TASK_TYPE, "metrics": qr.replay_verdict(
+            saved, "m", task(truncated=True)).metrics}, "ep")
+    assert attempt.unconfirmed and not attempt.valid and attempt.invalid == ""
+
+
 def test_a_crash_the_harness_recorded_is_the_symptom_of_a_death_defect():
     out = _decide(truth_kind="death", truth_texts=["NoSuchElementException"],
                   device_results=["home screen"], app_crashes=1)
@@ -120,7 +175,7 @@ def test_a_crash_the_harness_recorded_is_the_symptom_of_a_death_defect():
 
 # ── the replay task and its brief ──────────────────────────────────────────────
 
-def test_a_replay_task_is_the_seeded_case_with_an_opaque_id_and_twice_the_route():
+def test_a_replay_task_is_the_seeded_case_with_an_opaque_id_and_an_action_budget():
     unit = _unit()
     task = qr.build_task(unit, _suite(), CONFIG)
     spec = task.bug_spec
@@ -130,7 +185,10 @@ def test_a_replay_task_is_the_seeded_case_with_an_opaque_id_and_twice_the_route(
     for key in ("mode", "version", "active_bugs", "device_setup", "shared_storage", "oracle"):
         assert spec[key] == seeded.bug_spec[key]
     assert spec["version"] == "seeded" and SIDE[1] in spec["active_bugs"]
-    assert spec["step_budget"] == 2 * spec["ref_steps"]
+    # Version 3: device ACTIONS, 3x the route (at least the floor), and a call cap.
+    assert spec["budget_unit"] == "actions"
+    assert spec["step_budget"] == max(3 * spec["ref_steps"], CONFIG.budget_floor)
+    assert spec["call_cap"] == max(4 * spec["step_budget"], CONFIG.call_cap_floor)
     # Nothing the replayer can see names the case or the defect.
     assert task.id.startswith("replay-") and len(task.id) == len("replay-") + 12
     assert episode_runner.agent_visible_task_id(task.id) == task.id
@@ -143,10 +201,28 @@ def test_a_replay_task_is_the_seeded_case_with_an_opaque_id_and_twice_the_route(
 
 def test_the_budget_rule():
     cfg = CONFIG
-    assert qr.step_budget(9, 40, cfg) == 18
+    assert (cfg.budget_factor, cfg.budget_floor) == (3.0, 10)
+    assert qr.step_budget(9, 40, cfg) == 27
+    assert qr.step_budget(1, 40, cfg) == 10             # the floor
     assert qr.step_budget(None, 40, cfg) == 40          # no recorded route: the case's own
     assert qr.step_budget(4, 30, replace(cfg, budget_floor=15)) == 15
-    assert qr.step_budget(5, 30, replace(cfg, budget_factor=2.5)) == 13
+    assert qr.step_budget(5, 30, replace(cfg, budget_factor=2.5, budget_floor=0)) == 13
+    # The call cap: generous, never below the floor or the action budget itself.
+    assert qr.call_cap(27, cfg) == 108 and qr.call_cap(10, cfg) == 60
+    assert qr.call_cap(30, replace(cfg, call_cap_factor=1.0, call_cap_floor=0)) == 30
+    with pytest.raises(qr.ReplayError):
+        replace(cfg, call_cap_factor=0.5)
+
+
+def test_a_version_2_replay_is_never_folded_as_version_3():
+    old = {**CONFIG.fingerprint(), "replay_version": 2, "budget_factor": 2.0,
+           "budget_floor": 0}
+    for key in ("budget_unit", "call_cap_factor", "call_cap_floor"):
+        old.pop(key)
+    state = qr.ReplayState(CONFIG, [], [replace(_attempt(True), replayer=old)],
+                           extra_defects=[(APP, *SIDE)])
+    assert state.other_replayer == 1 and state.attempts == []
+    assert "replay_version=2" in state.other_replayer_text()
 
 
 def test_the_replayer_gets_the_report_and_not_the_test_case():
@@ -235,7 +311,7 @@ def test_an_agents_report_is_replayed_with_the_steps_the_customer_sees(tmp_path)
     control = qr.render_report(_ref(*SIDE).customer_report(with_steps=False))
     assert "Steps to reproduce: (the report gives none)" in control
     # A replay under the new brief is another measurement than one under the old.
-    assert qr.REPLAY_VERSION == 2 and CONFIG.fingerprint()["replay_version"] == 2
+    assert qr.REPLAY_VERSION == 3 and CONFIG.fingerprint()["replay_version"] == 3
 
 
 # ── a replay episode is never a journey episode ────────────────────────────────
@@ -256,7 +332,8 @@ def test_the_replay_verdict_reads_the_canary_and_the_device_text():
     assert v.passed and block["reproduced"] is True and block["agent_said"] == "yes"
     assert block["unit"]["defect_id"] == SIDE[1] and block["replayer"] == CONFIG.fingerprint()
     assert v.metrics["fault_fired"] == [SIDE[1]] and v.metrics["steps"] == 7
-    assert v.metrics["step_budget"] == 14 and v.metrics["infra_failure"] is False
+    assert v.metrics["step_budget"] == 21 and v.metrics["infra_failure"] is False
+    assert v.metrics["budget_unit"] == "actions" and v.metrics["call_capped"] is False
 
     # What the replayer says is recorded and never scored.
     lied = _transcript(_obs("openScale Overview Weight"), "RESULT: reproduced=yes")
@@ -361,11 +438,23 @@ def test_the_ceiling_stops_early_once_it_is_decided():
     assert _status([False, False], config=full)["need"] == qr.CEILING
 
 
-def test_a_defect_that_reproduces_without_its_steps_is_excluded():
+def test_the_control_is_a_diagnostic_and_never_excludes_a_defect():
+    """Replay version 3: G4 asks whether the report as written reproduces; whether the
+    steps were needed is reported beside it (`steps_needed`)."""
     out = _status([True, True], [True])
-    assert out["excluded"] == qr.CONTROL_REPRODUCES and out["control"]["reproduced"] == 1
+    assert out["excluded"] is None and out["decided"] and out["need"] is None
+    assert out["control"]["reproduced"] == 1 and out["steps_needed"] is False
     ok = _status([True, True], [False])
-    assert ok["excluded"] is None and ok["decided"] and ok["need"] is None
+    assert ok["excluded"] is None and ok["decided"] and ok["steps_needed"] is True
+    # Not measured yet: the defect is in all the same, and the control is still run.
+    waiting = _status([True, True])
+    assert waiting["decided"] and waiting["need"] == qr.CONTROL
+    assert waiting["steps_needed"] is None
+    # A control that could not be run leaves the diagnostic unmeasured, nothing else.
+    lost = _status([True, True], control_gave_up=True)
+    assert lost["decided"] and lost["need"] is None and lost["steps_needed"] is None
+    assert qr.steps_needed_share([out, ok, waiting]) == {
+        "measured": 2, "needed": 1, "share": 0.5}
 
 
 def test_a_silent_canary_is_verdict_unavailable_not_a_failed_ceiling():
@@ -427,7 +516,9 @@ def test_the_packaged_config_is_the_spec_defaults_with_no_replayer_yet():
     cfg = qr.load_config()
     assert cfg == qr.ReplayConfig()                 # D3 report only, D4 one attempt
     assert (cfg.give_test_case, cfg.attempts, cfg.ceiling_attempts, cfg.ceiling_min,
-            cfg.control_attempts, cfg.budget_factor) == (False, 1, 3, 2, 1, 2.0)
+            cfg.control_attempts, cfg.budget_factor, cfg.budget_floor) == (
+        False, 1, 3, 2, 1, 3.0, 10)
+    assert (cfg.call_cap_factor, cfg.call_cap_floor) == (4.0, 60)
     assert not cfg.pinned                           # D5: chosen from the pilot
 
 
@@ -553,19 +644,20 @@ def test_a_run_measures_the_baselines_first_and_replays_only_usable_defects(tmp_
     started = _run(state, fake)
     kinds = [k.split(":")[0] for k in fake.calls]
     # SIDE: 3 ceiling (T, F, T), 1 control, 2 reports. SCREEN: 2 ceiling (F, F), stop.
-    # OTHER: 2 ceiling (T, T), 1 control (T), no report replay.
-    assert started == len(fake.calls) == 11
+    # OTHER: 2 ceiling (T, T), 1 control (T), 1 report: the control does not exclude.
+    assert started == len(fake.calls) == 12
     assert kinds.count(qr.CEILING) == 7 and kinds.count(qr.CONTROL) == 2
-    assert kinds.count(qr.REPORT) == 2
-    # No report is replayed before its defect's ceiling and control are in.
+    assert kinds.count(qr.REPORT) == 3
+    # Every baseline replay a defect still needs runs before any report.
     first_report = kinds.index(qr.REPORT)
     assert qr.REPORT not in kinds[:first_report] and qr.CEILING not in kinds[first_report:]
     assert state.next_units() == [] and state.worst_case()["total"] == 0
 
     summary = qr.fold(run_dir, CONFIG, replay_dir=replay_dir, state=state)
-    assert summary["episodes"] == 4 and summary["reports"] == {"replayed": 2, "excluded": 2}
+    assert summary["episodes"] == 4 and summary["reports"] == {"replayed": 3, "excluded": 1}
     assert [(e["defect"].split("/")[-1], e["excluded"]) for e in summary["excluded"]] == [
-        (SCREEN[1], qr.BELOW_CEILING), (OTHER[1], qr.CONTROL_REPRODUCES)]
+        (SCREEN[1], qr.BELOW_CEILING)]
+    assert summary["steps_needed"] == {"measured": 2, "needed": 1, "share": 0.5}
 
     # quality_replay.json, beside each episode's result.json.
     good = json.loads((eps["side-good"] / qr.REPLAY_FILE).read_text())
@@ -575,9 +667,14 @@ def test_a_run_measures_the_baselines_first_and_replays_only_usable_defects(tmp_
     assert entry["reproduced"] is True and entry["excluded"] is None
     assert entry["ceiling"] == {"reproduced": 2, "attempts": 3}
     assert entry["control"] == {"reproduced": 0, "attempts": 1}
+    assert entry["steps_needed"] is True
     (attempt,) = entry["attempts"]
     assert (replay_dir / attempt["episode"] / "result.json").is_file()
-    assert attempt["steps"] == 5 and attempt["step_budget"] == 14
+    assert attempt["steps"] == 5 and attempt["step_budget"] == 21
+    assert attempt["unconfirmed"] is False and attempt["call_capped"] is False
+    other = json.loads((eps["other"] / qr.REPLAY_FILE).read_text())["reports"][0]
+    assert other["status"] == "replayed" and other["excluded"] is None
+    assert other["steps_needed"] is False and other["reproduced"] is True
     excluded = json.loads((eps["screen"] / qr.REPLAY_FILE).read_text())["reports"][0]
     assert excluded["index"] == 1 and excluded["status"] == "excluded"
     assert excluded["reproduced"] is None and excluded["attempts"] == []
@@ -587,6 +684,9 @@ def test_a_run_measures_the_baselines_first_and_replays_only_usable_defects(tmp_
     assert base["replayer"] == CONFIG.stamp() and "corpus_version" in base
     side = base["defects"][qr.defect_key(APP, *SIDE)]
     assert side["excluded"] is None and side["decided"] and "need" not in side
+    assert side["steps_needed"] is True
+    assert base["defects"][qr.defect_key(APP, *OTHER)]["steps_needed"] is False
+    assert base["steps_needed"] == {"measured": 2, "needed": 1, "share": 0.5}
     assert base["defects"][qr.defect_key(APP, *SCREEN)]["excluded"] == qr.BELOW_CEILING
 
     # G4 in quality.json.
@@ -608,9 +708,16 @@ def test_a_run_measures_the_baselines_first_and_replays_only_usable_defects(tmp_
     assert gate["unknown"] is True
     assert q["totals"]["gates"]["G4"] == {"name": "reproducible", "evaluated": 0,
                                           "passed": 0, "unknown": 1}
-    assert g4("other")[1]["unknown"] is True
     assert q["reports"][0]["neutral"] and q["reports"][0]["gates"] == {}
-    assert "excluded from replay (control)" in g4("other")[1]["reason"]
+    assert g4("other")[1]["pass"] is True
+    # The control's diagnostic, per defect, beside the coverage map of quality.json.
+    for name, pair, needed in (("other", OTHER, False), ("side-good", SIDE, True)):
+        result = json.loads((eps[name] / "result.json").read_text())
+        result["metrics"]["bugs_present"] = [pair[1]]
+        (eps[name] / "result.json").write_text(json.dumps(result))
+        coverage = rq.defect_coverage(rq.load_episode(eps[name]))
+        assert coverage[pair[1]]["replay_steps_needed"] is needed
+        assert coverage[pair[1]]["coverable"] is True
 
 
 def test_the_saved_episodes_are_the_state_so_a_run_resumes_and_folds_anywhere(tmp_path):
@@ -624,7 +731,7 @@ def test_the_saved_episodes_are_the_state_so_a_run_resumes_and_folds_anywhere(tm
     assert len(resumed.attempts) == 4
     again = FakeReplayer(replay_dir, _answers)
     again.calls = list(fake.calls)                         # keep episode names distinct
-    assert _run(resumed, again) == 7
+    assert _run(resumed, again) == 8
     assert sorted(fake.calls + again.calls[4:]) == sorted(again.calls)
 
     # Folding from disk alone gives the same files as folding the live state.
@@ -650,13 +757,13 @@ def test_replays_by_another_replayer_are_not_folded_in(tmp_path):
     _run(qr.ReplayState(other, qr.valid_reports(run_dir), []),
          FakeReplayer(replay_dir, _answers, other))
     state = qr.ReplayState(CONFIG, qr.valid_reports(run_dir), qr.collect(replay_dir))
-    assert state.attempts == [] and state.other_replayer == 11
+    assert state.attempts == [] and state.other_replayer == 12
     assert state.other_replayer_text() == "model='another-model' (here 'fake-model')"
-    assert qr.plan_document(state)["other_replayer"] == 11
-    assert "another replayer (left out): 11" in qr.plan_text(qr.plan_document(state))
+    assert qr.plan_document(state)["other_replayer"] == 12
+    assert "another replayer (left out): 12" in qr.plan_text(qr.plan_document(state))
     summary = qr.fold(run_dir, CONFIG, replay_dir=replay_dir, state=state,
                       allow_other_replayer=True)
-    assert summary["reports"] == {"pending": 4} and summary["other_replayer"] == 11
+    assert summary["reports"] == {"pending": 4} and summary["other_replayer"] == 12
     assert summary["other_replayer_differs"] == state.other_replayer_text()
     q = rq.score_episode(eps["side-good"])
     # Pending is "did not run": no `unknown` key, so the arm stays not measured.
@@ -683,7 +790,7 @@ def test_a_fold_under_another_replayer_is_refused_and_writes_nothing(tmp_path, c
     with pytest.raises(qr.ReplayError) as refused:
         qr.fold(run_dir, CONFIG, replay_dir=replay_dir)
     message = str(refused.value)
-    assert "11 saved replay episode(s)" in message and "Nothing was written" in message
+    assert "12 saved replay episode(s)" in message and "Nothing was written" in message
     assert "provider='bedrock' (here None)" in message
     assert "--provider" in message and "--allow-other-replayer" in message
     assert _files(run_dir) == before
@@ -700,7 +807,7 @@ def test_a_fold_under_another_replayer_is_refused_and_writes_nothing(tmp_path, c
     assert _files(run_dir) == before
     # Told to, it folds this replayer's (zero) episodes and says what it left out.
     assert qr.main(["fold", str(run_dir), *replayer, "--allow-other-replayer"]) == 0
-    assert "left out: 11 saved replay episode(s) of another replayer" in capsys.readouterr().out
+    assert "left out: 12 saved replay episode(s) of another replayer" in capsys.readouterr().out
     assert rq.score_episode(eps["side-good"])["reports"][0]["gates"]["G4"]["pass"] is None
 
 
@@ -745,7 +852,7 @@ def test_a_ceiling_that_was_given_up_is_unavailable_not_pending(tmp_path):
     assert len(ceiling) == CONFIG.max_retries + 1 and state.next_units() == []
     assert state.worst_case()["total"] == 0
     summary = qr.fold(run_dir, CONFIG, replay_dir=replay_dir, state=state)
-    assert summary["reports"] == {"unavailable": 2, "excluded": 2}
+    assert summary["reports"] == {"unavailable": 2, "excluded": 1, "replayed": 1}
     for name in ("side-good", "side-bad"):
         entry = json.loads((eps[name] / qr.REPLAY_FILE).read_text())["reports"][0]
         assert entry["status"] == "unavailable" and entry["excluded"] is None
@@ -755,10 +862,11 @@ def test_a_ceiling_that_was_given_up_is_unavailable_not_pending(tmp_path):
     # The arm is measured: its reports are unknown beside the rate, not waited for.
     (row,) = quality_rates.block([_record(ep) for ep in eps.values()])["rows"]
     assert row["gates_missing"] == [] and row["customer_ready"]["measured"] is True
-    assert (row["customer_ready"]["waiting"], row["customer_ready"]["unknown"]) == (0, 4)
-    # A control that was given up after the ceiling passed is the same.
-    assert qr.baseline_status(_facts(), [_attempt(True), _attempt(True)], [], CONFIG,
-                              gave_up=True)["need"] is None
+    assert (row["customer_ready"]["waiting"], row["customer_ready"]["unknown"]) == (0, 3)
+    # A control given up after the ceiling passed only leaves the diagnostic unmeasured.
+    lost = qr.baseline_status(_facts(), [_attempt(True), _attempt(True)], [], CONFIG,
+                              control_gave_up=True)
+    assert lost["need"] is None and lost["decided"] and lost["steps_needed"] is None
 
 
 def test_a_replay_that_did_not_run_is_retried_once_and_then_given_up(tmp_path):
@@ -866,18 +974,27 @@ def test_replayed_excluded_and_pending_reports_in_the_rates_block(tmp_path):
     state = qr.ReplayState(CONFIG, qr.valid_reports(run_dir), [])
     _run(state, FakeReplayer(replay_dir, _answers))
     qr.fold(run_dir, CONFIG, replay_dir=replay_dir, state=state)
-    # One reproduced, one not, two whose defect is excluded (ceiling, control).
+    # Two reproduced (SIDE's good report, and OTHER's: its control reproduced too, which
+    # no longer excludes it), one not, one whose defect is excluded (ceiling).
     (row,) = quality_rates.block([_record(ep) for ep in eps.values()])["rows"]
     assert row["gates_missing"] == [] and row["gates_available"] == ["G1", "G2", "G3", "G4"]
     ready = row["customer_ready"]
-    # Decided: the reproduced report (ready), the one that did not reproduce and ep-a's
-    # false report (not ready). The two reports of excluded defects are UNKNOWN: beside
-    # the rate, in neither side of it, and they do not stop it from being measured.
-    assert ready["measured"] is True and (ready["k"], ready["n"]) == (1, 3)
+    # Decided: the reproduced reports (ready), the one that did not reproduce and ep-a's
+    # false report (not ready). The report of the excluded defect is UNKNOWN: beside
+    # the rate, in neither side of it, and it does not stop it from being measured.
+    assert ready["measured"] is True and (ready["k"], ready["n"]) == (2, 4)
     assert (ready["ready"], ready["not_ready"], ready["unknown"], ready["waiting"]) == (
-        1, 2, 2, 0)
+        2, 2, 1, 0)
     g4 = row["gates"]["G4"]
-    assert (g4["evaluated"], g4["passed"], g4["unknown"]) == (2, 1, 2)
+    assert (g4["evaluated"], g4["passed"], g4["unknown"]) == (3, 2, 1)
+    # The control's diagnostic, additive: per distinct (case, defect), never a gate.
+    assert row["replay_steps_needed"] == {"measured": 0, "needed": 0, "share": None}
+    records = [_record(ep) for ep in eps.values()]
+    for rec, needed in zip(records, (True, True, None, False)):
+        rec["quality"]["defects"] = {"d": {"replay_steps_needed": needed}}
+    (row,) = quality_rates.block(records)["rows"]
+    assert row["replay_steps_needed"] == {"measured": 2, "needed": 1, "share": 0.5}
+    assert quality_rates.BLOCK_FORMAT == 1
 
     # A replay still pending for one report puts the whole arm back to "not measured".
     entry = json.loads((eps["side-bad"] / qr.REPLAY_FILE).read_text())
@@ -943,17 +1060,43 @@ def test_the_pilot_table_from_saved_replays(tmp_path, capsys):
     assert (row["ceiling_ok"], row["ceiling_measured"]) == (2, 3)
     assert (row["reference_reproduced"], row["reference_replays"]) == (5, 9)
     assert (row["control_failures"], row["control_measured"]) == (1, 2)
-    assert row["usable"] == 1 and row["episodes"] == 11 and row["truncated"] == 0
+    # Usable: SIDE (2 of 3) and OTHER (its control reproducing is a diagnostic now).
+    assert row["usable"] == 2 and row["episodes"] == 11 and row["truncated"] == 0
+    assert row["steps_needed"] == {"measured": 2, "needed": 1, "share": 0.5}
+    assert row["unconfirmed"] == 0
     # The fake transcript's usage is priced or not by the model table; either way the
     # table never prints an unmeasured cost as a number.
     assert row["cost_unknown"] + (11 if row["cost_per_replay_usd"] is not None else 0) >= 11
 
     assert pilot.main([*args, "--table"]) == 0
     text = capsys.readouterr().out
-    assert "| fake-agent / fake-model | 2 of 3 | 5 of 9 | 1 of 2 | 0 | 1 of 3 |" in text
+    assert "| fake-agent / fake-model | 2 of 3 | 5 of 9 | 2 of 3 | 1 of 2 | 0 |" in text
     assert f"excluded {qr.defect_key(APP, *SCREEN)}  [ceiling]" in text
     assert pilot.main([*args, "--table", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)[0]["ceiling_ok"] == 2
+
+
+def test_the_pilot_table_reads_an_early_stopped_ceiling_as_decided(tmp_path):
+    """QUA-3591. A cloud run stops a reference after two replays that agree; the pilot
+    table, whose own config turns the early stop off, used to read every such defect as
+    "not decided yet" and print 0 usable defects."""
+    pilot = _pilot()
+    defects = [(APP, *SIDE), (APP, *SCREEN), (APP, *OTHER)]
+    rdir = tmp_path / "cloud"
+    lab = qr.ReplayState(CONFIG, [], [], extra_defects=defects)       # early stop on
+
+    def answers(unit):
+        return unit.defect_id != SCREEN[1] and (unit.kind != qr.CONTROL
+                                                 or unit.defect_id == OTHER[1])
+
+    fake = FakeReplayer(rdir, answers)
+    _run(lab, fake)
+    assert sum(k.startswith(qr.CEILING) for k in fake.calls) == 6      # 2 per defect
+    config = pilot.pilot_config(qr.load_config(), "fake-agent", "fake-model", None, "mcp")
+    row = qr.pilot_row("fake", pilot.state_for(config, rdir, defects))
+    assert (row["ceiling_ok"], row["reference_replays"]) == (2, 6)
+    assert row["usable"] == 2 and row["steps_needed"] == {
+        "measured": 2, "needed": 1, "share": 0.5}
 
 
 def test_the_pilot_table_says_unknown_for_an_unmeasured_cost():
